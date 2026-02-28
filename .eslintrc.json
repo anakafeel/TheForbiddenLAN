@@ -1,0 +1,22 @@
+{
+  "root": true,
+  "ignorePatterns": ["**/*"],
+  "plugins": ["@nx"],
+  "overrides": [
+    {
+      "files": ["*.ts", "*.tsx"],
+      "rules": {
+        "@nx/enforce-module-boundaries": ["error", {
+          "enforceBuildableLibDependency": true,
+          "allow": [],
+          "depConstraints": [
+            { "sourceTag": "scope:mobile",  "onlyDependOnLibsWithTags": ["scope:comms"] },
+            { "sourceTag": "scope:portal",  "onlyDependOnLibsWithTags": ["scope:comms"] },
+            { "sourceTag": "scope:server",  "onlyDependOnLibsWithTags": ["scope:comms"] },
+            { "sourceTag": "scope:comms",   "onlyDependOnLibsWithTags": [] }
+          ]
+        }]
+      }
+    }
+  ]
+}

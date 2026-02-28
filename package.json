@@ -1,0 +1,25 @@
+{
+  "name": "skytalk",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:server":  "nx serve server",
+    "dev:mobile":  "nx serve mobile",
+    "dev:portal":  "nx serve portal",
+    "build:comms": "nx build comms",
+    "build:all":   "nx run-many --target=build --all",
+    "test:all":    "nx run-many --target=test --all",
+    "lint:all":    "nx run-many --target=lint --all"
+  },
+  "devDependencies": {
+    "nx": "18.0.0",
+    "@nx/js": "18.0.0",
+    "@nx/node": "18.0.0",
+    "@nx/react": "18.0.0",
+    "@nx/vite": "18.0.0",
+    "@nx/eslint": "18.0.0",
+    "typescript": "5.3.3",
+    "eslint": "8.57.0"
+  }
+}
