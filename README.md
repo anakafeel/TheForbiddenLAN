@@ -1,5 +1,5 @@
-# SkyTalk — Satellite PTT System
-SKYTRAC Hackathon 2026 | Team QWERTY (Carleton)
+# TheForbiddenLAN — Satellite PTT System
+SKYTRAC Hackathon 2026 
 
 ## Packages
 - `@skytalk/comms`  — Saim. Communication layer: DLS-140 API client, WebSocket relay, audio pipeline, floor control, GPS polling
