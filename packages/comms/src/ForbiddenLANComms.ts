@@ -1,6 +1,7 @@
 // ForbiddenLANComms — main class consumed by the mobile app via useComms() hook
 import { DLS140Client } from './DLS140Client';
 import { RelaySocket } from './RelaySocket';
+import { MockRelaySocket } from './MockRelaySocket';
 import { FloorControl } from './FloorControl';
 import { GPSPoller } from './GPSPoller';
 import { AudioPipeline } from './AudioPipeline';
@@ -10,6 +11,7 @@ export interface ForbiddenLANConfig {
   relayUrl: string;
   dls140Url?: string;
   deviceId: string;
+  mock?: boolean;
 }
 
 export class ForbiddenLANComms {
@@ -27,12 +29,16 @@ export class ForbiddenLANComms {
   // Half-Duplex Fix
   private isTransmitting = false;
 
+  // PTT Watchdog
+  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly MAX_TX_MS = 60000;
+
   // Signal Polling
   private signalPollingTimer: (() => void) | null = null;
 
   constructor(private config: ForbiddenLANConfig) {
     this.dls   = new DLS140Client(config.dls140Url);
-    this.relay = new RelaySocket();
+    this.relay = config.mock ? new MockRelaySocket() : new RelaySocket();
     this.floor = new FloorControl();
     this.gpsPoller = new GPSPoller(this.dls, this.relay, config.deviceId);
   }
@@ -86,14 +92,33 @@ export class ForbiddenLANComms {
     this.audio = new AudioPipeline(
       this.relay,
       this.activeTalkgroup,
-      this.config.deviceId,
       sessionId,
       () => Date.now() + this.serverTimeOffset,
+      currentSeq
     );
-    this.audio.startRecording(currentSeq);
+    this.audio.startRecording();
+
+    this.watchdogTimer = setTimeout(() => {
+      console.warn(`[ForbiddenLANComms] Transmitting for > ${this.MAX_TX_MS}ms. Auto-stopping PTT.`);
+      this.stopPTT();
+    }, this.MAX_TX_MS);
+  }
+
+  // React Native developers will call this from their audio recorder library
+  sendAudioChunk(base64OpusData: string): void {
+    if (!this.isTransmitting) {
+      console.warn('[ForbiddenLANComms] Ignored sendAudioChunk because PTT is not active');
+      return;
+    }
+    this.audio?.enqueueChunk(base64OpusData);
   }
 
   stopPTT(): void {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    
     this.audio?.stopRecording();
     this.audio = null;
     this.isTransmitting = false; // Half-Duplex trap fix
