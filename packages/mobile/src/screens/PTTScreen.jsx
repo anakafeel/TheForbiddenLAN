@@ -1,140 +1,125 @@
-import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import NetworkInfo from '../components/NetworkInfo.jsx';
-import UserStatus from '../components/UserStatus.jsx';
-import PTTButton from '../components/PTTButton.jsx';
+import React, { useContext, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
-import { CONFIG } from '../config';
+import { startAudioStream, stopAudioStream } from '../utils/audio';
+import { emitStartTalking, emitStopTalking } from '../utils/socket';
 import theme from '../theme';
 
-const { colors, spacing, radius, shadows, typography } = theme;
-
-// Stats Panel Component
-function StatsPanel() {
-  return (
-    <View style={styles.statsContainer}>
-      <View style={styles.statItem}>
-        <Text style={styles.statLabel}>LATENCY</Text>
-        <Text style={styles.statValue}>04:03</Text>
-      </View>
-      <View style={styles.statDivider} />
-      <View style={styles.statItem}>
-        <Text style={styles.statLabel}>UPLINK</Text>
-        <Text style={styles.statValue}>UTR-Y02</Text>
-      </View>
-    </View>
-  );
-}
-
-// Speaking Status Component
-function SpeakingStatus({ userName }) {
-  return (
-    <View style={styles.speakingContainer}>
-      <View style={styles.speakingDot} />
-      <Text style={styles.speakingLabel}>Now Speaking: </Text>
-      <Text style={styles.speakingName}>{userName || 'ECHO-1'}</Text>
-    </View>
-  );
-}
-
-// Channel Info Bar
-function ChannelInfoBar({ channel, onSwitch }) {
-  return (
-    <View style={styles.channelBar}>
-      <View style={styles.channelInfo}>
-        <Text style={styles.channelBarLabel}>ACTIVE CHANNEL</Text>
-        <Text style={styles.channelBarName}>{channel?.name || 'TACTICAL-MAIN'}</Text>
-      </View>
-      <View style={styles.channelFreq}>
-        <Text style={styles.freqValue}>420.065 MHz</Text>
-      </View>
-    </View>
-  );
-}
-
-// Control Buttons
-function ControlButtons() {
-  const buttons = [
-    { icon: '📋', label: 'VOL-1' },
-    { icon: '🎛️', label: 'HQ' },
-    { icon: '⭐', label: '' },
-  ];
-
-  return (
-    <View style={styles.controlsContainer}>
-      {buttons.map((btn, idx) => (
-        <TouchableOpacity key={idx} style={styles.controlBtn}>
-          <View style={styles.controlBtnInner}>
-            <Text style={styles.controlIcon}>{btn.icon}</Text>
-          </View>
-          {btn.label && <Text style={styles.controlLabel}>{btn.label}</Text>}
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
+const { colors, spacing, radius, typography } = theme;
 
 export default function PTTScreen({ navigation }) {
   const { current } = useContext(ChannelContext);
-  const [transmitting, setTransmitting] = useState(false);
-  const [channelBusy, setChannelBusy] = useState(true);
+  const [isTransmitting, setIsTransmitting] = useState(false);
+  const [currentSpeaker, setCurrentSpeaker] = useState(null);
+
+  // Simulate random speakers
+  useEffect(() => {
+    if (!current || isTransmitting) {
+      setCurrentSpeaker(null);
+      return;
+    }
+    
+    const speakers = ['ECHO-1', 'BRAVO-2', 'CHARLIE-3', 'DELTA-4'];
+    const interval = setInterval(() => {
+      if (Math.random() > 0.6) {
+        const speaker = speakers[Math.floor(Math.random() * speakers.length)];
+        setCurrentSpeaker(speaker);
+        setTimeout(() => setCurrentSpeaker(null), 2000 + Math.random() * 2000);
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [current, isTransmitting]);
+
+  const handlePTTToggle = async () => {
+    if (!current) return;
+    
+    if (isTransmitting) {
+      // Stop transmitting
+      setIsTransmitting(false);
+      emitStopTalking('user123');
+      stopAudioStream();
+    } else {
+      // Start transmitting
+      setIsTransmitting(true);
+      emitStartTalking('user123');
+      try {
+        await startAudioStream();
+      } catch (e) {
+        console.warn('Audio start error:', e);
+      }
+    }
+  };
+
+  // No channel selected - show prompt to select
+  if (!current) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.noChannelContainer}>
+          <Text style={styles.noChannelIcon}>📡</Text>
+          <Text style={styles.noChannelTitle}>No Channel Selected</Text>
+          <Text style={styles.noChannelSubtitle}>Select a channel to start communicating</Text>
+          <TouchableOpacity
+            style={styles.selectChannelBtn}
+            onPress={() => navigation.navigate('Channels')}
+          >
+            <Text style={styles.selectChannelText}>GO TO CHANNELS</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Stats Header */}
-      <StatsPanel />
+      {/* Channel Header */}
+      <View style={styles.channelHeader}>
+        <View style={styles.channelBadge}>
+          <View style={[styles.liveDot, (currentSpeaker || isTransmitting) && styles.liveDotActive]} />
+          <Text style={styles.channelLabel}>LIVE CHANNEL</Text>
+        </View>
+        <Text style={styles.channelName}>{current.name}</Text>
+        <Text style={styles.channelUsers}>👤 {current.users || 0} Online</Text>
+      </View>
 
       {/* Speaking Status */}
-      <SpeakingStatus />
+      <View style={[styles.speakingBar, (currentSpeaker || isTransmitting) && styles.speakingBarActive]}>
+        <Text style={styles.speakingText}>
+          {isTransmitting 
+            ? '📡 YOU ARE TRANSMITTING' 
+            : currentSpeaker 
+              ? `🎙️ NOW SPEAKING: ${currentSpeaker}` 
+              : '— Channel idle —'}
+        </Text>
+      </View>
 
       {/* Main PTT Area */}
       <View style={styles.pttArea}>
-        {/* Audio Waveform Visualization Placeholder */}
-        <View style={styles.waveformContainer}>
-          <View style={styles.waveform}>
-            {[...Array(40)].map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.waveformBar,
-                  { height: Math.random() * 30 + 5 }
-                ]}
-              />
-            ))}
-          </View>
-          <Text style={styles.rxLabel}>RX: 334.4</Text>
-        </View>
-
+        {/* Glow rings */}
+        <View style={[styles.glowRing, styles.glowRing1, isTransmitting && styles.glowRingActive]} />
+        <View style={[styles.glowRing, styles.glowRing2, isTransmitting && styles.glowRingActive]} />
+        <View style={[styles.glowRing, styles.glowRing3, isTransmitting && styles.glowRingActive]} />
+        
         {/* PTT Button */}
-        <View style={styles.pttButtonContainer}>
-          {current ? (
-            <PTTButton 
-              userId="user123" 
-              onTransmitChange={setTransmitting}
-            />
-          ) : (
-            <TouchableOpacity
-              style={styles.selectChannelBtn}
-              onPress={() => navigation.navigate('Channels')}
-            >
-              <Text style={styles.selectChannelText}>SELECT CHANNEL</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Control Buttons */}
-        <ControlButtons />
+        <Pressable
+          onPress={handlePTTToggle}
+          style={({ pressed }) => [
+            styles.pttButton,
+            isTransmitting && styles.pttButtonActive,
+            pressed && styles.pttButtonPressed,
+          ]}
+        >
+          <Text style={styles.pttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
+          <Text style={[styles.pttLabel, isTransmitting && styles.pttLabelActive]}>
+            {isTransmitting ? 'TRANSMITTING' : 'PUSH TO TALK'}
+          </Text>
+        </Pressable>
       </View>
 
-      {/* Channel Info Bar */}
-      <ChannelInfoBar channel={current} />
-
-      {/* Channel Busy Warning */}
-      {channelBusy && (
-        <View style={styles.busyBanner}>
-          <Text style={styles.busyText}>⚠️ CHANNEL BUSY - WAIT FOR CLEARANCE</Text>
-        </View>
-      )}
+      {/* Hint */}
+      <Text style={styles.hint}>
+        {isTransmitting ? 'Tap to stop transmitting' : 'Tap to start transmitting'}
+      </Text>
     </View>
   );
 }
@@ -144,179 +129,172 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
-  statsContainer: {
-    flexDirection: 'row',
+  // No channel state
+  noChannelContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.xl,
+    padding: spacing.xl,
   },
-  statItem: {
-    alignItems: 'center',
-    marginHorizontal: spacing.lg,
+  noChannelIcon: {
+    fontSize: 64,
+    marginBottom: spacing.lg,
+    opacity: 0.5,
   },
-  statLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.wider,
-    marginBottom: spacing.xs,
-  },
-  statValue: {
+  noChannelTitle: {
     color: colors.text.primary,
     fontSize: typography.size.xl,
     fontWeight: typography.weight.bold,
+    marginBottom: spacing.sm,
   },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: colors.border.subtle,
+  noChannelSubtitle: {
+    color: colors.text.muted,
+    fontSize: typography.size.md,
+    marginBottom: spacing.xl,
+    textAlign: 'center',
   },
-  speakingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    backgroundColor: colors.status.active,
-    marginHorizontal: spacing.lg,
+  selectChannelBtn: {
+    backgroundColor: colors.accent.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
     borderRadius: radius.lg,
   },
-  speakingDot: {
+  selectChannelText: {
+    color: colors.text.inverse,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.wider,
+  },
+  // Channel header
+  channelHeader: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.background.secondary,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  channelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.text.inverse,
+    backgroundColor: colors.text.muted,
     marginRight: spacing.sm,
   },
-  speakingLabel: {
-    color: colors.text.inverse,
-    fontSize: typography.size.sm,
+  liveDotActive: {
+    backgroundColor: colors.status.active,
   },
-  speakingName: {
-    color: colors.text.inverse,
-    fontSize: typography.size.sm,
+  channelLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    letterSpacing: typography.letterSpacing.widest,
+  },
+  channelName: {
+    color: colors.text.primary,
+    fontSize: typography.size.xxl,
     fontWeight: typography.weight.bold,
+    marginBottom: spacing.xs,
   },
+  channelUsers: {
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
+  },
+  // Speaking bar
+  speakingBar: {
+    backgroundColor: colors.background.tertiary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  speakingBarActive: {
+    backgroundColor: colors.status.activeGlow,
+  },
+  speakingText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.medium,
+    letterSpacing: typography.letterSpacing.wide,
+  },
+  // PTT Area
   pttArea: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xl,
   },
-  waveformContainer: {
-    width: '80%',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
+  glowRing: {
+    position: 'absolute',
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: colors.border.subtle,
+    opacity: 0.3,
   },
-  waveform: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    height: 40,
+  glowRing1: {
+    width: 280,
+    height: 280,
   },
-  waveformBar: {
-    width: 3,
-    backgroundColor: colors.accent.primary,
-    borderRadius: 1,
+  glowRing2: {
+    width: 240,
+    height: 240,
+  },
+  glowRing3: {
+    width: 200,
+    height: 200,
+  },
+  glowRingActive: {
+    borderColor: colors.status.danger,
     opacity: 0.6,
-    marginHorizontal: 1,
   },
-  rxLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.sm,
-    marginTop: spacing.sm,
-  },
-  pttButtonContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: spacing.xl,
-  },
-  selectChannelBtn: {
+  pttButton: {
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: colors.background.tertiary,
-    borderWidth: 3,
-    borderColor: colors.border.medium,
+    backgroundColor: colors.accent.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: colors.accent.primaryLight,
+    shadowColor: colors.accent.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 15,
   },
-  selectChannelText: {
-    color: colors.text.muted,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    letterSpacing: typography.letterSpacing.wide,
+  pttButtonActive: {
+    backgroundColor: colors.status.danger,
+    borderColor: '#FF6B6B',
+    shadowColor: colors.status.danger,
+    shadowOpacity: 0.8,
+    shadowRadius: 50,
   },
-  controlsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
+  pttButtonPressed: {
+    transform: [{ scale: 0.95 }],
   },
-  controlBtn: {
-    alignItems: 'center',
-    marginHorizontal: spacing.lg,
+  pttIcon: {
+    fontSize: 48,
+    marginBottom: spacing.sm,
   },
-  controlBtnInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.background.tertiary,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  controlIcon: {
-    fontSize: 24,
-  },
-  controlLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    marginTop: spacing.xs,
-  },
-  channelBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.background.card,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-  },
-  channelInfo: {},
-  channelBarLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.wider,
-    marginBottom: spacing.xs,
-  },
-  channelBarName: {
-    color: colors.accent.primary,
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
-  },
-  channelFreq: {
-    backgroundColor: colors.background.tertiary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-  },
-  freqValue: {
-    color: colors.text.secondary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.medium,
-  },
-  busyBanner: {
-    backgroundColor: colors.status.warning,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  busyText: {
+  pttLabel: {
     color: colors.text.inverse,
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.wider,
+  },
+  pttLabelActive: {
+    color: colors.text.inverse,
+  },
+  // Hint
+  hint: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+    textAlign: 'center',
+    paddingBottom: spacing.xl,
     letterSpacing: typography.letterSpacing.wide,
   },
 });

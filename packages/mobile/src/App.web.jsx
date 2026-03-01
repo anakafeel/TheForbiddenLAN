@@ -8,6 +8,7 @@ const { colors, spacing, radius, shadows, typography } = theme;
 // Lazy load screens to catch import errors
 const ChannelsScreen = React.lazy(() => import('./screens/Channels.jsx'));
 const PTTScreen = React.lazy(() => import('./screens/PTTScreen.jsx'));
+const VoiceChannelChatPage = React.lazy(() => import('./screens/VoiceChannelChatPage.jsx'));
 
 // Bottom Navigation Bar
 function BottomNav({ activeScreen, onNavigate }) {
@@ -15,7 +16,6 @@ function BottomNav({ activeScreen, onNavigate }) {
     { id: 'Channels', icon: '📡', label: 'CHANNELS' },
     { id: 'PTT', icon: '🎙️', label: 'PTT' },
     { id: 'Map', icon: '🗺️', label: 'MAP' },
-    { id: 'Settings', icon: '⚙️', label: 'SETTINGS' },
   ];
 
   return (
@@ -37,20 +37,60 @@ function BottomNav({ activeScreen, onNavigate }) {
   );
 }
 
-// Status Bar Header
+// Status Bar Header with network detection
 function StatusBar() {
+  const [activeNetwork, setActiveNetwork] = React.useState('SATELLITE');
+  const [satSignal, setSatSignal] = React.useState(4);
+  const [cellSignal, setCellSignal] = React.useState(2);
+
+  // Simulate network detection
+  React.useEffect(() => {
+    const signals = [1, 2, 3, 4, 5];
+    
+    // Simulate signal changes
+    const interval = setInterval(() => {
+      setSatSignal(signals[Math.floor(Math.random() * signals.length)]);
+      setCellSignal(signals[Math.floor(Math.random() * signals.length)]);
+      // Occasionally switch active network
+      if (Math.random() > 0.85) {
+        setActiveNetwork(prev => prev === 'SATELLITE' ? 'CELLULAR' : 'SATELLITE');
+      }
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const SignalBars = ({ strength, isActive, type }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 12 }}>
+      <Text style={{ fontSize: 12, marginRight: 4 }}>{type === 'SAT' ? '📡' : '📶'}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+        {[1, 2, 3, 4, 5].map(bar => (
+          <View
+            key={bar}
+            style={{
+              width: 3,
+              height: 4 + bar * 2,
+              backgroundColor: bar <= strength 
+                ? (isActive ? '#22C55E' : '#666')
+                : '#333',
+              marginRight: 1,
+              borderRadius: 1,
+            }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.statusBar}>
       <View style={styles.statusLeft}>
-        <View style={styles.statusDot} />
-        <Text style={styles.statusText}>SYSTEM</Text>
-        <Text style={styles.statusLabel}>FORBIDDEN LAN</Text>
+        <View style={[styles.statusDot, { backgroundColor: '#22C55E' }]} />
+        <Text style={styles.statusText}>SKYTALK</Text>
       </View>
       <View style={styles.statusRight}>
-        <View style={styles.statusBadge}>
-          <Text style={styles.statusBadgeText}>🔒 ENCRYPTED</Text>
-        </View>
-        <Text style={styles.statusTime}>SAT-LINK</Text>
+        <SignalBars strength={satSignal} isActive={activeNetwork === 'SATELLITE'} type="SAT" />
+        <SignalBars strength={cellSignal} isActive={activeNetwork === 'CELLULAR'} type="CELL" />
       </View>
     </View>
   );
@@ -58,17 +98,21 @@ function StatusBar() {
 
 function AppContent() {
   const [screen, setScreen] = useState('Channels');
+  const [routeParams, setRouteParams] = useState({});
   const [error, setError] = useState(null);
   const { current } = useChannel();
 
-  const navigate = (screenName) => {
+  const navigate = (screenName, params = {}) => {
     setScreen(screenName);
+    setRouteParams(params);
   };
 
   const navigation = {
     navigate,
     goBack: () => setScreen('Channels'),
   };
+
+  const route = { params: routeParams };
 
   // Simple loading fallback
   const LoadingFallback = () => (
@@ -79,11 +123,6 @@ function AppContent() {
 
   return (
     <View style={styles.container}>
-      {/* Debug element - remove after testing */}
-      <Text style={{ color: '#FF00FF', fontSize: 20, padding: 10, backgroundColor: '#222' }}>
-        DEBUG: React is rendering
-      </Text>
-      
       {/* Background gradient overlay */}
       <View style={styles.backgroundGradient} />
       
@@ -96,6 +135,8 @@ function AppContent() {
               <ChannelsScreen navigation={navigation} />
             ) : screen === 'PTT' ? (
               <PTTScreen navigation={navigation} />
+            ) : screen === 'VoiceChannel' ? (
+              <VoiceChannelChatPage navigation={navigation} route={route} />
             ) : (
               <View style={styles.placeholder}>
                 <Text style={styles.placeholderText}>{screen} - Coming Soon</Text>
@@ -104,7 +145,7 @@ function AppContent() {
           </React.Suspense>
         </View>
         
-        <BottomNav activeScreen={screen} onNavigate={navigate} />
+        {screen !== 'VoiceChannel' && <BottomNav activeScreen={screen} onNavigate={navigate} />}
       </SafeAreaView>
     </View>
   );
