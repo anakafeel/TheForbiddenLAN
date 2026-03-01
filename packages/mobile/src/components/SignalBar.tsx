@@ -1,5 +1,5 @@
 // Signal status bar — shows satellite bars, cellular signal, active link
-import type { SignalStatus } from '@skytalk/comms';
+import type { SignalStatus } from '@forbiddenlan/comms';
 interface Props { status: SignalStatus; }
 
 export function SignalBar({ status }: Props) {

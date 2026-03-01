@@ -1,6 +1,6 @@
 // Zustand global store — auth token, active talkgroup, signal status
 import { create } from 'zustand';
-import type { SignalStatus, FloorStatus, GPS } from '@skytalk/comms';
+import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
 
 interface AppState {
   jwt: string | null;

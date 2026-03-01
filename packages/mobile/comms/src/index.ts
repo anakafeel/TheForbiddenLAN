@@ -1,6 +1,6 @@
-// @skytalk/comms — main export. Everything the app and server import from here.
+// @forbiddenlan/comms — main export. Everything the app and server import from here.
 export * from './types';
-export * from './SkyTalkComms';
+export * from './ForbiddenLANComms';
 export * from './DLS140Client';
 export * from './RelaySocket';
 export * from './FloorControl';

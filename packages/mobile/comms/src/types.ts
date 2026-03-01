@@ -1,4 +1,4 @@
-// Shared types used across all packages. Define once, import from @skytalk/comms.
+// Shared types used across all packages. Define once, import from @forbiddenlan/comms.
 
 export type MessageType =
   | 'PTT_START'

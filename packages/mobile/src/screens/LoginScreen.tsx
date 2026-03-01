@@ -28,7 +28,7 @@ export function LoginScreen() {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16 }}>
-      <h1 style={{ fontSize:32, fontWeight:'bold' }}>SkyTalk</h1>
+      <h1 style={{ fontSize:32, fontWeight:'bold' }}>ForbiddenLAN</h1>
       <input placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)}
         style={{ padding:12, fontSize:16, width:280, borderRadius:8, border:'1px solid #ccc' }} />
       <input placeholder="Password" type="password" value={password} onChange={e=>setPassword(e.target.value)}
