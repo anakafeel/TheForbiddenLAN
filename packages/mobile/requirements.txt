@@ -1,0 +1,11 @@
+# React Native mobile app dependencies
+react
+react-native
+react-native-safe-area-context
+@react-navigation/native
+@react-navigation/stack
+react-native-screens
+react-native-vector-icons
+@react-native-community/netinfo
+socket.io-client
+react-native-webrtc
