@@ -15,12 +15,12 @@ export interface PTTMessage {
   type: MessageType;
   talkgroup: string;
   sender: string;       // device UUID
-  sessionId?: number;   // 4-byte short ID to avoid sending full UUID per audio chunk
+  sessionId: number;    // 4-byte short ID to avoid sending full UUID per audio chunk
   timestamp: number;    // GPS epoch ms — used for floor control arbitration
   seq: number;
 }
 
-export interface AudioChunk extends PTTMessage {
+export interface AudioChunk extends Omit<PTTMessage, 'sender'> {
   type: 'PTT_AUDIO';
   chunk: number;
   data: string;         // base64-encoded Opus frame
