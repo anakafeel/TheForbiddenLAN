@@ -1,0 +1,17 @@
+node_modules/
+.gradle/
+.idea/
+*.keystore
+*.jks
+*.iml
+.DS_Store
+build/
+dist/
+*.log
+.watchman*
+*.orig
+android/app/debug/
+android/app/release/
+coverage/
+.env
+.env.local
