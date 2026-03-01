@@ -16,6 +16,8 @@ await app.register(fastifyCors, { origin: true });
 await app.register(fastifyJwt, { secret: process.env.JWT_SECRET ?? 'dev-secret' });
 await app.register(fastifyWebsocket);
 
+app.get('/ping', async () => ({ pong: true }));
+
 // REST routes
 await app.register(authRoutes,       { prefix: '/auth' });
 await app.register(talkgroupRoutes,  { prefix: '/talkgroups' });
