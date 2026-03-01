@@ -1,29 +1,29 @@
 /**
- * Cyberpunk Tactical Theme System
- * Dark purple/neon aesthetic with glassmorphism effects
+ * SKYTRAC Theme System
+ * Clean professional dark theme
  */
 
 export const colors = {
   // Backgrounds
   background: {
-    primary: '#0B0614',
-    secondary: '#120A1F',
-    tertiary: '#1A0F2E',
-    card: 'rgba(26, 15, 46, 0.8)',
-    cardHover: 'rgba(35, 20, 60, 0.9)',
-    glass: 'rgba(18, 10, 31, 0.7)',
-    overlay: 'rgba(11, 6, 20, 0.95)',
+    primary: '#000000',
+    secondary: '#231f20',
+    tertiary: '#253746',
+    card: 'rgba(35, 31, 32, 0.9)',
+    cardHover: 'rgba(37, 55, 70, 0.9)',
+    glass: 'rgba(35, 31, 32, 0.7)',
+    overlay: 'rgba(0, 0, 0, 0.95)',
   },
 
-  // Primary Accents (Purple/Violet)
+  // Primary Accents (Blue-gray)
   accent: {
-    primary: '#A855F7',
-    primaryDark: '#7B2CFF',
-    primaryLight: '#C084FC',
-    secondary: '#8B5CF6',
-    tertiary: '#6366F1',
-    glow: 'rgba(168, 85, 247, 0.4)',
-    glowStrong: 'rgba(168, 85, 247, 0.7)',
+    primary: '#253746',
+    primaryDark: '#1a2830',
+    primaryLight: '#3a5060',
+    secondary: '#3a5060',
+    tertiary: '#4a6070',
+    glow: 'rgba(37, 55, 70, 0.4)',
+    glowStrong: 'rgba(37, 55, 70, 0.7)',
   },
 
   // Status Colors
@@ -40,28 +40,28 @@ export const colors = {
 
   // Text
   text: {
-    primary: '#EAEAF0',
-    secondary: '#A0A0B8',
-    muted: '#6B6B80',
-    accent: '#C084FC',
-    inverse: '#0B0614',
+    primary: '#ffffff',
+    secondary: '#cccccc',
+    muted: '#888888',
+    accent: '#ffffff',
+    inverse: '#000000',
   },
 
   // Borders
   border: {
-    subtle: 'rgba(168, 85, 247, 0.15)',
-    medium: 'rgba(168, 85, 247, 0.3)',
-    strong: 'rgba(168, 85, 247, 0.5)',
-    glow: '#A855F7',
+    subtle: 'rgba(255, 255, 255, 0.1)',
+    medium: 'rgba(255, 255, 255, 0.2)',
+    strong: 'rgba(255, 255, 255, 0.3)',
+    glow: '#253746',
   },
 
   // Gradients (as arrays for LinearGradient)
   gradient: {
-    primary: ['#7B2CFF', '#A855F7'],
-    secondary: ['#6366F1', '#8B5CF6'],
-    dark: ['#0B0614', '#1A0F2E'],
-    card: ['rgba(26, 15, 46, 0.9)', 'rgba(18, 10, 31, 0.7)'],
-    button: ['#8B5CF6', '#A855F7', '#C084FC'],
+    primary: ['#253746', '#3a5060'],
+    secondary: ['#231f20', '#253746'],
+    dark: ['#000000', '#231f20'],
+    card: ['rgba(35, 31, 32, 0.9)', 'rgba(0, 0, 0, 0.7)'],
+    button: ['#253746', '#3a5060', '#4a6070'],
     danger: ['#DC2626', '#EF4444'],
   },
 };
