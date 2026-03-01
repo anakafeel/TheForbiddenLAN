@@ -1,43 +1,39 @@
-// AudioPipeline — captures mic audio and sends Opus chunks over the relay
+// AudioPipeline — handles sequencing and sending external Opus chunks over the relay
 import type { RelaySocket } from './RelaySocket';
 
 export class AudioPipeline {
-  private mediaRecorder: MediaRecorder | null = null;
   private chunk = 0;
+  private isRecording = false;
 
   constructor(
     private relay: RelaySocket,
     private talkgroup: string,
-    private deviceId: string,
     private sessionId: number,
     private getSyncTime: () => number,
+    private seq: number
   ) {}
 
-  startRecording(seq: number): void {
-    if (typeof navigator === 'undefined') return; // server-side guard
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-      this.mediaRecorder.ondataavailable = async (e) => {
-        if (!e.data.size) return;
-        const buf = await e.data.arrayBuffer();
-        const data = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        this.relay.send({
-          type: 'PTT_AUDIO',
-          talkgroup: this.talkgroup,
-          sessionId: this.sessionId,
-          timestamp: this.getSyncTime(),
-          seq,
-          chunk: this.chunk++,
-          data,
-        });
-      };
-      this.mediaRecorder.start(200); // 200 ms chunks
-    }).catch(() => { /* mic access denied */ });
+  startRecording(): void {
+    this.isRecording = true;
+    this.chunk = 0;
+  }
+
+  // Mobile app (React Native) calls this with base64-encoded Opus frames
+  enqueueChunk(base64OpusData: string): void {
+    if (!this.isRecording) return;
+    
+    this.relay.send({
+      type: 'PTT_AUDIO',
+      talkgroup: this.talkgroup,
+      sessionId: this.sessionId,
+      timestamp: this.getSyncTime(),
+      seq: this.seq,
+      chunk: this.chunk++,
+      data: base64OpusData,
+    });
   }
 
   stopRecording(): void {
-    this.mediaRecorder?.stop();
-    (this.mediaRecorder as any)?.stream?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-    this.mediaRecorder = null;
+    this.isRecording = false;
   }
 }
