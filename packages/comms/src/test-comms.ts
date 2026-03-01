@@ -1,10 +1,17 @@
 import { ForbiddenLANComms } from './ForbiddenLANComms';
 
+const isMock = process.argv.includes('--mock');
+
 const comms = new ForbiddenLANComms({
   relayUrl: 'ws://localhost:9999',
   dls140Url: 'http://192.168.111.1:3000',
   deviceId: 'test-device-001',
+  mock: isMock,
 });
+
+if (isMock) {
+  console.log('🧪 Running in MOCK relay mode');
+}
 
 async function main() {
   await comms.connect('fake-jwt', 'skytrac', 'skytrac');
