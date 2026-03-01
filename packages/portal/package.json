@@ -1,5 +1,5 @@
 {
-  "name": "@skytalk/portal",
+  "name": "@forbiddenlan/portal",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "lint":  "eslint src/**/*.tsx"
   },
   "dependencies": {
-    "@skytalk/comms": "workspace:*",
+    "@forbiddenlan/comms": "workspace:*",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-router-dom": "6.22.0"
