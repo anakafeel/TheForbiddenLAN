@@ -1,0 +1,127 @@
+name: Discord Change Notifications
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Build commit list
+        id: commits
+        run: |
+          COMMIT_LIST=""
+          while IFS= read -r line; do
+            SHORT_SHA=$(echo "$line" | cut -d'|' -f1)
+            MSG=$(echo "$line" | cut -d'|' -f2)
+            AUTHOR=$(echo "$line" | cut -d'|' -f3)
+            COMMIT_LIST="${COMMIT_LIST}[\`${SHORT_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${SHORT_SHA}) ${MSG} — *${AUTHOR}*\n"
+          done <<< "$(git log --pretty=format:'%h|%s|%an' -10 ${{ github.event.before }}..${{ github.sha }} 2>/dev/null || git log --pretty=format:'%h|%s|%an' -1)"
+
+          # Escape for GH Actions output
+          COMMIT_LIST="${COMMIT_LIST//'%'/'%25'}"
+          COMMIT_LIST="${COMMIT_LIST//$'\n'/'%0A'}"
+          COMMIT_LIST="${COMMIT_LIST//$'\r'/'%0D'}"
+          echo "list=$COMMIT_LIST" >> "$GITHUB_OUTPUT"
+
+      - name: Send Discord notification (push)
+        if: github.event_name == 'push'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          ACTOR="${GITHUB_ACTOR}"
+          COMMIT_COUNT=$(git rev-list --count ${{ github.event.before }}..${{ github.sha }} 2>/dev/null || echo "1")
+          COMPARE_URL="${GITHUB_SERVER_URL}/${REPO}/compare/${{ github.event.before }}...${{ github.sha }}"
+
+          # Color: green for main/master, blue for other branches
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            COLOR=3066993
+            EMOJI="🚀"
+          else
+            COLOR=3447003
+            EMOJI="🔨"
+          fi
+
+          read -r -d '' PAYLOAD <<EOF
+          {
+            "embeds": [{
+              "title": "${EMOJI} ${COMMIT_COUNT} new commit(s) pushed to \`${BRANCH}\`",
+              "url": "${COMPARE_URL}",
+              "color": ${COLOR},
+              "description": "$(echo -e '${{ steps.commits.outputs.list }}')",
+              "fields": [
+                { "name": "Repository", "value": "[\`${REPO}\`](${GITHUB_SERVER_URL}/${REPO})", "inline": true },
+                { "name": "Branch", "value": "[\`${BRANCH}\`](${GITHUB_SERVER_URL}/${REPO}/tree/${BRANCH})", "inline": true },
+                { "name": "Pushed by", "value": "[\`${ACTOR}\`](https://github.com/${ACTOR})", "inline": true }
+              ],
+              "footer": { "text": "git pull to stay up to date 👀" },
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+
+          curl -s -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               "$DISCORD_WEBHOOK"
+
+      - name: Send Discord notification (PR)
+        if: github.event_name == 'pull_request'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PR_ACTION="${{ github.event.action }}"
+          ACTOR="${GITHUB_ACTOR}"
+          REPO="${GITHUB_REPOSITORY}"
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          if [[ "$PR_ACTION" == "opened" ]]; then
+            COLOR=15105570  # orange
+            EMOJI="📬"
+            TITLE="New PR opened"
+            FOOTER="Review time!"
+          elif [[ "$PR_ACTION" == "closed" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            COLOR=10181046  # purple
+            EMOJI="🎉"
+            TITLE="PR merged"
+            FOOTER="git pull to grab these changes!"
+          else
+            COLOR=9807270  # grey
+            EMOJI="❌"
+            TITLE="PR closed"
+            FOOTER="Closed without merging"
+          fi
+
+          read -r -d '' PAYLOAD <<EOF
+          {
+            "embeds": [{
+              "title": "${EMOJI} ${TITLE}: #${PR_NUM} ${PR_TITLE}",
+              "url": "${PR_URL}",
+              "color": ${COLOR},
+              "fields": [
+                { "name": "Repository", "value": "[\`${REPO}\`](${GITHUB_SERVER_URL}/${REPO})", "inline": true },
+                { "name": "Branch", "value": "\`${HEAD}\` → \`${BASE}\`", "inline": true },
+                { "name": "Author", "value": "[\`${ACTOR}\`](https://github.com/${ACTOR})", "inline": true }
+              ],
+              "footer": { "text": "${FOOTER}" },
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+
+          curl -s -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               "$DISCORD_WEBHOOK"
