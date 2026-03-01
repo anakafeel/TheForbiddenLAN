@@ -7,13 +7,17 @@ export class RelaySocket {
   private handlers: Map<string, ((msg: RelayMessage) => void)[]> = new Map();
 
   connect(url: string, jwt: string): void {
-    this.ws = new WebSocket(url, { headers: { Authorization: `Bearer ${jwt}` } });
+    const wsUrl = url.includes('?') ? `${url}&token=${jwt}` : `${url}?token=${jwt}`;
+    this.ws = new WebSocket(wsUrl);
     this.ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString()) as RelayMessage;
         this.emit(msg.type, msg);
         this.emit('*', msg);
       } catch { /* ignore malformed messages */ }
+    });
+    this.ws.on('open', () => {
+      this.emit('connect', { type: 'PRESENCE' } as unknown as RelayMessage); // Using a dummy cast to satisfy the internal emit signature for the 'connect' string
     });
     this.ws.on('error', (err) => {
       console.warn('[RelaySocket] error', err.message);
