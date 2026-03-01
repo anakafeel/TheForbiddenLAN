@@ -56,5 +56,10 @@ export function useComms() {
     commsRef.current?.onMessage(handler);
   };
 
-  return { startPTT, stopPTT, sendText, onMessage };
+  const sendAudioChunk = (base64OpusData: string) => {
+    if (MOCK) return;
+    commsRef.current?.sendAudioChunk(base64OpusData);
+  };
+
+  return { startPTT, stopPTT, sendText, onMessage, sendAudioChunk };
 }
