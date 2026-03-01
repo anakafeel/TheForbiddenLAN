@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  user
+}
+
+model Device {
+  id          String      @id @default(uuid())
+  name        String
+  site        String
+  serial      String      @unique
+  active      Boolean     @default(true)
+  created_at  DateTime    @default(now())
+  user        User?
+  gps_updates GpsUpdate[]
+}
+
+model User {
+  id            String       @id @default(uuid())
+  username      String       @unique
+  password_hash String
+  role          Role         @default(user)
+  device_id     String?      @unique
+  device        Device?      @relation(fields: [device_id], references: [id])
+  created_at    DateTime     @default(now())
+  memberships   Membership[]
+}
+
+model Talkgroup {
+  id               String        @id @default(uuid())
+  name             String        @unique
+  master_secret    Bytes
+  rotation_counter Int           @default(0)
+  created_at       DateTime      @default(now())
+  memberships      Membership[]
+  key_rotations    KeyRotation[]
+}
+
+model Membership {
+  user_id      String
+  talkgroup_id String
+  site         String
+  user         User      @relation(fields: [user_id], references: [id])
+  talkgroup    Talkgroup @relation(fields: [talkgroup_id], references: [id])
+
+  @@id([user_id, talkgroup_id])
+}
+
+model KeyRotation {
+  id           String    @id @default(uuid())
+  talkgroup_id String
+  counter      Int
+  rotated_at   DateTime  @default(now())
+  talkgroup    Talkgroup @relation(fields: [talkgroup_id], references: [id])
+}
+
+model GpsUpdate {
+  id         String   @id @default(uuid())
+  device_id  String
+  lat        Float
+  lng        Float
+  alt        Float
+  updated_at DateTime @default(now())
+  device     Device   @relation(fields: [device_id], references: [id])
+}
