@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AudioPipeline Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+    #log { background: #eee; padding: 10px; height: 300px; overflow-y: scroll; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>AudioPipeline Test</h1>
+  <button id="btnStart">Start Recording</button>
+  <button id="btnStop" disabled>Stop Recording</button>
+  <p>Check browser console for PTT_AUDIO messages (simulated mock RelaySocket).</p>
+  <div id="log"></div>
+
+  <script type="module">
+    import { AudioPipeline } from './dist/index.js';
+
+    const logDiv = document.getElementById('log');
+    function logMsg(msg) {
+      const p = document.createElement('div');
+      p.innerText = typeof msg === 'string' ? msg : JSON.stringify(msg);
+      logDiv.appendChild(p);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // Mock RelaySocket for browser testing
+    class MockRelay {
+      send(msg) {
+        logMsg(msg);
+        console.log('[MockRelay] send:', msg);
+      }
+    }
+
+    const relay = new MockRelay();
+    const sessionId = Math.floor(Math.random() * 0xFFFFFFFF);
+    let audio = null;
+
+    document.getElementById('btnStart').onclick = () => {
+      audio = new AudioPipeline(relay, 'TG-TEST', 'browser-device-123', sessionId, () => Date.now());
+      audio.startRecording(1);
+      document.getElementById('btnStart').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+      logMsg('Recording started...');
+    };
+
+    document.getElementById('btnStop').onclick = () => {
+      if (audio) audio.stopRecording();
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      logMsg('Recording stopped.');
+    };
+  </script>
+</body>
+</html>

@@ -18,16 +18,25 @@ export function useComms() {
       dls140Url: import.meta.env.VITE_DLS140_URL,
       deviceId: 'device-placeholder-uuid',
     });
+    let cleanupPolling: (() => void) | undefined;
     comms.connect(jwt).then(() => {
       commsRef.current = comms;
+      cleanupPolling = comms.startSignalPolling(10000, setSignalStatus);
+      // We still need to poll GPS manually for now or whenever it updates,
+      // but SignalStatus is now handled by the comms package natively.
     });
-    const interval = setInterval(async () => {
-      const s = await comms.getSignalStatus();
-      setSignalStatus(s);
+    
+    // GPS Polling (to match what we had before)
+    const gpsInterval = setInterval(() => {
       const g = comms.getGPS();
       if (g) setGPS(g);
     }, 10_000);
-    return () => { clearInterval(interval); comms.disconnect(); };
+
+    return () => { 
+      clearInterval(gpsInterval);
+      if (cleanupPolling) cleanupPolling();
+      comms.disconnect(); 
+    };
   }, [jwt]);
 
   const startPTT = (tg: string) => {
@@ -42,6 +51,10 @@ export function useComms() {
     if (MOCK) { console.log('[MOCK] text', tg, text); return; }
     commsRef.current?.sendText(tg, text);
   };
+  const onMessage = (handler: (msg: any) => void) => {
+    if (MOCK) return;
+    commsRef.current?.onMessage(handler);
+  };
 
-  return { startPTT, stopPTT, sendText };
+  return { startPTT, stopPTT, sendText, onMessage };
 }

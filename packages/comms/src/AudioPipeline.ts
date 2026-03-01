@@ -9,6 +9,8 @@ export class AudioPipeline {
     private relay: RelaySocket,
     private talkgroup: string,
     private deviceId: string,
+    private sessionId: number,
+    private getSyncTime: () => number,
   ) {}
 
   startRecording(seq: number): void {
@@ -22,8 +24,8 @@ export class AudioPipeline {
         this.relay.send({
           type: 'PTT_AUDIO',
           talkgroup: this.talkgroup,
-          sender: this.deviceId,
-          timestamp: Date.now(),
+          sessionId: this.sessionId,
+          timestamp: this.getSyncTime(),
           seq,
           chunk: this.chunk++,
           data,

@@ -21,6 +21,15 @@ export class ForbiddenLANComms {
   private seq = 0;
   private activeTalkgroup = '';
 
+  // Clock Drift Fix
+  private serverTimeOffset = 0;
+
+  // Half-Duplex Fix
+  private isTransmitting = false;
+
+  // Signal Polling
+  private signalPollingTimer: (() => void) | null = null;
+
   constructor(private config: ForbiddenLANConfig) {
     this.dls   = new DLS140Client(config.dls140Url);
     this.relay = new RelaySocket();
@@ -30,6 +39,23 @@ export class ForbiddenLANComms {
 
   async connect(jwt: string, dlsUser?: string, dlsPass?: string): Promise<void> {
     this.relay.connect(this.config.relayUrl, jwt);
+
+    // Clock Drift Fix: initial sync ping
+    this.relay.on('SYNC_TIME', (msg: RelayMessage) => {
+      if (msg.type === 'SYNC_TIME') {
+        const syncMsg = msg as Extract<RelayMessage, { type: 'SYNC_TIME' }>;
+        if (syncMsg.serverTime !== undefined) {
+          const rtt = Date.now() - syncMsg.clientTime;
+          this.serverTimeOffset = syncMsg.serverTime - syncMsg.clientTime - (rtt / 2);
+          console.log(`[ForbiddenLANComms] Time offset synced: ${this.serverTimeOffset}ms`);
+        }
+      }
+    });
+
+    this.relay.on('connect', () => {
+       this.relay.send({ type: 'SYNC_TIME', clientTime: Date.now() });
+    });
+
     if (dlsUser && dlsPass) {
       try {
         await this.dls.login(dlsUser, dlsPass);
@@ -51,17 +77,29 @@ export class ForbiddenLANComms {
 
   startPTT(): void {
     if (!this.activeTalkgroup) return;
+    this.isTransmitting = true; // Half-Duplex trap fix
     const currentSeq = ++this.seq;
-    this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, timestamp: Date.now(), seq: currentSeq });
-    this.audio = new AudioPipeline(this.relay, this.activeTalkgroup, this.config.deviceId);
+    const synchronizedTime = Date.now() + this.serverTimeOffset;
+    // Generate a quick random sessionId for this PTT press
+    const sessionId = Math.floor(Math.random() * 0xFFFFFFFF);
+    this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId, timestamp: synchronizedTime, seq: currentSeq });
+    this.audio = new AudioPipeline(
+      this.relay,
+      this.activeTalkgroup,
+      this.config.deviceId,
+      sessionId,
+      () => Date.now() + this.serverTimeOffset,
+    );
     this.audio.startRecording(currentSeq);
   }
 
   stopPTT(): void {
     this.audio?.stopRecording();
     this.audio = null;
+    this.isTransmitting = false; // Half-Duplex trap fix
     if (this.activeTalkgroup) {
-      this.relay.send({ type: 'PTT_END', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, timestamp: Date.now(), seq: this.seq });
+      const synchronizedTime = Date.now() + this.serverTimeOffset;
+      this.relay.send({ type: 'PTT_END', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, timestamp: synchronizedTime, seq: this.seq });
     }
   }
 
@@ -70,7 +108,14 @@ export class ForbiddenLANComms {
   }
 
   onMessage(handler: (msg: RelayMessage) => void): void {
-    this.relay.on('*', handler);
+    this.relay.on('*', (msg: RelayMessage) => {
+      // Half-Duplex Strict Buffer Fix
+      if (this.isTransmitting && msg.type === 'PTT_AUDIO') {
+        // Drop incoming audio while transmitting to avoid 22kbps saturation
+        return;
+      }
+      handler(msg);
+    });
   }
 
   async getSignalStatus(): Promise<SignalStatus> {
@@ -85,6 +130,14 @@ export class ForbiddenLANComms {
     return this.gpsPoller.getLastGPS();
   }
 
+  startSignalPolling(intervalMs: number, onChange: (s: SignalStatus) => void): () => void {
+    if (this.signalPollingTimer) {
+      this.signalPollingTimer(); // clear existing
+    }
+    this.signalPollingTimer = this.dls.startSignalPolling(intervalMs, onChange);
+    return this.signalPollingTimer;
+  }
+
   getFloorStatus(talkgroup: string): FloorStatus {
     return this.floor.getFloor(talkgroup);
   }
@@ -92,6 +145,11 @@ export class ForbiddenLANComms {
   disconnect(): void {
     this.audio?.stopRecording();
     this.gpsPoller.stop();
+    this.isTransmitting = false; // Half-Duplex fix: reset flag on disconnect
+    if (this.signalPollingTimer) {
+      this.signalPollingTimer();
+      this.signalPollingTimer = null;
+    }
     this.relay.disconnect();
   }
 }
