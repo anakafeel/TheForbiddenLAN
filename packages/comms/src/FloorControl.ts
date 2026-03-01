@@ -21,12 +21,12 @@ export class FloorControl {
     this.pending.set(talkgroup, candidates);
 
     if (!this.timers.has(talkgroup)) {
-      const timer = setTimeout(() => this.resolve(talkgroup), 50);
+      const timer = setTimeout(() => this.pickWinner(talkgroup), 50);
       this.timers.set(talkgroup, timer);
     }
   }
 
-  private resolve(talkgroup: string): void {
+  public pickWinner(talkgroup: string): void {
     this.timers.delete(talkgroup);
     const candidates = this.pending.get(talkgroup) ?? [];
     this.pending.delete(talkgroup);
@@ -42,5 +42,14 @@ export class FloorControl {
 
   getFloor(talkgroup: string): FloorStatus {
     return this.floors.get(talkgroup) ?? { holder: null, talkgroup, timestamp: 0 };
+  }
+
+  release(talkgroup: string): void {
+    this.floors.delete(talkgroup);
+    this.pending.delete(talkgroup);
+    if (this.timers.has(talkgroup)) {
+      clearTimeout(this.timers.get(talkgroup)!);
+      this.timers.delete(talkgroup);
+    }
   }
 }
