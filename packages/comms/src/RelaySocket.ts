@@ -1,64 +1,43 @@
-// RelaySocket — persistent WebSocket connection to the DigitalOcean relay server
-import type { RelayMessage, MessageType } from './types';
-
-type Handler = (msg: RelayMessage) => void;
+// RelaySocket — WebSocket client wrapper for the ForbiddenLAN relay server
+import WebSocket from 'ws';
+import type { RelayMessage } from './types';
 
 export class RelaySocket {
   private ws: WebSocket | null = null;
-  private handlers = new Map<MessageType | '*', Handler[]>();
-  private url = '';
-  private jwt = '';
-  private reconnectDelay = 1000;
+  private handlers: Map<string, ((msg: RelayMessage) => void)[]> = new Map();
 
   connect(url: string, jwt: string): void {
-    this.url = url;
-    this.jwt = jwt;
-    this.open();
-  }
-
-  private open(): void {
-    this.ws = new WebSocket(`${this.url}?token=${this.jwt}`);
-
-    this.ws.onopen = () => {
-      console.log('[RelaySocket] connected');
-      this.reconnectDelay = 1000;
-    };
-
-    this.ws.onmessage = (e: MessageEvent) => {
+    const wsUrl = url.includes('?') ? `${url}&token=${jwt}` : `${url}?token=${jwt}`;
+    this.ws = new WebSocket(wsUrl);
+    this.ws.on('message', (data) => {
       try {
-        const msg: RelayMessage = JSON.parse(e.data);
-        this.handlers.get(msg.type)?.forEach(h => h(msg));
-        this.handlers.get('*')?.forEach(h => h(msg));
-      } catch {
-        console.warn('[RelaySocket] bad message', e.data);
-      }
-    };
-
-    this.ws.onclose = () => {
-      console.warn('[RelaySocket] closed — reconnecting in', this.reconnectDelay);
-      setTimeout(() => {
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
-        this.open();
-      }, this.reconnectDelay);
-    };
+        const msg = JSON.parse(data.toString()) as RelayMessage;
+        this.emit(msg.type, msg);
+        this.emit('*', msg);
+      } catch { /* ignore malformed messages */ }
+    });
+    this.ws.on('open', () => {
+      this.emit('connect', { type: 'PRESENCE' } as unknown as RelayMessage); // Using a dummy cast to satisfy the internal emit signature for the 'connect' string
+    });
+    this.ws.on('error', (err) => {
+      console.warn('[RelaySocket] error', err.message);
+    });
   }
 
-  on(type: MessageType | '*', handler: Handler): void {
-    if (!this.handlers.has(type)) this.handlers.set(type, []);
-    this.handlers.get(type)!.push(handler);
-  }
-
-  off(type: MessageType | '*', handler: Handler): void {
-    const list = this.handlers.get(type) ?? [];
-    this.handlers.set(type, list.filter(h => h !== handler));
-  }
-
-  send(msg: RelayMessage): void {
+  send(msg: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
-    } else {
-      console.warn('[RelaySocket] not connected — message dropped', msg.type);
     }
+  }
+
+  on(event: string, handler: (msg: RelayMessage) => void): void {
+    const list = this.handlers.get(event) ?? [];
+    list.push(handler);
+    this.handlers.set(event, list);
+  }
+
+  private emit(event: string, msg: RelayMessage): void {
+    this.handlers.get(event)?.forEach(h => h(msg));
   }
 
   disconnect(): void {

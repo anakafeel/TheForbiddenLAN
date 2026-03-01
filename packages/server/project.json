@@ -16,7 +16,7 @@
     },
     "serve": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm --filter @skytalk/server dev" }
+      "options": { "command": "pnpm --filter @forbiddenlan/server dev" }
     },
     "lint": {
       "executor": "@nx/eslint:lint",

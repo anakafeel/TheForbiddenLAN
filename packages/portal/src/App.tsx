@@ -9,7 +9,7 @@ export default function App() {
     <BrowserRouter>
       <div style={{ display:'flex', height:'100vh', fontFamily:'Arial, sans-serif' }}>
         <nav style={{ width:200, backgroundColor:'#0A1628', color:'white', padding:20, display:'flex', flexDirection:'column', gap:12 }}>
-          <h2 style={{ color:'#0D6EFD', marginBottom:16 }}>SkyTalk Admin</h2>
+          <h2 style={{ color:'#0D6EFD', marginBottom:16 }}>ForbiddenLAN Admin</h2>
           <a href="/dashboard" style={{ color:'white', textDecoration:'none' }}>📊 Dashboard</a>
           <a href="/devices"   style={{ color:'white', textDecoration:'none' }}>📡 Devices</a>
           <a href="/talkgroups"style={{ color:'white', textDecoration:'none' }}>🎙 Talkgroups</a>

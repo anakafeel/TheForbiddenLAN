@@ -8,14 +8,12 @@ export type MessageType =
   | 'FLOOR_DENY'
   | 'PRESENCE'
   | 'TEXT_MSG'
-  | 'GPS_UPDATE'
-  | 'SYNC_TIME';
+  | 'GPS_UPDATE';
 
 export interface PTTMessage {
   type: MessageType;
   talkgroup: string;
   sender: string;       // device UUID
-  sessionId?: number;   // 4-byte short ID to avoid sending full UUID per audio chunk
   timestamp: number;    // GPS epoch ms — used for floor control arbitration
   seq: number;
 }
@@ -60,12 +58,6 @@ export interface GPSUpdate {
   alt: number;
 }
 
-export interface SyncTimeMessage {
-  type: 'SYNC_TIME';
-  clientTime: number;
-  serverTime?: number;
-}
-
 export type RelayMessage =
   | PTTMessage
   | AudioChunk
@@ -73,8 +65,7 @@ export type RelayMessage =
   | FloorDeny
   | PresenceMessage
   | TextMessage
-  | GPSUpdate
-  | SyncTimeMessage;
+  | GPSUpdate;
 
 export interface SignalStatus {
   certusSignalBars: number;   // 0–5 from DLS-140 /device/status

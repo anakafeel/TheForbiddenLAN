@@ -1,7 +1,7 @@
-// GPSPoller — polls DLS-140 GPS every N seconds, emits GPS_UPDATE to relay
-import type { GPS, GPSUpdate } from './types';
+// GPSPoller — polls DLS-140 GPS every 10 s and broadcasts GPS_UPDATE to the relay
 import type { DLS140Client } from './DLS140Client';
 import type { RelaySocket } from './RelaySocket';
+import type { GPS } from './types';
 
 export class GPSPoller {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -11,7 +11,7 @@ export class GPSPoller {
     private dls: DLS140Client,
     private relay: RelaySocket,
     private deviceId: string,
-    private intervalMs = 30_000,
+    private intervalMs = 10_000,
   ) {}
 
   start(): void {
@@ -21,8 +21,7 @@ export class GPSPoller {
   }
 
   stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
   }
 
   getLastGPS(): GPS | null {
@@ -32,18 +31,15 @@ export class GPSPoller {
   private async poll(): Promise<void> {
     try {
       const raw = await this.dls.getGPS();
-      if (raw.mode < 2 || raw.latitude == null) return;  // no fix
-      this.lastGPS = { lat: raw.latitude, lng: raw.longitude!, alt: raw.altitude ?? 0, mode: raw.mode };
-      const msg: GPSUpdate = {
-        type: 'GPS_UPDATE',
-        device: this.deviceId,
-        lat: this.lastGPS.lat,
-        lng: this.lastGPS.lng,
-        alt: this.lastGPS.alt,
+      if (!raw || raw.mode < 2) return;
+      const gps: GPS = {
+        lat: raw.latitude ?? 0,
+        lng: raw.longitude ?? 0,
+        alt: raw.altitude ?? 0,
+        mode: raw.mode,
       };
-      this.relay.send(msg);
-    } catch (e) {
-      console.warn('[GPSPoller] failed to poll GPS', e);
-    }
+      this.lastGPS = gps;
+      this.relay.send({ type: 'GPS_UPDATE', device: this.deviceId, ...gps });
+    } catch { /* DLS-140 not reachable */ }
   }
 }

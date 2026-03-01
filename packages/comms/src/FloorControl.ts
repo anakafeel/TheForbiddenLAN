@@ -1,53 +1,46 @@
-// FloorControl — optimistic GPS timestamp arbitration. No round-trip, instant PTT.
-import type { FloorStatus, PTTMessage, FloorGrant, FloorDeny } from './types';
+// FloorControl — deterministic PTT floor arbitration
+// Collision window: 50 ms. Tiebreak: lowest timestamp, then lexically smallest sender UUID.
+import type { PTTMessage, FloorStatus } from './types';
 
-const COLLISION_WINDOW_MS = 50;
+interface Candidate {
+  sender: string;
+  timestamp: number;
+}
 
 export class FloorControl {
-  private pending = new Map<string, PTTMessage>();  // talkgroup → first PTT_START seen
-  private floor = new Map<string, FloorStatus>();
+  private floors = new Map<string, FloorStatus>();
+  private pending = new Map<string, Candidate[]>();
+  private timers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  /**
-   * Called when a PTT_START arrives. Returns FLOOR_GRANT or FLOOR_DENY to send back.
-   * Deterministic: lowest GPS timestamp wins. Tiebreak: lexicographically smaller UUID.
-   */
-  arbitrate(incoming: PTTMessage): FloorGrant | FloorDeny | null {
-    const tg = incoming.talkgroup;
-    const existing = this.pending.get(tg);
+  arbitrate(msg: PTTMessage): void {
+    if (msg.type !== 'PTT_START') return;
+    const { talkgroup, sender, timestamp } = msg;
 
-    if (!existing) {
-      this.pending.set(tg, incoming);
-      // Give it a collision window before granting
-      setTimeout(() => this.resolve(tg), COLLISION_WINDOW_MS);
-      return null;
+    const candidates = this.pending.get(talkgroup) ?? [];
+    candidates.push({ sender, timestamp });
+    this.pending.set(talkgroup, candidates);
+
+    if (!this.timers.has(talkgroup)) {
+      const timer = setTimeout(() => this.resolve(talkgroup), 50);
+      this.timers.set(talkgroup, timer);
     }
-
-    // Collision — keep the winner in pending
-    const winner = this.pickWinner(existing, incoming);
-    this.pending.set(tg, winner);
-    return null;
   }
 
-  private resolve(tg: string): void {
-    const winner = this.pending.get(tg);
-    if (!winner) return;
-    this.pending.delete(tg);
-    this.floor.set(tg, { holder: winner.sender, talkgroup: tg, timestamp: winner.timestamp });
-  }
+  private resolve(talkgroup: string): void {
+    this.timers.delete(talkgroup);
+    const candidates = this.pending.get(talkgroup) ?? [];
+    this.pending.delete(talkgroup);
+    if (candidates.length === 0) return;
 
-  private pickWinner(a: PTTMessage, b: PTTMessage): PTTMessage {
-    if (Math.abs(a.timestamp - b.timestamp) < COLLISION_WINDOW_MS) {
-      // Tiebreak: lexicographically smaller UUID wins (deterministic across all clients)
+    const winner = candidates.reduce((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? a : b;
       return a.sender < b.sender ? a : b;
-    }
-    return a.timestamp < b.timestamp ? a : b;
+    });
+
+    this.floors.set(talkgroup, { holder: winner.sender, talkgroup, timestamp: winner.timestamp });
   }
 
   getFloor(talkgroup: string): FloorStatus {
-    return this.floor.get(talkgroup) ?? { holder: null, talkgroup, timestamp: 0 };
-  }
-
-  release(talkgroup: string): void {
-    this.floor.set(talkgroup, { holder: null, talkgroup, timestamp: 0 });
+    return this.floors.get(talkgroup) ?? { holder: null, talkgroup, timestamp: 0 };
   }
 }

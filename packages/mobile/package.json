@@ -1,7 +1,7 @@
 {
-  "name": "SkyTalkMobile",
-  "version": "1.0.0",
-  "private": true,
+  "name": "@forbiddenlan/mobile",
+  "version": "0.0.1",
+  "type": "module",
   "scripts": {
     "start": "react-native start",
     "android": "react-native run-android",
@@ -12,6 +12,7 @@
     "lint": "eslint src/**/*.js"
   },
   "dependencies": {
+    "@forbiddenlan/comms": "workspace:*",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "0.72.17",

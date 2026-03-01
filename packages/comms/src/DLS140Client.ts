@@ -5,7 +5,7 @@ export class DLS140Client {
   private jwt = '';
   private base: string;
 
-  constructor(base = 'http://192.168.1.1') {
+  constructor(base = 'http://192.168.111.1:3000') {
     this.base = base;
   }
 
@@ -50,6 +50,11 @@ export class DLS140Client {
     });
   }
 
+  async getRoutingPreference(): Promise<{ prefer: 'cellular' | 'satellite' }> {
+    const res = await fetch(`${this.base}/network/routing`, { headers: this.headers });
+    return res.json();
+  }
+
   async ping(ip: string, iface: 'sat' | 'cell' | 'any' = 'any') {
     const res = await fetch(`${this.base}/diagnostics/ping`, {
       method: 'POST',
@@ -57,6 +62,20 @@ export class DLS140Client {
       body: JSON.stringify({ ip, count: 4, interface: iface }),
     });
     return res.json();
+  }
+
+  startSignalPolling(intervalMs = 10000, onChange: (s: SignalStatus) => void): () => void {
+    let last = '';
+    const run = async () => {
+      try {
+        const s = await this.toSignalStatus();
+        const key = JSON.stringify(s);
+        if (key !== last) { last = key; onChange(s); }
+      } catch { /* device unreachable */ }
+    };
+    run();
+    const timer = setInterval(run, intervalMs);
+    return () => clearInterval(timer);
   }
 
   async toSignalStatus(): Promise<SignalStatus> {
@@ -69,7 +88,7 @@ export class DLS140Client {
       : status.certusDataBars > 0 ? 'satellite'
       : 'none';
     return {
-      certusSignalBars: status.certusDataBars,
+      certusSignalBars: status.certusDataBars ?? 0,
       cellularSignal: status.cellularSignalStrength,
       activeLink,
       certusDataUsedKB: usage?.certus?.txusage ?? 0,

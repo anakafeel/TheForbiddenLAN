@@ -1,0 +1,147 @@
+name: Discord Change Notifications
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Send Discord notification (push)
+        if: github.event_name == 'push'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          ACTOR="${GITHUB_ACTOR}"
+          SERVER_URL="${GITHUB_SERVER_URL}"
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          COMMIT_COUNT=$(git rev-list --count "${BEFORE}..${AFTER}" 2>/dev/null || echo "1")
+          COMPARE_URL="${SERVER_URL}/${REPO}/compare/${BEFORE}...${AFTER}"
+
+          # Build commit list
+          COMMIT_LIST=""
+          while IFS='|' read -r sha msg author; do
+            COMMIT_LIST="${COMMIT_LIST}[\`${sha}\`](${SERVER_URL}/${REPO}/commit/${sha}) ${msg} — *${author}*\n"
+          done <<< "$(git log --pretty=format:'%h|%s|%an' -10 "${BEFORE}..${AFTER}" 2>/dev/null || git log --pretty=format:'%h|%s|%an' -1)"
+
+          # Color: green for main/master, blue for other branches
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+            COLOR=3066993
+            EMOJI="🚀"
+          else
+            COLOR=3447003
+            EMOJI="🔨"
+          fi
+
+          TITLE="${EMOJI} ${COMMIT_COUNT} new commit(s) pushed to \`${BRANCH}\`"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$COMPARE_URL" \
+            --argjson color "$COLOR" \
+            --arg desc "$COMMIT_LIST" \
+            --arg repo "$REPO" \
+            --arg repo_url "${SERVER_URL}/${REPO}" \
+            --arg branch "$BRANCH" \
+            --arg branch_url "${SERVER_URL}/${REPO}/tree/${BRANCH}" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/${ACTOR}" \
+            --arg ts "$TIMESTAMP" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: $color,
+                description: $desc,
+                fields: [
+                  { name: "Repository", value: "[\($repo)](\($repo_url))", inline: true },
+                  { name: "Branch", value: "[\($branch)](\($branch_url))", inline: true },
+                  { name: "Pushed by", value: "[\($actor)](\($actor_url))", inline: true }
+                ],
+                footer: { text: "git pull to stay up to date 👀" },
+                timestamp: $ts
+              }]
+            }')
+
+          curl -sf -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               "$DISCORD_WEBHOOK"
+
+      - name: Send Discord notification (PR)
+        if: github.event_name == 'pull_request'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          PR_ACTION="${{ github.event.action }}"
+          PR_MERGED="${{ github.event.pull_request.merged }}"
+          ACTOR="${GITHUB_ACTOR}"
+          REPO="${GITHUB_REPOSITORY}"
+          SERVER_URL="${GITHUB_SERVER_URL}"
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          if [[ "$PR_ACTION" == "opened" ]]; then
+            COLOR=15105570
+            EMOJI="📬"
+            STATUS="New PR opened"
+            FOOTER="Review time!"
+          elif [[ "$PR_ACTION" == "closed" && "$PR_MERGED" == "true" ]]; then
+            COLOR=10181046
+            EMOJI="🎉"
+            STATUS="PR merged"
+            FOOTER="git pull to grab these changes!"
+          else
+            COLOR=9807270
+            EMOJI="❌"
+            STATUS="PR closed"
+            FOOTER="Closed without merging"
+          fi
+
+          TITLE="${EMOJI} ${STATUS}: #${PR_NUM} ${PR_TITLE}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$PR_URL" \
+            --argjson color "$COLOR" \
+            --arg repo "$REPO" \
+            --arg repo_url "${SERVER_URL}/${REPO}" \
+            --arg branches "\`${HEAD}\` → \`${BASE}\`" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/${ACTOR}" \
+            --arg footer "$FOOTER" \
+            --arg ts "$TIMESTAMP" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: $color,
+                fields: [
+                  { name: "Repository", value: "[\($repo)](\($repo_url))", inline: true },
+                  { name: "Branch", value: $branches, inline: true },
+                  { name: "Pushed by", value: "[\($actor)](\($actor_url))", inline: true }
+                ],
+                footer: { text: $footer },
+                timestamp: $ts
+              }]
+            }')
+
+          curl -sf -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               "$DISCORD_WEBHOOK"

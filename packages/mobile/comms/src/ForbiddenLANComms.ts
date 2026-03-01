@@ -1,4 +1,4 @@
-// SkyTalkComms — main class consumed by the mobile app via useComms() hook
+// ForbiddenLANComms — main class consumed by the mobile app via useComms() hook
 import { DLS140Client } from './DLS140Client';
 import { RelaySocket } from './RelaySocket';
 import { FloorControl } from './FloorControl';
@@ -6,13 +6,13 @@ import { GPSPoller } from './GPSPoller';
 import { AudioPipeline } from './AudioPipeline';
 import type { SignalStatus, GPS, FloorStatus, RelayMessage } from './types';
 
-export interface SkyTalkConfig {
+export interface ForbiddenLANConfig {
   relayUrl: string;
   dls140Url?: string;
   deviceId: string;
 }
 
-export class SkyTalkComms {
+export class ForbiddenLANComms {
   private dls: DLS140Client;
   private relay: RelaySocket;
   private floor: FloorControl;
@@ -21,7 +21,7 @@ export class SkyTalkComms {
   private seq = 0;
   private activeTalkgroup = '';
 
-  constructor(private config: SkyTalkConfig) {
+  constructor(private config: ForbiddenLANConfig) {
     this.dls   = new DLS140Client(config.dls140Url);
     this.relay = new RelaySocket();
     this.floor = new FloorControl();
@@ -42,7 +42,7 @@ export class SkyTalkComms {
           await this.dls.setRoutingPreference('cellular');
         }
       } catch {
-        console.warn('[SkyTalkComms] DLS-140 not reachable — running on external network');
+        console.warn('[ForbiddenLANComms] DLS-140 not reachable — running on external network');
       }
     }
   }
