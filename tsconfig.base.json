@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "rootDir": ".",
     "sourceMap": true,
     "declaration": true,
@@ -14,8 +15,8 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@skytalk/comms": ["packages/comms/src/index.ts"],
-      "@skytalk/comms/*": ["packages/comms/src/*"]
+      "@forbiddenlan/comms": ["packages/comms/src/index.ts"],
+      "@forbiddenlan/comms/*": ["packages/comms/src/*"]
     }
   },
   "exclude": ["node_modules", "dist"]

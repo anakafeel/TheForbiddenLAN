@@ -1,4 +1,4 @@
-// @skytalk/server — Fastify relay server entry point
+// @forbiddenlan/server — Fastify relay server entry point
 import 'dotenv/config';
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
@@ -27,4 +27,4 @@ await registerHub(app);
 
 const port = Number(process.env.PORT ?? 3000);
 await app.listen({ port, host: '0.0.0.0' });
-console.log(`SkyTalk relay server listening on :${port}`);
+console.log(`ForbiddenLAN relay server listening on :${port}`);

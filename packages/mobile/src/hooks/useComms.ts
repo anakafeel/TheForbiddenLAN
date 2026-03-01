@@ -1,6 +1,6 @@
-// useComms — wraps SkyTalkComms. Swap mock for real by changing the import only.
+// useComms — wraps ForbiddenLANComms. Swap mock for real by changing the import only.
 import { useEffect, useRef } from 'react';
-import { SkyTalkComms } from '@skytalk/comms';
+import { ForbiddenLANComms } from '@forbiddenlan/comms';
 import { useStore } from '../store';
 
 // ── MOCK: remove this block and uncomment real config when Saim's package is ready ──
@@ -9,11 +9,11 @@ const MOCK = true;
 
 export function useComms() {
   const { setSignalStatus, setFloorStatus, setGPS, jwt } = useStore();
-  const commsRef = useRef<SkyTalkComms | null>(null);
+  const commsRef = useRef<ForbiddenLANComms | null>(null);
 
   useEffect(() => {
     if (MOCK || !jwt) return;
-    const comms = new SkyTalkComms({
+    const comms = new ForbiddenLANComms({
       relayUrl: import.meta.env.VITE_WS_URL ?? 'ws://localhost:3000',
       dls140Url: import.meta.env.VITE_DLS140_URL,
       deviceId: 'device-placeholder-uuid',
