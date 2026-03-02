@@ -7,7 +7,7 @@
   "scripts": {
     "dev:server":  "nx serve server",
     "dev:mobile":  "nx serve mobile",
-    "dev:portal":  "nx serve portal",
+    "dev:web":     "nx serve portal",
     "build:comms": "nx build comms",
     "build:all":   "nx run-many --target=build --all",
     "test:all":    "nx run-many --target=test --all",
