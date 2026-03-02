@@ -1,0 +1,1583 @@
+openapi: 3.1.1
+info:
+  title: DLS-140 API Spec
+  description: API specification for DLS-140 system
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:3000
+    description: Place Holder Server
+
+paths:
+  /ping:
+    get:
+      summary: Pings the server
+      responses:
+        "200":
+          description: Ping successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pong:
+                    type: boolean
+                    example: true
+                required:
+                  - pong
+  /auth/login:
+    post:
+      summary: Authenticate with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jwt:
+                    type: string
+                required:
+                  - jwt
+        "400":
+          description: Missing input
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: bad_request
+        "401":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: invalid_login
+        "500":
+          description: Server error
+          $ref: "#/components/responses/ServerErrorResponse"
+  /auth/changepassword:
+    post:
+      summary: Changes a user's password
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newpassword]
+              properties:
+                oldpassword:
+                  type: string
+                newpassword:
+                  type: string
+                username:
+                  type: string
+      responses:
+        "200":
+          description: Password changed
+        "403":
+          description: Old password did not match
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: invalid_password
+        "401":
+          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "500":
+          description: Server error
+          $ref: "#/components/responses/ServerErrorResponse"
+  /dhcp/reservations:
+    get:
+      summary: List all DHCP reservations
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: List returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [mac, ip, hostname]
+                  properties:
+                    mac:
+                      type: string
+                    ip:
+                      type: string
+                    hostname:
+                      type: string
+
+        "401":
+          description: Unauthorized
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "500":
+          description: Server error
+          $ref: "#/components/responses/ServerErrorResponse"
+
+    put:
+      summary: Create a new DHCP reservation
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac, ip, hostname]
+              properties:
+                mac:
+                  type: string
+                ip:
+                  type: string
+                hostname:
+                  type: string
+      responses:
+        "200":
+          description: Reservation created
+
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /dhcp/reservations/{mac}:
+    patch:
+      summary: Edit an existing DHCP reservation
+      parameters:
+        - in: path
+          name: mac
+          required: true
+          schema:
+            type: string         
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mac:
+                  type: string
+                ip:
+                  type: string
+                hostname:
+                  type: string
+      responses:
+        "200":
+          description: Reservation updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mac:
+                    type: string
+                  ip:
+                    type: string
+                  hostname:
+                    type: string
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+    delete:
+      summary: Delete a DHCP reservation
+      parameters:
+        - in: path
+          name: mac
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/AuthorizationHeader"
+
+      responses:
+        "200":
+          description: Reservation deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mac:
+                    type: string
+                  ip:
+                    type: string
+                  hostname:
+                    type: string
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /device/info:
+    get:
+      summary: Get static device information
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Static device info returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productName:
+                    type: string
+                    example: DLS-140
+                  partNumber:
+                    type: string
+                    example: 140-100-0x
+                  serialNumber:
+                    type: string
+                    example: 12345
+                  firmwareVersion:
+                    type: string
+                    example: FW-1.2.3
+                  hardwareVersion:
+                    type: string
+                    example: HW-1.0
+                required:
+                  - productName
+                  - partNumber
+                  - serialNumber
+                  - firmwareVersion
+                  - hardwareVersion
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /device/state:
+    get:
+      summary: Get static device information
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Static device info returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state:
+                    type: string
+                    example: active
+                required:
+                  - state
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /device/status:
+    get:
+      summary: Get variable device information
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Variable device info returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certusIMEI:
+                    type: string
+                    example: "356789101234567"
+                  certusSIM:
+                    type: string
+                    example: "8901120201234567890"
+                  certusSignalStrength:
+                    type: integer                   
+                    minimum: -100
+                    maximum: -60
+                    example: -78
+                  certusDataBars:
+                    type: integer
+                    minimum: 0
+                    maximum: 5
+                    example: 3
+                  cellularIMEI:
+                    type: string
+                    example: "351234567890123"
+                  cellularSIM:
+                    type: string
+                    example: "8901234567890123456"
+                  cellularSignalStrength:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    example: 65
+                required:
+                  - certusIMEI
+                  - certusSIM
+                  - certusSignalStrength
+                  - cellularIMEI
+                  - cellularSIM
+                  - cellularDataStrength
+
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /device/data-usage:
+    get:
+      summary: Get data usage over specific periods
+      parameters:
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [24h, 7d, all]
+            default: 24h
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Usage data returned
+          content:
+            application/json:
+              schema:
+                properties:
+                  cellular:
+                    type: object
+                    properties:
+                      txusage:
+                        type: number
+                        format: float
+                        description: Amount of data transmitted over the cellular interface
+                        example: 145.2
+                      txunit:
+                        type: string
+                        description: Unit of the cellular data usage
+                        example: MB
+                      rxusage:
+                        type: number
+                        format: float
+                        description: Amount of data received over the cellular interface
+                        example: 145.2
+                      rxunit:
+                        type: string
+                        description: Unit of the cellular data usage
+                        example: MB
+                    required: [rxusage, rxunit, txusage, txunit]
+
+                  certus:
+                    type: object
+                    properties:
+                      txusage:
+                        type: number
+                        format: float
+                        description: Amount of data transmitted over the Certus interface
+                        example: 78.5
+                      txunit:
+                        type: string
+                        description: Unit of the Certus data usage
+                        example: MB
+                      rxusage:
+                        type: number
+                        format: float
+                        description: Amount of data received over the Certus interface
+                        example: 78.5
+                      rxunit:
+                        type: string
+                        description: Unit of the Certus data usage
+                        example: MB
+                    required: [rxusage, rxunit, txusage, txunit]
+
+                
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /device/name:
+    get:
+      summary: Get device name
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Name returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    patch:
+      summary: Update device name
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Name updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/status/wifi:
+    get:
+      summary: Retrieve current network status of the WiFi interface
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: WiFi network status returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                    - enabled
+                properties:
+                  enabled:
+                    type: boolean
+                    description: True if enabled, false otherwise
+                    example: true
+                  
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /network/status/cell:
+    get:
+      summary: Retrieve current network status of the cellular interface
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Cellular network status returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                    - enabled
+                properties:
+                  enabled:
+                    type: boolean
+                    description: True if enabled, false otherwise
+                    example: true
+                  error:
+                    type: boolean
+                  
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /network/status/certus:
+    get:
+      summary: Retrieve current network status of the satellite interface
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Satellite network status returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                    - enabled
+                properties:
+                  enabled:
+                    type: boolean
+                    description: True if enabled, false otherwise
+                    example: true
+                  
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/wifi:
+    get:
+      summary: Retrieve current Wi-Fi access point settings
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Wi-Fi settings returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ssid, country, security, channel]
+                properties:
+                  ssid:
+                    type: string
+                  country:
+                    type: string
+                  security:
+                    type: string
+                    enum:
+                      - "none"
+                      - "wpa"
+                      - "wpa2"
+                  password:
+                    type: string
+                  channel:
+                    type: number
+                    description: Set to 0 for autoselect
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    patch:
+      summary: Modify Wi-Fi access point settings
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ssid:
+                  type: string
+                country:
+                  type: string
+                  description: Two letter country code
+                security:
+                  type: string
+                password:
+                  type: string
+                channel:
+                  type: number
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ssid, country, security, channel]
+                properties:
+                  ssid:
+                    type: string
+                  country:
+                    type: string
+                  security:
+                    type: string
+                  password:
+                    type: string
+                  channel:
+                    type: number
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/lan:
+    get:
+      summary: Retrieve current LAN settings
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: LAN settings returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ip, netmask, primary_dns, secondary_dns, dhcpstart, dhcpend, dhcpvalidity]
+                properties:
+                  ip:
+                    type: string
+                  netmask:
+                    type: string
+                  primary_dns:
+                    type: string
+                  secondary_dns:
+                    type: string
+                  dhcpstart:
+                    type: string
+                  dhcpend:
+                    type: string
+                  dhcpvalidity:
+                    type: number
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    patch:
+      summary: Modify LAN settings
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:
+                  type: string
+                netmask:
+                  type: string
+                primary_dns:
+                  type: string
+                secondary_dns:
+                  type: string
+                dhcpstart:
+                  type: string
+                dhcpend:
+                  type: string
+                dhcpvalidity:
+                  type: number
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ip, netmask, primary_dns, secondary_dns, dhcpstart, dhcpend, dhcpvalidity]
+                properties:
+                  ip:
+                    type: string
+                  netmask:
+                    type: string
+                  primary_dns:
+                    type: string
+                  secondary_dns:
+                    type: string
+                  dhcpstart:
+                    type: string
+                  dhcpend:
+                    type: string
+                  dhcpvalidity:
+                    type: number
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/routing:
+    get:
+      summary: Get network routing preferences
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Routing preferences returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prefer:
+                    type: string
+                    enum: [cellular, satellite]
+                    description: Preferred connection type
+                required:
+                - perfer
+                  
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    put:
+      summary: Update network routing preferences
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prefer:
+                  type: string
+                  enum: [cellular, satellite]
+                  description: Preferred connection type
+      responses:
+        "200":
+          description: Preferences updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/firewall:
+    get:
+      summary: Get current firewall configuration
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Firewall config returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current:
+                    type: string
+                    enum: [unrestricted, nointernet, webonly]
+                    description: Firewall profile
+                  available:
+                    type: array
+                    items:
+                      type: string
+                      enum: [unrestricted, nointernet, webonly]
+                required:
+                - current
+                - available
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    put:
+      summary: Update firewall configuration
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                profile:
+                  type: string
+                  enum: [unrestricted, nointernet, webonly]
+              required:
+                - profile
+      responses:
+        "200":
+          description: Configuration updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /cell/apn:
+    get:
+      summary: Gets the current cellular APN
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: APN returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apn:
+                    type: string
+                    example: ltemobile.apn
+                required:
+                  - apn
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    put:
+      summary: Update the APN
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apn:
+                  type: string
+                  example: gigsky.apn
+              required:
+                - apn
+      responses:
+        "200":
+          description: APN updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+
+  /diagnostics/status:
+    get:
+      summary: Get device status
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Device status returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  temperature:
+                    type: number
+                    format: float
+                    example: 42.5
+                  uptime:
+                    type: number
+                    example: 1800
+                  cpuUsage:
+                    type: number
+                    example: 35.2
+                  memoryUsage:
+                    type: number
+                    example: 58.7
+                  storageUsage:
+                    type: number
+                    example: 15.0
+                required:
+                - uptime
+                - cpuUsage
+                - memoryUsage
+                - temperature
+                - storageUsage
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /diagnostics/ping:
+    post:
+      summary: Get connection quality
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ip, count, interface]
+              properties:
+                ip:
+                  type: string
+                  example: 1.1.1.1
+                count:
+                  type: number
+                  example: 5
+                interface:
+                  type: string
+                  enum:
+                    - "sat"
+                    - "cell"
+                    - "any"
+                  example: cell
+      responses:
+        "200":
+          description: Ping output returned
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /network/toggle:
+    post:
+      summary: Enable or disable Wi-Fi, cellular, or Certus
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - enabled
+              properties:
+                type:
+                  type: string
+                  description: The network interface to toggle
+                  enum: [wifi, cellular, certus]
+                  example: wifi
+                enabled:
+                  type: boolean
+                  description: Enable (true) or disable (false) the interface
+                  example: true
+      responses:
+        "200":
+          description: Network interface state updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /logs:
+    get:
+      summary: Get available log types
+      description: Returns a list of available log types (e.g., debug, system, network)
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: List of available log types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      type: string
+                    example: ["debug", "system", "network"]
+                required:
+                - logs
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /logs/{logType}:
+    get:
+      summary: Download a specific log file
+      description: Returns the requested log file in plain text format
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+        - in: path
+          name: logType
+          required: true
+          schema:
+            type: string
+          description: Type of log to download
+        - in: query
+          name: start
+          required: false
+          schema:
+            type: number
+          description: Unix timestamp for start of log range
+        - in: query
+          name: end
+          required: false
+          schema:
+            type: number
+          description: Unix timestamp for end of log range
+      responses:
+        "200":
+          description: Log file download
+          content:
+            text/plain:
+              schema:
+                required: 
+                  - logfile
+                properties:
+                  logfile:
+                    type: string
+                    format: binary
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "404":
+          description: Log file not found
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    example: "Requested log type not found"
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+
+  /location/gps:
+    get:
+      summary: Get GPS data
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Current GPS location returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  latitude:
+                    type: number
+                    example: 49.2827
+                  longitude:
+                    type: number
+                    example: -123.1207
+                  altitude:
+                    type: number
+                    example: 20.3
+                  mode:
+                    type: number
+                    example: 3
+                required:
+                  - mode
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /location/gps/toggle:
+    post:
+      summary: Toggles GPS reporting
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                  description: Enable (true) or disable (false) the interface
+                  example: true
+      responses:
+        "200":
+          description: GPS state updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /location/gps/interval:
+    get:
+      summary: Gets the GPS reporting interval
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: GPS interval and state returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    example: true
+                  interval:
+                    type: number
+                    example: 30
+                required:
+                  - enabled
+                  - interval
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+    post:
+      summary: Sets the GPS reporting interval
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - interval
+              properties:
+                interval:
+                  type: number
+                  example: 15
+      responses:
+        "200":
+          description: GPS interval set
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  /config:
+    get:
+      summary: Download full device configuration
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Configuration file returned
+          content:
+            multipart/form-data:
+              schema:
+                type: object
+                required: 
+                  - file
+                properties:
+                  file:
+                    type: string
+                    format: binary
+                    description: The configuration file to upload
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  
+    post:
+      summary: Upload full device configuration
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The configuration file to upload
+      responses:
+        "200":
+          description: Configuration updated
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  
+    delete:
+      summary: Factory resets the device configuration
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        "200":
+          description: Configuration reset
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  
+  /system/update:
+    post:
+      summary: Upload a RAUC bundle and run a system update
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - bundle
+              properties:
+                bundle:
+                  type: string
+                  format: binary
+                  description: The RAUC update bundle file (.raucb)
+      responses:
+        "200":
+          description: RAUC bundle uploaded and update started
+        "400":
+          description: Invalid input
+          $ref: '#/components/responses/BadRequestResponse'
+        "401":
+          description: Unauthorized
+          $ref: '#/components/responses/UnauthorizedResponse'
+        "500":
+          description: Server error
+          $ref: '#/components/responses/ServerErrorResponse'
+  
+  /users:
+    get:
+      summary: List all users
+      tags: [User Management]
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    username:
+                      type: string
+                    role:
+                      type: string
+                    permissions:
+                      type: object
+                      additionalProperties:
+                        type: object
+        '403':
+          description: Forbidden
+  
+    put:
+      summary: Create new user
+      tags: [User Management]
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, role]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                role:
+                  type: string
+                permissions:
+                  type: object
+                  additionalProperties:
+                    type: object
+      responses:
+        '200':
+          description: User created
+        '400':
+          description: Missing fields
+        '500':
+          description: Database error
+  
+  /users/{username}:
+    get:
+      summary: Get user details
+      tags: [User Management]
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+        - in: path
+          name: username
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  role:
+                    type: string
+                  permissions:
+                    type: object
+                    additionalProperties:
+                      type: object
+        '404':
+          description: User not found
+  
+    patch:
+      summary: Update user role/permissions
+      tags: [User Management]
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+        - in: path
+          name: username
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                permissions:
+                  type: object
+                  additionalProperties:
+                    type: object
+      responses:
+        '200':
+          description: User updated
+        '400':
+          description: Invalid input
+        '404':
+          description: User not found
+  
+    delete:
+      summary: Delete a user
+      tags: [User Management]
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationHeader"
+        - in: path
+          name: username
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deleted
+        '404':
+          description: User not found
+  
+components:
+    parameters:
+      AuthorizationHeader:
+        name: Authorization
+        in: header
+        description: Bearer token for authentication
+        required: true
+        schema:
+          type: string
+  
+    responses:
+      BadRequestResponse:
+        description: Bad request
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [error]
+              properties:
+                error:
+                  type: string
+                  example: invalid_input
+  
+      UnauthorizedResponse:
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [error]
+              properties:
+                error:
+                  type: string
+                  example: invalid_token
+  
+      ServerErrorResponse:
+        description: Server error response with message
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [error]
+              properties:
+                error:
+                  type: string
+                  example: internal_error
+  
