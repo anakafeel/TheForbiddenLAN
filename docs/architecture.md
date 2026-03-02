@@ -7,13 +7,19 @@ See SkyTalk_Master_Guide.docx for full details.
 
 ## Mobile App Build Targets
 
-The mobile package (`packages/mobile`) produces three build targets from the same React Native source:
+The mobile package (`packages/mobile`) is an **Expo SDK 50** project. `expo/AppEntry.js` is the universal entry point, which auto-discovers `src/App.tsx` (or `App.jsx`).
 
-- **Browser** — Vite + `react-native-web` aliasing. Entry: `index.web.js` → `App.web.jsx`. Used for development, comms integration testing, and the web client. Run with `pnpm dev:mobile`.
-- **Android** — Metro + Gradle. Entry: `index.js` → `App.jsx`.
-- **iOS** — Metro + Xcode. Entry: `index.js` → `App.jsx`.
+| Target | Command | Notes |
+|--------|---------|-------|
+| iOS (device) | `expo start --ios` | Requires a custom **Expo Development Build** — standard Expo Go is incompatible due to `react-native-webrtc` native bindings |
+| Android | `expo start --android` | Same requirement as iOS |
+| Native project generation | `expo prebuild` | Generates `ios/` and `android/` directories from `app.json` plugins before building |
 
-See `docs/tradeoffs.md` — *Web Dev Environment: Vite + react-native-web vs Metro Web* for the full rationale.
+### Why Expo Development Build (not Expo Go)
+`react-native-webrtc` requires C++/Objective-C native bindings that are not included in the standard Expo Go binary. We use `expo-build-properties` in `app.json` to enforce a minimum iOS deployment target of 13.0 for WebRTC compatibility. See `docs/tradeoffs.md` — *Expo Go vs Expo Development Build* for the full rationale.
+
+### Previous Vite / Bare React Native Setup
+Prior to the Expo migration, the package used Vite + `react-native-web` for browser-based dev testing, with `index.js` / `index.web.js` as entry points. These have been removed. Browser-based testing of the comms layer can still be done via the relay test scripts in `packages/comms/src/test-comms.ts`.
 
 ## Resilience and Testing Architecture
 - **Auto-Reconnect**: The `RelaySocket` implements an exponential backoff reconnect strategy (up to 30s delays, max 5 attempts) to handle the intermittent nature of satellite internet.

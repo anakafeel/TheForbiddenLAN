@@ -1,4 +1,28 @@
 {
-  "name": "SkyTalkMobile",
-  "displayName": "SkyTalk Mobile"
+  "expo": {
+    "name": "SkyTalkMobile",
+    "slug": "theforbiddenlan",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.forbiddenlan.skytalk"
+    },
+    "android": {
+      "package": "com.forbiddenlan.skytalk"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f3bbbbfc-47f4-4d7e-a94c-c653589636cf"
+      }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-web-browser"
+    ]
+  }
 }

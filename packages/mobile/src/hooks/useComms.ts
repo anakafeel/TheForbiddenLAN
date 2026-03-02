@@ -5,6 +5,7 @@ import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { useStore } from '../store';
 import { useAudioCapture } from './useAudioCapture';
 import { useAudioPlayback } from './useAudioPlayback';
+import { CONFIG } from '../config';
 
 const IS_MOCK = false;
 const DEVICE_ID = 'device-placeholder-uuid';
@@ -32,10 +33,10 @@ export function useComms() {
   // Initialize comms with MockRelaySocket (no real server needed)
   useEffect(() => {
     const comms = new ForbiddenLANComms({
-      relayUrl: import.meta.env.VITE_WS_URL ?? 'ws://localhost:3000',
-      dls140Url: import.meta.env.VITE_DLS140_URL,
-      deviceId: DEVICE_ID,
-      mock: true, // always use MockRelaySocket — swap to false when relay server is live
+      relayUrl: CONFIG.WS_URL,
+      dls140Url: CONFIG.DLS140_URL,
+      deviceId: CONFIG.DEVICE_ID,
+      mock: CONFIG.MOCK_MODE,
     });
 
     comms.connect(jwt ?? 'mock-dev-token').then(() => {

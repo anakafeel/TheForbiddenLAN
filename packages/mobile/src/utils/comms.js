@@ -2,6 +2,8 @@
 // All values come from CONFIG so no code changes are needed when switching to real backend.
 import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { CONFIG } from '../config';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 export const encryption = new Encryption();
 
@@ -12,66 +14,49 @@ export const comms = new ForbiddenLANComms({
   mock:      CONFIG.MOCK_MODE,
 });
 
-// ── Audio playback ────────────────────────────────────────────────────────────
+// ── Audio playback (expo-av) ──────────────────────────────────────────────────
 //
-// WHY NOT per-chunk decodeAudioData?
+// On PTT_AUDIO: accumulate base64 chunks.
+// On PTT_END:   concatenate all chunks → write to a temp file → play via expo-av.
 //
-// MediaRecorder (audio/webm;codecs=opus) produces FRAGMENTED WebM, not independent files:
-//
-//   Chunk 0 (first, larger):  [EBML header][WebM Info][Tracks][Cluster 1]
-//   Chunk 1..N (subsequent):  [Cluster N]   ← no header, NOT standalone-decodable
-//
-// decodeAudioData() needs a complete audio file. Chunk 0 succeeds (has the header).
-// Chunks 1..N throw silently inside the catch → only the first ~200ms of audio plays.
-//
-// FIX: accumulate every chunk from one PTT transmission into _accumulator[].
-// On PTT_END (relayed back from MockRelay / real server), concatenate the buffers:
-//
-//   [EBML header][WebM Info][Tracks][Cluster 1][Cluster 2]...[Cluster N]
-//                                                   ↑ valid, complete WebM file
-//
-// decodeAudioData on the concatenated buffer decodes the full transmission.
-// You hear the entire thing play back right after the speaker releases PTT.
+// We accumulate before playing because the audio stream (m4a/aac from expo-av) produces
+// fragmented packets that are not independently decodable. The full file is needed.
 
-let _audioCtx = null;
-const _accumulator = []; // ArrayBuffers collected during one PTT transmission
-
-function _getCtx() {
-  if (!_audioCtx) _audioCtx = new AudioContext();
-  return _audioCtx;
-}
+const _accumulator = []; // base64 string chunks
 
 export function enqueueAudio(base64) {
-  const binary = atob(base64);
-  const buf = new ArrayBuffer(binary.length);
-  const view = new Uint8Array(buf);
-  for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-  _accumulator.push(buf);
+  _accumulator.push(base64);
 }
 
 async function _flushAudio() {
   if (_accumulator.length === 0) return;
 
-  // Concatenate all accumulated WebM clusters into one decodable buffer
-  const totalBytes = _accumulator.reduce((n, b) => n + b.byteLength, 0);
-  const combined = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of _accumulator) {
-    combined.set(new Uint8Array(chunk), offset);
-    offset += chunk.byteLength;
-  }
-  _accumulator.length = 0; // clear for next transmission
+  // Concatenate all base64 chunks into one string
+  const combinedBase64 = _accumulator.join('');
+  _accumulator.length = 0;
 
   try {
-    const ctx = _getCtx();
-    const decoded = await ctx.decodeAudioData(combined.buffer);
-    const source = ctx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(ctx.destination);
-    source.start();
-    console.log('[comms] playing transmission —', Math.round(decoded.duration * 1000), 'ms');
+    const tempUri = FileSystem.cacheDirectory + `ptt_rx_${Date.now()}.m4a`;
+    await FileSystem.writeAsStringAsync(tempUri, combinedBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: tempUri },
+      { shouldPlay: true }
+    );
+
+    sound.setOnPlaybackStatusUpdate(async (status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        await sound.unloadAsync();
+        await FileSystem.deleteAsync(tempUri, { idempotent: true });
+        console.log('[comms] PTT playback complete');
+      }
+    });
+
+    console.log('[comms] playing transmission');
   } catch (e) {
-    console.warn('[comms] playback decode error:', e.message);
+    console.warn('[comms] playback error:', e.message);
   }
 }
 
@@ -82,7 +67,7 @@ let _initialized = false;
  * Connect to the relay and wire up audio playback.
  *
  * Mock mode:  called automatically with CONFIG.MOCK_JWT on import (via socket.js).
- * Real mode:  called by connectComms(jwt) in socket.js after Shri's auth login.
+ * Real mode:  called by connectComms(jwt) in socket.js after auth login.
  *
  * Idempotent — safe to call multiple times, only the first call takes effect.
  */
@@ -90,16 +75,16 @@ export async function initComms(jwt) {
   if (_initialized) return;
   _initialized = true;
 
-  // Init AES-GCM-256 key (hardcoded test key — replaced by Shri's KDF when ready)
+  // Init AES-GCM-256 key (hardcoded test key — replaced by KDF when ready)
   await encryption.init();
 
   // Connect — no dlsUser/dlsPass skips DLS-140 HTTP login (avoids ERR_ADDRESS_UNREACHABLE)
   await comms.connect(jwt);
   comms.joinTalkgroup(CONFIG.TALKGROUP);
 
-  // Mock mode:  onRawMessage bypasses the half-duplex filter so MockRelay echo reaches
-  //             the playback handler (needed for single-device loopback testing).
-  // Real mode:  onMessage keeps the half-duplex filter (no audio feedback on live links).
+  // Mock mode: onRawMessage bypasses the half-duplex filter so MockRelay echo reaches
+  // the playback handler (needed for single-device loopback testing).
+  // Real mode: onMessage keeps the half-duplex filter (no audio feedback on live links).
   const subscribe = CONFIG.MOCK_MODE
     ? comms.onRawMessage.bind(comms)
     : comms.onMessage.bind(comms);
