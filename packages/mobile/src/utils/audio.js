@@ -1,60 +1,45 @@
-import { Platform } from 'react-native';
+// audio.js — mic capture via MediaRecorder → AES-GCM encrypt → comms.sendAudioChunk().
+// Exports the same startAudioStream / stopAudioStream API so PTTScreen.jsx needs no changes.
+import { comms, encryption } from './comms';
 
-let mediaDevices, RTCPeerConnection;
-let pc = null;
-let webStream = null;
-
-if (Platform.OS !== 'web') {
-  const webrtc = require('react-native-webrtc');
-  mediaDevices = webrtc.mediaDevices;
-  RTCPeerConnection = webrtc.RTCPeerConnection;
-}
+let _mediaRecorder = null;
+let _stream = null;
 
 export async function startAudioStream() {
-  // Web platform - use browser's native WebRTC
-  if (Platform.OS === 'web') {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        webStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('Web audio stream started');
-        return webStream;
-      } else {
-        console.warn('getUserMedia not supported in this browser');
-        return null;
-      }
-    } catch (err) {
-      console.warn('Web getUserMedia error', err);
-      return null;
-    }
-  }
-  
-  // Native platform
-  if (!mediaDevices) {
-    throw new Error('WebRTC not available');
-  }
   try {
-    const stream = await mediaDevices.getUserMedia({ audio: true });
-    pc = new RTCPeerConnection();
-    pc.addStream(stream);
-    return pc;
+    _stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    _mediaRecorder = new MediaRecorder(_stream, { mimeType: 'audio/webm;codecs=opus' });
+
+    _mediaRecorder.ondataavailable = async (e) => {
+      if (!e.data.size) return;
+      try {
+        const buf = await e.data.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const encrypted = await encryption.encrypt(b64);
+        console.log('[comms] PTT_AUDIO sending, encrypted bytes:', encrypted.length);
+        await comms.sendAudioChunk(encrypted);
+      } catch (err) {
+        console.warn('[comms] audio chunk error:', err.message);
+      }
+    };
+
+    _mediaRecorder.start(200); // 200 ms chunks — matches useAudioCapture
+    console.log('[comms] mic capture started (audio/webm;codecs=opus)');
+    return _stream;
   } catch (err) {
-    console.warn('getUserMedia error', err);
+    console.warn('[comms] startAudioStream failed:', err.message);
     throw err;
   }
 }
 
 export function stopAudioStream() {
-  // Web platform
-  if (webStream) {
-    webStream.getTracks().forEach(track => track.stop());
-    webStream = null;
-    console.log('Web audio stream stopped');
-    return;
+  if (_mediaRecorder) {
+    _mediaRecorder.stop();
+    _mediaRecorder = null;
   }
-  
-  // Native platform
-  if (pc) {
-    pc.close();
-    pc = null;
+  if (_stream) {
+    _stream.getTracks().forEach(t => t.stop());
+    _stream = null;
   }
+  console.log('[comms] mic capture stopped');
 }
