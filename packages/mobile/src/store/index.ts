@@ -20,7 +20,7 @@ export const useStore = create<AppState>((set) => ({
   jwt: null,
   activeTalkgroup: '',
   talkgroups: [],
-  signalStatus: { certusSignalBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },
+  signalStatus: { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },
   floorStatus: { holder: null, talkgroup: '', timestamp: 0 },
   gps: null,
   setJwt: (jwt) => set({ jwt }),

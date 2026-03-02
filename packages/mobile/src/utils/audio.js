@@ -1,30 +1,58 @@
-// audio.js — mic capture via expo-av → base64 encode → comms.sendAudioChunk().
-// Replaces browser-only navigator.mediaDevices + MediaRecorder with expo-av.
-// Exports the same startAudioStream / stopAudioStream API so PTTScreen.jsx needs no changes.
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+// audio.js — live mic capture via react-native-live-audio-stream → Opus encode → comms.sendAudioChunk()
+// Replaces expo-av to enable real-time chunk streaming and Opus compression.
+// Note: Requires Expo Dev Build (EAS) because it uses custom native modules.
+import LiveAudioStream from 'react-native-live-audio-stream';
+import { OpusEncoder } from 'react-native-opus';
+import { Buffer } from 'buffer';
 import { comms, encryption } from './comms';
 
-let _recording = null;
+let isRecording = false;
+let encoder = null;
+
+const FRAME_SIZE_MS = 60; // 60ms frames for Opus as per architecture
+const SAMPLE_RATE = 16000;
+const CHANNELS = 1;
 
 export async function startAudioStream() {
   try {
-    const { status } = await Audio.requestPermissionsAsync();
-    if (status !== 'granted') {
-      console.warn('[comms] Microphone permission denied');
-      return;
-    }
+    if (isRecording) return;
+    
+    // Initialize Opus Encoder: 16kHz, 1 channel, VoIP application
+    encoder = new OpusEncoder(SAMPLE_RATE, CHANNELS, OpusEncoder.Application.VOIP);
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
+    const options = {
+      sampleRate: SAMPLE_RATE,
+      channels: CHANNELS,
+      bitsPerSample: 16,
+      audioSource: 1, // MIC
+      bufferSize: (SAMPLE_RATE * FRAME_SIZE_MS) / 1000 * 2 // PCM bytes for 60ms
+    };
+
+    LiveAudioStream.init(options);
+    
+    LiveAudioStream.on('data', async (base64PCM) => {
+      if (!isRecording) return;
+      try {
+        // Decode base64 PCM data to Buffer
+        const pcmBuffer = Buffer.from(base64PCM, 'base64');
+        
+        // Encode PCM to Opus
+        const opusBuffer = await encoder.encode(pcmBuffer);
+        
+        // Encode Opus to base64 for the comms pipeline
+        const opusBase64 = opusBuffer.toString('base64');
+        
+        // Encrypt and send
+        const encrypted = await encryption.encrypt(opusBase64);
+        comms.sendAudioChunk(encrypted);
+      } catch (err) {
+        console.warn('[comms] Encoding/Encryption error:', err);
+      }
     });
 
-    const { recording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.LOW_QUALITY
-    );
-    _recording = recording;
-    console.log('[comms] mic capture started via expo-av');
+    LiveAudioStream.start();
+    isRecording = true;
+    console.log(`[comms] mic capture started via react-native-live-audio-stream (Opus, ${FRAME_SIZE_MS}ms frames)`);
   } catch (err) {
     console.warn('[comms] startAudioStream failed:', err.message);
     throw err;
@@ -32,25 +60,16 @@ export async function startAudioStream() {
 }
 
 export async function stopAudioStream() {
-  if (!_recording) return;
+  if (!isRecording) return;
   try {
-    await _recording.stopAndUnloadAsync();
-    const uri = _recording.getURI();
-    _recording = null;
-
-    if (!uri) return;
-
-    // Read recorded file as base64 and send via the comms layer
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    const encrypted = await encryption.encrypt(base64);
-    console.log('[comms] PTT_AUDIO sending, encrypted bytes:', encrypted.length);
-    await comms.sendAudioChunk(encrypted);
-
-    // Clean up temp file
-    await FileSystem.deleteAsync(uri, { idempotent: true });
+    LiveAudioStream.stop();
+    isRecording = false;
+    
+    // Give comms layer time to flush final chunks
+    setTimeout(() => {
+      encoder = null;
+    }, 100);
+    console.log('[comms] mic capture stopped');
   } catch (err) {
     console.warn('[comms] stopAudioStream error:', err.message);
   }
