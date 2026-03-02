@@ -105,12 +105,12 @@ export class ForbiddenLANComms {
   }
 
   // React Native developers will call this from their audio recorder library
-  sendAudioChunk(base64OpusData: string): void {
+  async sendAudioChunk(base64OpusData: string): Promise<void> {
     if (!this.isTransmitting) {
       console.warn('[ForbiddenLANComms] Ignored sendAudioChunk because PTT is not active');
       return;
     }
-    this.audio?.enqueueChunk(base64OpusData);
+    await this.audio?.enqueueChunk(base64OpusData);
   }
 
   stopPTT(): void {
@@ -141,6 +141,12 @@ export class ForbiddenLANComms {
       }
       handler(msg);
     });
+  }
+
+  // Bypass the half-duplex filter — use for loopback testing and signal monitoring.
+  // Receives every relay message including echoed PTT_AUDIO while transmitting.
+  onRawMessage(handler: (msg: RelayMessage) => void): void {
+    this.relay.on('*', handler);
   }
 
   async getSignalStatus(): Promise<SignalStatus> {
