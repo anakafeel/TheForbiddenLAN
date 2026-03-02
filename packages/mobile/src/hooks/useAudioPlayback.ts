@@ -1,44 +1,45 @@
 import { useRef } from 'react';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 export function useAudioPlayback() {
-  const audioCtx = useRef<AudioContext | null>(null);
-  const queue = useRef<ArrayBuffer[]>([]);
+  const queue = useRef<string[]>([]);
   const playing = useRef(false);
-
-  const getCtx = () => {
-    if (!audioCtx.current) {
-      audioCtx.current = new AudioContext();
-    }
-    return audioCtx.current;
-  };
 
   const playNext = async () => {
     if (playing.current || queue.current.length === 0) return;
     playing.current = true;
-    const buf = queue.current.shift()!;
+    const base64Chunk = queue.current.shift()!;
+    
     try {
-      const ctx = getCtx();
-      const decoded = await ctx.decodeAudioData(buf.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = decoded;
-      source.connect(ctx.destination);
-      source.onended = () => {
-        playing.current = false;
-        playNext();
-      };
-      source.start();
-    } catch {
+      // expo-av cannot play raw base64 memory buffers directly.
+      // We must write it to a temporary file first, then play it.
+      const tempUri = FileSystem.cacheDirectory + `chunk_${Date.now()}.wav`;
+      await FileSystem.writeAsStringAsync(tempUri, base64Chunk, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: tempUri },
+        { shouldPlay: true }
+      );
+
+      sound.setOnPlaybackStatusUpdate(async (status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          await sound.unloadAsync();
+          playing.current = false;
+          playNext();
+        }
+      });
+    } catch (err) {
+      console.error('Audio playback error', err);
       playing.current = false;
       playNext();
     }
   };
 
   const enqueue = (base64: string) => {
-    const binary = atob(base64);
-    const buf = new ArrayBuffer(binary.length);
-    const view = new Uint8Array(buf);
-    for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-    queue.current.push(buf);
+    queue.current.push(base64);
     playNext();
   };
 

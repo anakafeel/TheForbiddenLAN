@@ -1,5 +1,6 @@
-import { AppRegistry } from 'react-native';
-import App from './src/App';
-import { name as appName } from './app.json';
+import { registerRootComponent } from 'expo';
+import App from './src/App.jsx';
 
-AppRegistry.registerComponent(appName, () => App);
+// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
+// Explicitly importing App.jsx (native) instead of App.tsx (web/react-router-dom)
+registerRootComponent(App);

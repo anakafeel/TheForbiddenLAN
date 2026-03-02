@@ -2,8 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ChannelProvider } from './context/ChannelContext';
-import ChannelsScreen from './screens/Channels';
-import PTTScreen from './screens/PTTScreen';
+import ChannelsScreen from './screens/Channels.jsx';
+import PTTScreen from './screens/PTTScreen.jsx';
 
 const Stack = createStackNavigator();
 
