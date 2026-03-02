@@ -1,7 +1,5 @@
-# Design Tradeoffs
 ## Floor Control: Optimistic vs Server-side Grant
-Chose optimistic GPS timestamp arbitration. Avoids 1–3s round-trip at satellite latency.
-## Relay Architecture: Hybrid Centralized Relay vs Pure P2P Mesh
+**Decision**: Fully client-side deterministic arbitration. Each client runs the same GPS timestamp comparison algorithm and reaches the same winner independently. Relay fans out PTT_START messages only — no server involvement in arbitration. Eliminates 1000–3000ms round-trip penalty entirely.
 **Problem**: Iridium NAT prevents direct P2P between DLS-140 units, making a pure decentralized mesh impossible across remote sites.
 **Decision**: We chose a **Hybrid Approach** with a central DigitalOcean relay. While we lose offline local-mesh capabilities if the internet drops, we prioritize extreme low-bandwidth optimizations (like `sessionId` compression) to ensure the fragile 22kbps satellite link to the centralized server never saturates.
 ## Codec: Opus vs Codec2
@@ -59,10 +57,10 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 **Decision:** Added a 60-second `pttWatchdog` timeout that automatically stops recording.
 **Tradeoff:** Users holding the button for over 60 seconds will be abruptly cut off and must repress the button, but it prevents "hot mics" from burning through thousands of dollars of satellite airtime.
 
-## Expo Go (Managed) vs Expo Development Build (EAS Build)
-**Problem:** Standard Expo Go only ships a pre-compiled set of native libraries. Our original `react-native-webrtc` dependency required custom C++/Objective-C bindings **not included** in Expo Go, which would crash with a `NativeModule not found` error. EAS Build (cloud compile) solves this but requires a paid Apple Developer Account ($99/yr) and cloud wait times.
-**Decision:** We removed `react-native-webrtc` entirely and replaced our audio capture/playback hooks with Expo's official `expo-av` and `expo-file-system` modules. This makes the app a pure **Managed Expo** project that runs directly in the free Expo Go client — no Apple account, no Mac, no cloud builds.
-**Tradeoff:** We lose access to WebRTC data channels and raw PCM streaming. `expo-av` records to a file rather than streaming 200ms chunks in real-time. For the hackathon demo this is acceptable (audio is sent on PTT release). If real-time streaming is needed later, we must migrate to an Expo Dev Build with a custom native audio module. See `docs/expo-migration.md` for the full decision log.
+## Expo Go (Managed) vs Expo Development Build (Android Only)
+**Problem:** Standard Expo Go only ships a pre-compiled set of native libraries. Our architecture requires `react-native-live-audio-stream` and `react-native-opus` custom C++ bindings for 60ms real-time chunk streaming. These are **not included** in Expo Go.
+**Decision:** We transitioned to an **Expo Development Build (EAS)**. However, because our primary engineering environment is Fedora Linux, compiling the iOS Dev Build locally is impossible (requires macOS/Xcode). We therefore **dropped iOS support** for the current development phase and mandate Android testing.
+**Tradeoff:** We lose the ability to test on iPhones locally. Engineers must use physical Android devices or the Android Studio emulator. This allows us to maintain the strict 60ms Opus streaming requirement for the 22kbps satellite link without paying for Apple Developer accounts or waiting for EAS Cloud iOS build queues.
 
 ## Hybrid Relay Clarification: Centralized DO Relay vs True Decentralized Mesh
 **Problem:** The stated long-term goal is a "decentralized" architecture. However, `RelaySocket.ts` always connects to the DigitalOcean WebSocket relay. If the satellite/internet link drops, phones on the same local helicopter Wi-Fi network cannot communicate with each other at all.
@@ -74,7 +72,10 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 **Decision:** `MockRelaySocket` is intentionally scoped to single-device loopback testing of the audio pipeline, floor control, and UI state. For multi-device integration testing before the real satellite link, engineers should run the lightweight local relay (`packages/relay` or equivalent Node.js relay script) on a laptop connected to the same Wi-Fi, and point both phones at `ws://192.168.X.X:3000`.
 **Tradeoff:** No multi-device mock is built in; this requires a real (even if local) relay process. Acceptable because standing up a Node.js relay is trivial and tests the real code path rather than a more complex multi-device mock shim.
 
+## Store-and-Forward / Redis
+**Problem:** Satellite link reliability dropouts during handoff.
+**Decision:** Best-effort delivery. Missed audio during a handoff dropout is not replayed — consistent with walkie-talkie behaviour. V2: client-side jitter buffer with local replay. We removed the Redis store-and-forward system entirely.
+
 ## AES-GCM Overhead vs 22kbps Satellite Budget
-**Problem:** Every AES-GCM encrypted payload carries a 12-byte IV and a 16-byte authentication tag — 28 bytes of overhead before the Base64 encoding multiplier (~1.37x). The `sessionId` optimization saves ~30 bytes per audio chunk. AES-GCM encryption can negate that saving entirely, potentially pushing each Opus frame over the ~100-byte budget that keeps the 22kbps link (~2,750 bytes/sec total) from saturating with multiple concurrent talkers.
-**Decision:** Encryption overhead must be **measured** before the satellite integration test. Encrypt a representative 20ms Opus frame at 8kbps (roughly 20 bytes raw) and log the Base64 output length. If the encrypted payload consistently exceeds 100 bytes, the design must fall back to: encrypt the session key once at `PTT_START`, then transmit Opus `PTT_AUDIO` chunks **unencrypted** over the relay for that session.
-**Tradeoff:** Unencrypted audio chunks over the DO relay expose voice content to anyone with relay access. This is acceptable for a hackathon demo but must be hardened before production. The alternative (per-chunk encryption at the cost of link saturation) renders the product non-functional in the field, which is a worse outcome.
+**Problem:** Total bandwidth budget calculation.
+**Decision:** 8 kbps audio + 12B app header + 16B GCM tag + ~46B WS/TCP overhead @ 60ms frames = ~17.9 kbps on the wire. This consumes ~82% of the 22 kbps uplink budget. Signaling traffic (PTT_START, GPS_UPDATE, keepalives) must be kept minimal. Codec2 fallback at 2400 bps reduces audio contribution to ~5.4 kbps on the wire, giving substantial headroom.

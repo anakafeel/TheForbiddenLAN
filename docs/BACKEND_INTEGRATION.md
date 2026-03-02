@@ -20,6 +20,337 @@ Everything below describes what must change for **real** relay integration.
 
 ---
 
+## Frontend Integration Quick Reference
+
+**For Annie/Maisam:** This section shows exactly what data you get from Shrikar's backend and what you need to do with it.
+
+### What Shrikar Must Deliver to You
+
+| #   | What                       | Status    | Notes                             |
+| --- | -------------------------- | --------- | --------------------------------- |
+| 1   | Server IP + Port           | ⏳ Needed | e.g., `192.168.1.100:3000`        |
+| 2   | Working `POST /auth/login` | ✅ Done   | Returns `{ jwt: "..." }`          |
+| 3   | Working `GET /talkgroups`  | ⏳ Bug C1 | After Prisma migration            |
+| 4   | WebSocket URL format       | ✅ Done   | `ws://<ip>:<port>/ws?token=<jwt>` |
+| 5   | PRESENCE broadcasts        | ⏳ Bug H3 | On connect/disconnect             |
+| 6   | Fix self-echo              | ⏳ Bug H4 | Don't send audio back to sender   |
+
+### REST API Data Structures
+
+#### 1. Login (Already Works)
+
+**Your code:**
+
+```javascript
+// In LoginScreen.tsx
+import { connectComms } from "../utils/socket";
+import { CONFIG } from "../config";
+import useStore from "../store";
+
+async function handleLogin() {
+  const response = await fetch(`${CONFIG.API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Login failed");
+  }
+
+  const { jwt } = await response.json();
+
+  // Save JWT in Zustand store
+  const setJwt = useStore.getState().setJwt;
+  setJwt(jwt);
+
+  // Connect WebSocket with JWT
+  await connectComms(jwt);
+
+  // Navigate to Channels
+  navigation.navigate("Channels");
+}
+```
+
+**What Shrikar returns:**
+
+```json
+{
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWlkIiwidXNlcm5hbWUiOiJhbm5pZSIsInJvbGUiOiJ1c2VyIn0..."
+}
+```
+
+#### 2. Get Talkgroups/Channels (Once Bug C1 Fixed)
+
+**Your code:**
+
+```javascript
+// In Channels.jsx, replace lines 99-103
+import useStore from "../store";
+
+useEffect(() => {
+  if (!CONFIG.MOCK_MODE) {
+    const jwt = useStore.getState().jwt;
+
+    fetch(`${CONFIG.API_URL}/talkgroups`, {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((talkgroups) => {
+        // Transform to match your UI format
+        const channelData = talkgroups.map((tg) => ({
+          id: tg.id,
+          name: tg.name,
+          status: "active",
+          users: 0, // Will be updated by PRESENCE messages
+          transmitting: false,
+        }));
+        setChannels(channelData);
+      })
+      .catch((err) => console.error("Failed to fetch talkgroups:", err));
+  }
+}, []);
+```
+
+**What Shrikar returns (after Prisma fix):**
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Alpha Team",
+    "master_secret": "<Buffer>",
+    "rotation_counter": 0
+  },
+  {
+    "id": "661f9511-f39c-52e5-b827-557766551111",
+    "name": "Bravo Team",
+    "master_secret": "<Buffer>",
+    "rotation_counter": 0
+  }
+]
+```
+
+### WebSocket Message Data Structures
+
+**All handled by `comms` layer — you just need to subscribe and update UI.**
+
+#### PRESENCE — Who's online
+
+**What Shrikar broadcasts (once Bug H3 fixed):**
+
+```json
+{
+  "type": "PRESENCE",
+  "talkgroup": "550e8400-e29b-41d4-a716-446655440000",
+  "online": ["device-uuid-1", "device-uuid-2", "device-uuid-3"]
+}
+```
+
+**Your code to handle it:**
+
+```javascript
+// In Channels.jsx or useEffect
+import { comms } from "../utils/comms";
+
+comms.onMessage((msg) => {
+  if (msg.type === "PRESENCE") {
+    // Update user count for this channel
+    setChannels((prev) =>
+      prev.map((ch) =>
+        ch.id === msg.talkgroup ? { ...ch, users: msg.online.length } : ch,
+      ),
+    );
+
+    // Update channel speakers map
+    if (msg.online.length > 0) {
+      setChannelSpeakers((prev) => ({
+        ...prev,
+        [msg.talkgroup]: msg.online[0], // Or track who's actually transmitting
+      }));
+    }
+  }
+});
+```
+
+#### PTT_START — Someone started talking
+
+**What Shrikar broadcasts:**
+
+```json
+{
+  "type": "PTT_START",
+  "talkgroup": "550e8400-e29b-41d4-a716-446655440000",
+  "sender": "device-uuid-1",
+  "timestamp": 1709424000000,
+  "seq": 1
+}
+```
+
+**Your code:**
+
+```javascript
+comms.onMessage((msg) => {
+  if (msg.type === "PTT_START") {
+    // Show UI feedback - someone is talking
+    setCurrentSpeaker(msg.sender);
+
+    // Update channel to show transmission
+    setChannels((prev) =>
+      prev.map((ch) =>
+        ch.id === msg.talkgroup ? { ...ch, transmitting: true } : ch,
+      ),
+    );
+  }
+});
+```
+
+#### PTT_AUDIO — Audio chunk
+
+**What Shrikar broadcasts:**
+
+```json
+{
+  "type": "PTT_AUDIO",
+  "talkgroup": "550e8400-e29b-41d4-a716-446655440000",
+  "sessionId": 12345,
+  "seq": 1,
+  "chunk": 1,
+  "data": "base64-encoded-encrypted-audio-data..."
+}
+```
+
+**Your code:** NOTHING! `comms.js` already handles decryption and playback automatically.
+
+#### PTT_END — Transmission finished
+
+**What Shrikar broadcasts:**
+
+```json
+{
+  "type": "PTT_END",
+  "talkgroup": "550e8400-e29b-41d4-a716-446655440000",
+  "sender": "device-uuid-1",
+  "seq": 5
+}
+```
+
+**Your code:**
+
+```javascript
+comms.onMessage((msg) => {
+  if (msg.type === "PTT_END") {
+    // Clear UI feedback
+    setCurrentSpeaker(null);
+
+    // Update channel to show transmission stopped
+    setChannels((prev) =>
+      prev.map((ch) =>
+        ch.id === msg.talkgroup ? { ...ch, transmitting: false } : ch,
+      ),
+    );
+  }
+});
+```
+
+### Complete Data Flow Example
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. User opens app → sees LoginScreen                │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 2. User enters username/password, taps Login        │
+│    POST /auth/login                                 │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 3. Backend returns { jwt: "..." }                   │
+│    Save to Zustand: setJwt(jwt)                     │
+│    Call: await connectComms(jwt)                    │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 4. WebSocket connects to                            │
+│    ws://192.168.1.100:3000/ws?token=<jwt>           │
+│    Backend sends: { type: "SYNC_TIME", ... }        │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 5. Navigate to Channels screen                      │
+│    GET /talkgroups (Authorization: Bearer <jwt>)    │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 6. Backend returns talkgroups array                 │
+│    Transform to channel format, display in FlatList │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 7. Backend broadcasts PRESENCE messages             │
+│    Update user counts in UI                         │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 8. User taps channel, navigates to PTT screen       │
+│    User presses PTT button                          │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 9. emitStartTalking(deviceId)                       │
+│    → comms.startPTT()                               │
+│    → Records audio, encrypts, sends PTT_START        │
+│    → Sends PTT_AUDIO chunks                         │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 10. Backend broadcasts to all users in talkgroup    │
+│     Other devices: receive, decrypt, play audio     │
+│     Your device: UI shows "YOU" as speaker          │
+└────────────────────┬────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────┐
+│ 11. User releases PTT button                        │
+│     emitStopTalking()                               │
+│     → comms.stopPTT()                               │
+│     → Sends PTT_END                                 │
+└─────────────────────────────────────────────────────┘
+```
+
+### Your Frontend Tasks Checklist
+
+- [ ] **Task 1:** Add `LoginScreen.tsx` to navigator in `App.jsx` as initial screen
+- [ ] **Task 2:** Wire login handler to call `connectComms(jwt)` and save JWT to Zustand
+- [ ] **Task 3:** Fix `Channels.jsx` line 100 — replace `socket.emit('list-channels')` with REST call
+- [ ] **Task 4:** Subscribe to PRESENCE messages and update channel user counts
+- [ ] **Task 5:** Subscribe to PTT_START/PTT_END and show current speaker in UI
+- [ ] **Task 6:** Test with Shrikar's server once Bug C1 (Prisma) is fixed
+
+### What You DON'T Need to Do
+
+- ❌ Handle WebSocket connection logic (comms layer does this)
+- ❌ Audio encryption/decryption (comms layer does this)
+- ❌ Audio recording/playback (utils/audio.js does this)
+- ❌ Floor control logic (comms layer does this)
+- ❌ Message routing (comms layer does this)
+
+**You only handle:** UI state, REST API calls for channels, and showing/hiding visual feedback.
+
+---
+
 ## Step 1 — Environment Variables
 
 Create `packages/mobile/.env.local` (gitignored):
@@ -33,13 +364,14 @@ EXPO_PUBLIC_TALKGROUP=alpha
 ```
 
 **Important:** Expo only injects `EXPO_PUBLIC_*` prefixed variables. `VITE_*` vars are ignored on
-native. The app falls back to VITE_ names for backwards compat but they have no effect at runtime
+native. The app falls back to VITE\_ names for backwards compat but they have no effect at runtime
 on device — do not use them.
 
 For phone-to-server connectivity on the same Wi-Fi: use the machine's LAN IP, not `localhost`.
 `localhost` on an iOS device resolves to the phone itself, not the dev machine.
 
 Restart Metro after editing `.env.local`:
+
 ```bash
 cd packages/mobile && npx expo start --clear
 ```
@@ -102,16 +434,16 @@ is established.
 2. On successful login, call `connectComms(jwt)` from `utils/socket.js`:
 
 ```js
-import { connectComms } from '../utils/socket';
-import { CONFIG } from '../config';
+import { connectComms } from "../utils/socket";
+import { CONFIG } from "../config";
 
 // Inside login handler:
 const res = await fetch(`${CONFIG.API_URL}/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ username, password }),
 });
-if (!res.ok) throw new Error('Login failed');
+if (!res.ok) throw new Error("Login failed");
 const { jwt } = await res.json();
 
 await connectComms(jwt);
@@ -123,44 +455,49 @@ The `utils/socket.js` auto-connect (mock mode only) will NOT fire when `MOCK_MOD
 
 ---
 
-## Step 4 — Audio Streaming Limitation
+## Step 4 — Audio Streaming (Opus + EAS Build Required)
 
-**The current audio pipeline sends one full recording per PTT press, not live 200ms chunks.**
+**The audio pipeline has been upgraded to stream real live 60ms Opus chunks.**
 
-In mock mode this works fine (loopback). On a real relay over 22kbps satellite, it means no audio
-arrives at the other device until you release PTT. The comms layer is designed for streaming
-(`enqueueChunk` / `PTT_AUDIO` per chunk), but `expo-av` records to a file and cannot stream raw
-PCM/Opus frames out of the box.
+In order to support the 22kbps satellite link with low latency, we have integrated `react-native-live-audio-stream` and `react-native-opus`. These libraries use native iOS/Android code to capture and compress audio down to the tiny bandwidth budget required by the architecture.
 
-### What happens today
+**Because of this, the mobile app can no longer be run in the standard Expo Go client.** 
+
+To test the audio transmission now, you must run an **Expo Dev Build** (EAS Build) or compile locally using Android Studio. 
+
+Because we are developing on Linux (Fedora), **we are dropping iOS support** for local compilation, as it requires macOS and Xcode. You must test using an Android Emulator or a physical Android device plugged in via USB.
+
+### Setup for Fedora / Linux
+
+1. Install Android Studio (e.g. via Flatpak or JetBrains Toolbox).
+2. Open Android Studio → SDK Manager. Ensure you have the `Android SDK Build-Tools` and `Android Emulator` installed.
+3. Open Virtual Device Manager (AVD) and create a new Pixel emulator.
+4. Set up your environment variables in `~/.bashrc` or `~/.zshrc`:
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$ANDROID_HOME/emulator
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+```
+5. Run your project natively:
+
+```bash
+cd packages/mobile
+npx expo prebuild --clean  # Generates the /android folder (ignores /ios)
+npx expo run:android       # Boots the emulator and compiles the C++ Opus codecs
+```
+
+#### What happens today:
 
 ```
-PTT press  → Audio.Recording.createAsync() starts recording to file
-PTT release → stopAndUnloadAsync() → read file as base64 → sendAudioChunk(encrypted)
-             → relay receives one PTT_AUDIO → other devices hear it all at once
+PTT press  → react-native-live-audio-stream starts capturing raw PCM audio
+Every 60ms → Raw PCM buffer is encoded to Opus via react-native-opus
+           → Opus frame is encrypted via AES-GCM
+           → sent via comms.sendAudioChunk(encrypted)
 ```
 
-### What needs to happen for real 200ms streaming
+**For the hackathon demo**: This is exactly what we need to prove the SATCOM architecture works on a low-bandwidth connection.
 
-Option A — **Polling the recording URI during capture** (no native code):
-```
-Every 200ms while recording: read partial file → compute new bytes since last read
-→ send incremental base64 chunk via comms.sendAudioChunk()
-```
-Expo does not have a stable API for this. The file is locked during recording on iOS.
-
-Option B — **Switch to expo-dev-client + a streaming audio library** (requires native build):
-Libraries like `react-native-audio-recorder-player` or `react-native-live-audio-stream` provide
-raw PCM frame callbacks compatible with the `enqueueChunk` pipeline. This requires an EAS build
-or custom dev client — Expo Go cannot load these.
-
-**For the hackathon demo**: Option A (whole-file send at PTT_END) is functional and demonstrates
-the full pipeline. The relay, floor control, and encryption all work correctly. Only latency
-differs from the intended 200ms design.
-
-**For post-hackathon**: Option B is the correct path. Switch to EAS Build, add a streaming audio
-native module, and the `AudioPipeline.enqueueChunk()` API already handles the rest without
-changes to the comms layer.
+**For post-hackathon**: None! The architecture is now using the correct 60ms streaming chunks.
 
 ---
 
@@ -173,13 +510,13 @@ presence entries.
 For a persistent, secure device ID, replace with `expo-secure-store`:
 
 ```js
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
 async function getOrCreateDeviceId() {
-  let id = await SecureStore.getItemAsync('device_id');
+  let id = await SecureStore.getItemAsync("device_id");
   if (!id) {
-    id = 'dev-' + Math.random().toString(36).slice(2, 10);
-    await SecureStore.setItemAsync('device_id', id);
+    id = "dev-" + Math.random().toString(36).slice(2, 10);
+    await SecureStore.setItemAsync("device_id", id);
   }
   return id;
 }
@@ -226,6 +563,7 @@ calls `comms.onMessage()` for `PRESENCE` events. Wire this to update channel sta
 the **lowest timestamp** when multiple `PTT_START` messages arrive within a 50ms collision window.
 
 This works correctly only if:
+
 1. Device clocks are reasonably synchronised — the `SYNC_TIME` ping on connect corrects for
    offset but does not account for high-jitter satellite links
 2. The relay server echoes `PTT_START` to all participants quickly enough for the 50ms window
@@ -244,19 +582,19 @@ only on low-latency cellular links.
 
 ## What Does NOT Change
 
-| File | Status |
-|---|---|
-| `packages/mobile/src/App.jsx` | No changes |
+| File                                        | Status     |
+| ------------------------------------------- | ---------- |
+| `packages/mobile/src/App.jsx`               | No changes |
 | `packages/mobile/src/screens/PTTScreen.jsx` | No changes |
-| `packages/mobile/src/utils/audio.js` | No changes |
-| `packages/mobile/src/utils/comms.js` | No changes |
-| `packages/mobile/src/utils/socket.js` | No changes |
-| `packages/mobile/metro.config.js` | No changes |
-| `packages/comms/src/AudioPipeline.ts` | No changes |
-| `packages/comms/src/MockRelaySocket.ts` | No changes |
-| `packages/comms/src/FloorControl.ts` | No changes |
-| `packages/comms/src/DLS140Client.ts` | No changes |
-| `packages/comms/src/Encryption.ts` | No changes |
+| `packages/mobile/src/utils/audio.js`        | No changes |
+| `packages/mobile/src/utils/comms.js`        | No changes |
+| `packages/mobile/src/utils/socket.js`       | No changes |
+| `packages/mobile/metro.config.js`           | No changes |
+| `packages/comms/src/AudioPipeline.ts`       | No changes |
+| `packages/comms/src/MockRelaySocket.ts`     | No changes |
+| `packages/comms/src/FloorControl.ts`        | No changes |
+| `packages/comms/src/DLS140Client.ts`        | No changes |
+| `packages/comms/src/Encryption.ts`          | No changes |
 
 The only file that **must** change before real mode works is `RelaySocket.ts` (Step 2).
 
@@ -280,12 +618,14 @@ The only file that **must** change before real mode works is `RelaySocket.ts` (S
 ```
 
 PTT press:
+
 ```
 [comms] PTT start — device: dev-xxxx
 [comms] mic capture started via expo-av
 ```
 
 PTT release (current file-based mode):
+
 ```
 [comms] PTT_AUDIO sending, encrypted bytes: XXXX
 [comms] PTT_END received — flushing audio buffer   ← on receiving device
@@ -299,13 +639,13 @@ read. Restart Metro with `--clear` flag.
 
 ## Tradeoff Summary
 
-| Item | Current (Mock/Demo) | Production Path |
-|---|---|---|
-| Audio delivery | Full file at PTT_END | 200ms chunks (needs EAS Build + streaming lib) |
-| WebSocket | MockRelaySocket loopback | RelaySocket → fix `.on()` → browser WS shim |
-| Auth | Auto-connect with fake JWT | Login screen → real JWT → `connectComms(jwt)` |
-| Device ID | `Math.random()` per launch | `expo-secure-store` persistent ID |
-| Encryption key | Hardcoded `deadbeef...` | KDF(masterSecret, talkgroup, rotation) |
-| Channel list | Hardcoded `MOCK_CHANNELS` | Live from relay `PRESENCE` events |
-| Floor control | 50ms window (ineffective at 800ms RTT) | Acceptable for demo; redesign for sat link |
-| GPS | DLS-140 HTTP poll | Add `expo-location` fallback for phone GPS |
+| Item           | Current (Mock/Demo)                    | Production Path                                |
+| -------------- | -------------------------------------- | ---------------------------------------------- |
+| Audio delivery | Live 60ms Opus chunks                    | Production ready (Requires Expo Dev Build)     |
+| WebSocket      | MockRelaySocket loopback               | RelaySocket → fix `.on()` → browser WS shim    |
+| Auth           | Auto-connect with fake JWT             | Login screen → real JWT → `connectComms(jwt)`  |
+| Device ID      | `Math.random()` per launch             | `expo-secure-store` persistent ID              |
+| Encryption key | Hardcoded `deadbeef...`                | KDF(masterSecret, talkgroup, rotation)         |
+| Channel list   | Hardcoded `MOCK_CHANNELS`              | Live from relay `PRESENCE` events              |
+| Floor control  | 50ms window (ineffective at 800ms RTT) | Acceptable for demo; redesign for sat link     |
+| GPS            | DLS-140 HTTP poll                      | Add `expo-location` fallback for phone GPS     |
