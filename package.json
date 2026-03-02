@@ -22,5 +22,12 @@
     "@nx/eslint": "18.0.0",
     "typescript": "5.3.3",
     "eslint": "8.57.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "strip-ansi-cjs": "npm:strip-ansi@^6.0.1",
+      "string-width-cjs": "npm:string-width@^4.2.0",
+      "wrap-ansi-cjs": "npm:wrap-ansi@^7.0.0"
+    }
   }
 }
