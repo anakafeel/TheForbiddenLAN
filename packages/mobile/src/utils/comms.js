@@ -113,7 +113,7 @@ export async function initComms(jwt) {
   // Signal polling — DLS-140 unreachable in mock (silent fail), works with real hardware
   comms.startSignalPolling(10000, (status) => {
     console.log('[comms] signal — link:', status.activeLink,
-      '| sat:', status.certusSignalBars,
+      '| sat:', status.certusDataBars,
       '| cell:', status.cellularSignal);
   });
 

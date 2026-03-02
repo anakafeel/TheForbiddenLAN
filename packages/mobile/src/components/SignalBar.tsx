@@ -8,7 +8,7 @@ export function SignalBar({ status }: Props) {
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
       backgroundColor:'#1E3A5F', padding:'8px 16px', borderRadius:8, color:'white', fontSize:13 }}>
-      <span>🛰 {status.certusSignalBars}/5</span>
+      <span>🛰 {status.certusDataBars}/5</span>
       <span style={{ color: linkColor, fontWeight:'bold' }}>
         {status.activeLink.toUpperCase()}
       </span>
