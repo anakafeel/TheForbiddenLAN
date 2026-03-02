@@ -1,0 +1,17 @@
+{
+  "ignore_dirs": [
+    ".git",
+    ".nx",
+    "node_modules",
+    "build",
+    "dist",
+    ".gradle",
+    "gradle-dist",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    "*.egg-info"
+  ],
+  "idle_time_ms": 200,
+  "root_restrict_files": true
+}
