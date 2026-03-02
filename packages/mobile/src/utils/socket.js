@@ -1,81 +1,79 @@
+// socket.js — PTT signaling via ForbiddenLANComms.
+// Exports the same API as Annie's original mock socket so no UI code needs to change.
+//
+// ── Integration point for Shri's backend ─────────────────────────────────────
+// When MOCK_MODE=false, call connectComms(jwt) after Shri's login:
+//
+//   import { connectComms } from './utils/socket';
+//   const jwt = await fetch(`${CONFIG.API_URL}/auth/login`, { ... }).then(r => r.json()).then(d => d.jwt);
+//   await connectComms(jwt);
+//
+// The natural place for this is inside ChannelContext.jsx (or a new useAuth hook)
+// once Shri's /auth/login endpoint is live. See BACKEND_INTEGRATION.md for details.
+// ─────────────────────────────────────────────────────────────────────────────
+import { comms, initComms } from './comms';
 import { CONFIG } from '../config';
 
-let socket = null;
-
-// Only import socket.io-client when not in mock mode
-if (!CONFIG.MOCK_MODE) {
-  import('socket.io-client').then(({ default: io }) => {
-    socket = io(CONFIG.SOCKET_URL);
-  }).catch(err => {
-    console.warn('socket.io-client not available:', err);
-  });
+// Mock mode: auto-connect on import using the fake JWT from config.
+// Real mode: connectComms(jwt) must be called explicitly after auth.
+if (CONFIG.MOCK_MODE) {
+  initComms(CONFIG.MOCK_JWT).catch(err => console.warn('[comms] init error:', err));
 }
 
-// Mock user activity data for testing
+/**
+ * Connect to Shri's real relay with a JWT obtained from his /auth/login endpoint.
+ * Call this once after successful login — idempotent, safe to await.
+ *
+ * @param {string} jwt - JWT returned by POST /auth/login
+ * @returns {Promise<void>}
+ */
+export function connectComms(jwt) {
+  return initComms(jwt);
+}
+
+// ── Mock user presence — keeps Annie's Channels/UserStatus UI lively ─────────
 const MOCK_USERS = [
-  { id: 'user1', name: 'Alice', talking: false },
-  { id: 'user2', name: 'Bob', talking: false },
+  { id: 'user1', name: 'Alice',   talking: false },
+  { id: 'user2', name: 'Bob',     talking: false },
   { id: 'user3', name: 'Charlie', talking: false },
 ];
+let _currentTalkingUser = null;
 
-let currentTalkingUser = null;
-
-// Simulate user talking activity
-function simulateUserActivity(callback) {
-  if (!CONFIG.MOCK_MODE) return;
-  
+function _simulatePresence(callback) {
   setInterval(() => {
-    // Randomly pick a user to talk
     const randomUser = MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)];
-    
-    // 30% chance to start/stop talking
     if (Math.random() < 0.3) {
-      currentTalkingUser = currentTalkingUser === randomUser.id ? null : randomUser.id;
+      _currentTalkingUser = _currentTalkingUser === randomUser.id ? null : randomUser.id;
     }
-    
-    // Send updated activity for all users
-    MOCK_USERS.forEach(user => {
-      callback({
-        id: user.id,
-        name: user.name,
-        talking: user.id === currentTalkingUser,
-      });
-    });
+    MOCK_USERS.forEach(user => callback({
+      id: user.id, name: user.name, talking: user.id === _currentTalkingUser,
+    }));
   }, 3000);
 }
 
 export function subscribeToUserActivity(callback) {
-  if (CONFIG.MOCK_MODE) {
-    simulateUserActivity(callback);
-  } else if (socket) {
-    socket.on('user-activity', callback);
-  }
+  // Simulated presence keeps the UI lively while no real backend is connected
+  _simulatePresence(callback);
+  // Real PRESENCE messages from the relay also surface here
+  comms.onMessage((msg) => {
+    if (msg.type === 'PRESENCE' && Array.isArray(msg.online)) {
+      callback({ id: msg.talkgroup, name: msg.talkgroup, talking: false });
+    }
+  });
 }
 
 export function emitStartTalking(userId) {
-  if (CONFIG.MOCK_MODE) {
-    currentTalkingUser = userId;
-    console.log(`[MOCK] ${userId} started talking`);
-  } else if (socket) {
-    socket.emit('start-talking', { userId });
-  }
+  console.log(`[comms] PTT start — device: ${userId}`);
+  comms.startPTT();
 }
 
 export function emitStopTalking(userId) {
-  if (CONFIG.MOCK_MODE) {
-    if (currentTalkingUser === userId) {
-      currentTalkingUser = null;
-    }
-    console.log(`[MOCK] ${userId} stopped talking`);
-  } else if (socket) {
-    socket.emit('stop-talking', { userId });
-  }
+  console.log(`[comms] PTT stop — device: ${userId}`);
+  comms.stopPTT();
 }
 
 export function disconnect() {
-  if (socket) {
-    socket.disconnect();
-  }
+  comms.disconnect();
 }
 
-export default socket;
+export default null;

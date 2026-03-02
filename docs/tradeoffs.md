@@ -26,6 +26,33 @@ Adaptive. Opus 8kbps default, Codec2 2400bps fallback when signal < 2 bars.
 **Decision:** We re-architected `AudioPipeline.ts` to be a pure state machine and sequencer. It no longer captures audio directly. Instead, it exposes `enqueueChunk(base64OpusData)`.
 **Tradeoff:** The mobile frontend developers must now handle native hardware microphone bindings using external libraries (e.g., `react-native-audio-recorder-player`), but the comms package remains purely platform-agnostic and focused solely on transport.
 
+## Web Dev Environment: Vite + react-native-web vs Metro Web
+
+**Question:** If Annie wrote the frontend in React Native so it runs everywhere, why is Vite involved at all?
+
+**Answer:** Vite is not replacing React Native — it is only the dev server for the browser target. The same `.jsx` source files that Vite bundles for the browser are the exact same files Metro bundles for iOS/Android. Nothing in Annie's code changes between targets.
+
+The trick is `react-native-web`: a library that re-implements every React Native primitive as a DOM equivalent (`View` → `<div>`, `Text` → `<span>`, `Pressable` → `<div onPointerDown>`, `StyleSheet` → CSS-in-JS, etc.). `vite.config.js` redirects the `react-native` import to `react-native-web` at bundle time:
+
+```js
+alias: { 'react-native': path.resolve(__dirname, 'node_modules/react-native-web') }
+```
+
+So the three build paths from the same source are:
+
+| Target | Build tool | Command |
+|--------|-----------|---------|
+| Browser (dev/testing) | Vite + react-native-web | `pnpm dev:mobile` |
+| Android | Metro + Gradle | `pnpm android` |
+| iOS | Metro + Xcode | `pnpm ios` |
+
+There are two App entry points: `App.web.jsx` (web — uses manual state navigation because React Navigation's native modules don't exist in a browser) and `App.jsx` (native — uses `@react-navigation/native` stack navigator). All screen and component files are shared between both.
+
+**Why Vite instead of the React Native CLI's built-in `--platform web` (Webpack)?**
+The RN CLI web mode is noticeably slower to start and harder to configure inside an NX monorepo. Vite cold-starts in under 2 seconds, has first-class HMR, and NX's `@nx/vite` executor integrates cleanly with the workspace tooling already in use.
+
+**Tradeoff:** Maintaining two App entry points (`App.jsx` vs `App.web.jsx`) and the Vite alias config adds a small amount of setup overhead. The benefit is that the full PTT + comms integration can be developed and tested entirely in a browser — no physical device, no Metro bundler, no simulator required — while the same source ships to real hardware unchanged.
+
 ## Hot Mic Protection: PTT Watchdog
 **Problem:** Network drops or UI glitches could result in a "PTT_END" never firing, causing a device to continuously broadcast indefinitely over the expensive satellite connection.
 **Decision:** Added a 60-second `pttWatchdog` timeout that automatically stops recording.

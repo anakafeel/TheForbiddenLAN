@@ -21,6 +21,16 @@ export default defineConfig({
       },
     },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    watch: {
+      // Use polling to avoid EMFILE (inotify limit) on Linux in large monorepos.
+      // Raise OS limit permanently instead if CPU polling is a concern:
+      //   echo "fs.inotify.max_user_instances=8192" | sudo tee /etc/sysctl.d/99-inotify.conf
+      //   sudo sysctl -p /etc/sysctl.d/99-inotify.conf
+      usePolling: true,
+      interval: 300,
+    },
+  },
   build: { outDir: 'dist' },
 });
