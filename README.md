@@ -23,7 +23,7 @@ No global `npm install -g pnpm` needed. If corepack isn't available, upgrade Nod
 ```sh
 pnpm dev:server        # start relay server
 pnpm dev:mobile        # start mobile app in browser
-pnpm dev:portal        # start web portal
+pnpm dev:web           # start web portal
 pnpm build:comms       # build shared comms library
 pnpm build:all         # build everything
 pnpm nx graph          # view dependency graph
