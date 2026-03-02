@@ -14,11 +14,9 @@
 import { comms, initComms } from './comms';
 import { CONFIG } from '../config';
 
-// Mock mode: auto-connect on import using the fake JWT from config.
-// Real mode: connectComms(jwt) must be called explicitly after auth.
-if (CONFIG.MOCK_MODE) {
-  initComms(CONFIG.MOCK_JWT).catch(err => console.warn('[comms] init error:', err));
-}
+// MVP Testing: auto-connect on import using the fake JWT from config.
+// In production, this should be removed and connectComms(jwt) called explicitly after auth.
+initComms(CONFIG.MOCK_JWT).catch(err => console.warn('[comms] init error:', err));
 
 /**
  * Connect to Shri's real relay with a JWT obtained from his /auth/login endpoint.
