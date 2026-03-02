@@ -1,8 +1,9 @@
 # Design Tradeoffs
 ## Floor Control: Optimistic vs Server-side Grant
 Chose optimistic GPS timestamp arbitration. Avoids 1–3s round-trip at satellite latency.
-## Relay Architecture: P2P vs Central Server
-Chose central relay. Iridium NAT prevents direct P2P between DLS-140 units.
+## Relay Architecture: Hybrid Centralized Relay vs Pure P2P Mesh
+**Problem**: Iridium NAT prevents direct P2P between DLS-140 units, making a pure decentralized mesh impossible across remote sites.
+**Decision**: We chose a **Hybrid Approach** with a central DigitalOcean relay. While we lose offline local-mesh capabilities if the internet drops, we prioritize extreme low-bandwidth optimizations (like `sessionId` compression) to ensure the fragile 22kbps satellite link to the centralized server never saturates.
 ## Codec: Opus vs Codec2
 Adaptive. Opus 8kbps default, Codec2 2400bps fallback when signal < 2 bars.
 
@@ -57,3 +58,23 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 **Problem:** Network drops or UI glitches could result in a "PTT_END" never firing, causing a device to continuously broadcast indefinitely over the expensive satellite connection.
 **Decision:** Added a 60-second `pttWatchdog` timeout that automatically stops recording.
 **Tradeoff:** Users holding the button for over 60 seconds will be abruptly cut off and must repress the button, but it prevents "hot mics" from burning through thousands of dollars of satellite airtime.
+
+## Expo Go (Managed) vs Expo Development Build (EAS Build)
+**Problem:** Standard Expo Go only ships a pre-compiled set of native libraries. Our original `react-native-webrtc` dependency required custom C++/Objective-C bindings **not included** in Expo Go, which would crash with a `NativeModule not found` error. EAS Build (cloud compile) solves this but requires a paid Apple Developer Account ($99/yr) and cloud wait times.
+**Decision:** We removed `react-native-webrtc` entirely and replaced our audio capture/playback hooks with Expo's official `expo-av` and `expo-file-system` modules. This makes the app a pure **Managed Expo** project that runs directly in the free Expo Go client — no Apple account, no Mac, no cloud builds.
+**Tradeoff:** We lose access to WebRTC data channels and raw PCM streaming. `expo-av` records to a file rather than streaming 200ms chunks in real-time. For the hackathon demo this is acceptable (audio is sent on PTT release). If real-time streaming is needed later, we must migrate to an Expo Dev Build with a custom native audio module. See `docs/expo-migration.md` for the full decision log.
+
+## Hybrid Relay Clarification: Centralized DO Relay vs True Decentralized Mesh
+**Problem:** The stated long-term goal is a "decentralized" architecture. However, `RelaySocket.ts` always connects to the DigitalOcean WebSocket relay. If the satellite/internet link drops, phones on the same local helicopter Wi-Fi network cannot communicate with each other at all.
+**Decision:** This is by design — we use a **Hybrid Approach**. The DigitalOcean relay is the single mandatory dependency for standard operation. True local-mesh capability (deploying a micro-relay on the edge DLS-140 device) is a future phase. For the hackathon, the priority is strict bandwidth optimization over the DO relay so the 22kbps satellite link never saturates.
+**Tradeoff:** Zero offline local-mesh capability today. If internet drops, all comms cease. Acceptable for hackathon scope. Future mitigation: run a lightweight Node.js relay binary on the DLS-140 device itself and point `VITE_WS_URL` to `ws://192.168.X.X:3000`.
+
+## MockRelaySocket: Single-Device Loopback vs Multi-Device Testing
+**Problem:** `MockRelaySocket.ts` simulates the server by echoing all messages back to the originating device after a 50ms delay. Its state lives entirely in local JS memory on a single device. If two engineers load the app on two different phones both using `MockRelaySocket`, they will never hear each other — messages are echoed back to themselves only.
+**Decision:** `MockRelaySocket` is intentionally scoped to single-device loopback testing of the audio pipeline, floor control, and UI state. For multi-device integration testing before the real satellite link, engineers should run the lightweight local relay (`packages/relay` or equivalent Node.js relay script) on a laptop connected to the same Wi-Fi, and point both phones at `ws://192.168.X.X:3000`.
+**Tradeoff:** No multi-device mock is built in; this requires a real (even if local) relay process. Acceptable because standing up a Node.js relay is trivial and tests the real code path rather than a more complex multi-device mock shim.
+
+## AES-GCM Overhead vs 22kbps Satellite Budget
+**Problem:** Every AES-GCM encrypted payload carries a 12-byte IV and a 16-byte authentication tag — 28 bytes of overhead before the Base64 encoding multiplier (~1.37x). The `sessionId` optimization saves ~30 bytes per audio chunk. AES-GCM encryption can negate that saving entirely, potentially pushing each Opus frame over the ~100-byte budget that keeps the 22kbps link (~2,750 bytes/sec total) from saturating with multiple concurrent talkers.
+**Decision:** Encryption overhead must be **measured** before the satellite integration test. Encrypt a representative 20ms Opus frame at 8kbps (roughly 20 bytes raw) and log the Base64 output length. If the encrypted payload consistently exceeds 100 bytes, the design must fall back to: encrypt the session key once at `PTT_START`, then transmit Opus `PTT_AUDIO` chunks **unencrypted** over the relay for that session.
+**Tradeoff:** Unencrypted audio chunks over the DO relay expose voice content to anyone with relay access. This is acceptable for a hackathon demo but must be hardened before production. The alternative (per-chunk encryption at the cost of link saturation) renders the product non-functional in the field, which is a worse outcome.
