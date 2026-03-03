@@ -48,9 +48,11 @@ See [docs/MOBILE_SETUP_TROUBLESHOOTING.md](docs/MOBILE_SETUP_TROUBLESHOOTING.md)
 
 ## Commands
 ```sh
+pnpm setup:local       # First-time local setup (enables Corepack, installs deps)
 pnpm dev:server        # start relay server
 pnpm dev:mobile        # start mobile app in browser
 pnpm dev:web           # start web portal
+pnpm dev:docs          # start documentation site (Fumadocs)
 pnpm build:comms       # build shared comms library
 pnpm build:all         # build everything
 pnpm nx graph          # view dependency graph
