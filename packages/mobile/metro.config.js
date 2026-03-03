@@ -6,33 +6,56 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch only the packages that need hot-reload support.
-//    DO NOT watch workspaceRoot — FallbackWatcher opens one fd per directory
-//    and a pnpm monorepo has ~600k dirs including node_modules, which exhausts
-//    the kernel's EMFILE limit even after ulimit adjustments.
-//    Module resolution is handled by nodeModulesPaths below (separate concern).
+// 1. Watch folders for hot-reload and module resolution.
+//    Include workspace node_modules for pnpm virtual store (.pnpm/) where expo
+//    packages resolve to when following symlinks. The aggressive ignore pattern
+//    below prevents FallbackWatcher from opening file descriptors for unnecessary
+//    directories.
 config.watchFolders = [
   path.resolve(workspaceRoot, "packages/comms"),
+  path.resolve(workspaceRoot, "node_modules"),
 ];
 
-// Exclude ALL node_modules from file watching to prevent Linux EMFILE (too many open files).
-// Metro's FallbackWatcher opens an inotify watch per-directory; a pnpm monorepo
-// has ~600k files which exhausts the default kernel limit of 8192 watches.
-// Listed here: monorepo root, mobile package, and comms package node_modules.
-config.resolver.blockList = [
-  /.*\/node_modules\/.*/,
-];
+// Explicitly disable Watchman. This monorepo triggers Watchman's inotify-poison
+// error when it tries to crawl the workspace root. FallbackWatcher (Node.js
+// native fs.watch) is lighter and respects the ignore regex below BEFORE opening
+// any file descriptors — so only the necessary src directories get watched.
+//
+// In Metro 0.83 the flag lives under resolver, NOT watcher.watchman.
+// metro-file-map reads config.resolver.useWatchman to decide between
+// WatchmanWatcher and NodeWatcher (see createFileMap.js:114).
+config.resolver.useWatchman = false;
 
-// EMFILE fix: tell FallbackWatcher (used when Watchman is absent) to skip these
-// directories entirely — it checks `ignore` BEFORE opening fs.watch() fds AND
-// before recursing into subdirectories.
+// Enable symlink following so Metro can properly watch files that resolve through
+// pnpm's virtual store symlinks. Without this, Metro can't compute SHA-1 for files
+// in .pnpm/ directories.
+config.resolver.unstable_enableSymlinks = true;
+
 // NOTE: the initial file crawl that builds Metro's module-resolution map is a
 // separate code path and still runs, so module resolution is unaffected.
 config.watcher = {
   ...(config.watcher ?? {}),
   watcherOptions: {
     ...(config.watcher?.watcherOptions ?? {}),
-    ignore: /node_modules|\.gradle|[/\\]android[/\\]|\.expo[/\\]|[/\\]dist[/\\]|[/\\]build[/\\]/,
+    // Only watch source files in node_modules/.pnpm/expo*/node_modules/expo*/src/
+    // and packages/comms/src/. Ignore everything else to avoid inotify exhaustion.
+    ignore: (filename) => {
+      // Always ignore common build/cache directories
+      if (/(\.gradle|[/\\]android[/\\]app[/\\]build[/\\]|\.expo[/\\]|[/\\]dist[/\\]|[/\\]build[/\\]|[/\\]\.cache[/\\])/.test(filename)) {
+        return true;
+      }
+      
+      // In node_modules, only watch .pnpm/expo-*/node_modules/expo-*/src/
+      // Ignore all other node_modules content
+      if (filename.includes("node_modules")) {
+        const inPnpmExpo = filename.includes(".pnpm") && 
+                           /\/expo[^/]*\/node_modules\/expo[^/]*\/src\//.test(filename);
+        return !inPnpmExpo;
+      }
+      
+      // Watch everything else (packages/comms/src/, etc.)
+      return false;
+    },
   },
 };
 
@@ -41,9 +64,6 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-
-// Follow PNPM workspace symlinks (workspace:* deps are symlinked, not copied).
-config.resolver.unstable_enableSymlinks = true;
 
 // Respect "exports" field in package.json for packages that use export maps.
 config.resolver.unstable_enablePackageExports = true;
@@ -73,7 +93,6 @@ const NODE_BUILTIN_SHIMS = new Set([
   "stream",
   "net",
   "tls",
-  "crypto",
   "http",
   "https",
   "zlib",
@@ -99,6 +118,11 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: "sourceFile", filePath: path.resolve(shimDir, "ws.js") };
   }
 
+  // Shim crypto with Web Crypto API polyfill (react-native-quick-crypto)
+  if (moduleName === "crypto") {
+    return { type: "sourceFile", filePath: path.resolve(shimDir, "crypto.js") };
+  }
+
   // Shim Node.js built-ins that don't exist in React Native
   if (NODE_BUILTIN_SHIMS.has(moduleName)) {
     return { type: "sourceFile", filePath: path.resolve(shimDir, "empty.js") };
@@ -109,7 +133,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: "sourceFile", filePath: path.resolve(shimDir, "icon-shim.js") };
   }
 
-  // Let Metro handle everything else normally
+  // Let Metro handle everything else with symlink support enabled
   return context.resolveRequest(context, moduleName, platform);
 };
 
