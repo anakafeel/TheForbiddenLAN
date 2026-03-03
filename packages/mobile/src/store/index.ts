@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
 
-interface AppState {
+export interface AppState {
   jwt: string | null;
   activeTalkgroup: string;
   talkgroups: string[];
