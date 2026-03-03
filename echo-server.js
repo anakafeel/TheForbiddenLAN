@@ -1,4 +1,4 @@
-const { WebSocketServer } = require('ws');
+const { Server: WebSocketServer } = require('ws');
 
 const wss = new WebSocketServer({ port: 8080 });
 
