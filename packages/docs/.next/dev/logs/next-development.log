@@ -1,0 +1,266 @@
+[00:00:00.731] Server  LOG     [MDX] generated files in 19.31588099999999ms
+[00:00:00.833] Server  LOG     ✓ Ready in 600ms
+[00:00:00.861] Server  LOG     [MDX] started dev server
+[00:00:03.871] Server  LOG     ○ Compiling /docs/[[...slug]] ...
+[00:00:11.327] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:11.495] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+%s%s https://react.dev/link/hydration-mismatch 
+
+  ...
+    <InnerLayoutRouter url="/docs" tree={[...]} params={{}} cacheNode={{...}} segmentPath={[...]} ...>
+      <SegmentViewNode type="layout" pagePath="/packages/...">
+        <SegmentTrieNode>
+        <script>
+        <script>
+        <DocLayout>
+          <DocsLayout>
+            <TreeContextProvider tree={{name:"Welc...", ...}}>
+              <NavProvider>
+                <Navbar className="md:hidden">
+                  <header id="nd-subnav" className="sticky top...">
+                    <Title>
+                    <div>
+                    <SearchToggle hideIfDisabled={true}>
+                      <button type="button" className={"inline-f..."} data-search="" aria-label="Open Search" ...>
+                        <Search>
+                          <svg
+                            ref={null}
+                            xmlns="http://www.w3.org/2000/svg"
+                            width={24}
+                            height={24}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="lucide lucide-search"
+-                           style={{--darkreader-inline-stroke:"currentColor"}}
+-                           data-darkreader-inline-stroke=""
+                          >
+                    <NavbarSidebarTrigger className="-me-2 md:h...">
+                      <SidebarTrigger className={"inline-f..."}>
+                        <button aria-label="Toggle Sid..." data-open={false} onClick={function onClick} ...>
+                          <Menu>
+                            <svg
+                              ref={null}
+                              xmlns="http://www.w3.org/2000/svg"
+                              width={24}
+                              height={24}
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="lucide lucide-menu"
+-                             style={{--darkreader-inline-stroke:"currentColor"}}
+-                             data-darkreader-inline-stroke=""
+                            >
+                <main id="nd-docs-la..." className="flex flex-..." style={{...}}>
+                  <SidebarCollapseTrigger className="fixed bott..." style={{...}}>
+                    <button type="button" aria-label="Collapse S..." data-collapsed={false} className={"inline-f..."} ...>
+                      <PanelLeft>
+                        <svg
+                          ref={null}
+                          xmlns="http://www.w3.org/2000/svg"
+                          width={24}
+                          height={24}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="lucide lucide-panel-left"
+-                         style={{--darkreader-inline-stroke:"currentColor"}}
+-                         data-darkreader-inline-stroke=""
+                        >
+                  ...
+                    <div className="flex size-...">
+                      <SidebarHeader>
+                        <div className="flex flex-...">
+                          <div>
+                          <LargeSearchToggle hideIfDisabled={true} className="rounded-lg...">
+                            <button type="button" data-search-full="" className="inline-fle..." ...>
+                              <Search className="ms-1 size-4">
+                                <svg
+                                  ref={null}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width={24}
+                                  height={24}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="lucide lucide-search ms-1 size-4"
+-                                 style={{--darkreader-inline-stroke:"currentColor"}}
+-                                 data-darkreader-inline-stroke=""
+                                >
+                              ...
+                      ...
+                        <SidebarPageTree>
+                          <SidebarItem>
+                          ...
+                            <button type="button" aria-controls="radix-_R_5..." aria-expanded={false} data-state="closed" ...>
+                              <ChevronDown data-icon={true} className="ms-auto tr...">
+                                <svg
+                                  ref={null}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width={24}
+                                  height={24}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="lucide lucide-chevron-down ms-auto transition-transform -rotate-90"
+                                  data-icon={true}
+-                                 style={{--darkreader-inline-stroke:"currentColor"}}
+-                                 data-darkreader-inline-stroke=""
+                                >
+                          ...
+                            <button type="button" aria-controls="radix-_R_7..." aria-expanded={false} data-state="closed" ...>
+                              <ChevronDown data-icon={true} className="ms-auto tr...">
+                                <svg
+                                  ref={null}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width={24}
+                                  height={24}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="lucide lucide-chevron-down ms-auto transition-transform -rotate-90"
+                                  data-icon={true}
+-                                 style={{--darkreader-inline-stroke:"currentColor"}}
+-                                 data-darkreader-inline-stroke=""
+                                >
+                      ...
+                        <SidebarFooterItems>
+                          <div className="flex flex-...">
+                            <div>
+                            <ThemeToggle className="p-0 md:ord...">
+                              <button className="inline-fle..." onClick={function onClick} data-theme-toggle="">
+                                <Sun className="size-7 rou...">
+                                  <svg
+                                    ref={null}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width={24}
+                                    height={24}
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="lucide lucide-sun size-7 rounded-full p-1.5 text-fd-muted-foreground"
+-                                   style={{--darkreader-inline-stroke:"currentColor"}}
+-                                   data-darkreader-inline-stroke=""
+                                  >
+                                <Moon className="size-7 rou...">
+                                  <svg
+                                    ref={null}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width={24}
+                                    height={24}
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="lucide lucide-moon size-7 rounded-full p-1.5 text-fd-muted-foreground"
+-                                   style={{--darkreader-inline-stroke:"currentColor"}}
+-                                   data-darkreader-inline-stroke=""
+                                  >
+                            <SidebarCollapseTrigger className="-me-1.5 ma...">
+                              <button type="button" aria-label="Collapse S..." data-collapsed={false} ...>
+                                <PanelLeft>
+                                  <svg
+                                    ref={null}
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width={24}
+                                    height={24}
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="lucide lucide-panel-left"
+-                                   style={{--darkreader-inline-stroke:"currentColor"}}
+-                                   data-darkreader-inline-stroke=""
+                                  >
+                  ...
+                    <InnerLayoutRouter url="/docs" tree={[...]} params={{slug:[...]}} cacheNode={{rsc:<Fragment>, ...}} ...>
+                      <SegmentViewNode type="page" pagePath="/packages/...">
+                        <SegmentTrieNode>
+                        <DocPage>
+                          <main className="flex-1 con...">
+                            <h1>
+                            <p>
+                            <article className="prose dark...">
+                              <p>
+                              <MDXContent>
+                                <h2>
+                                  <Heading>
+                                    <h2 className="flex scrol..." id="quick-navi...">
+                                      <a>
+                                      <Link>
+                                        <>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width={24}
+                                            height={24}
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="lucide lucide-link size-3.5 shrink-0 text-fd-muted-foreground o..."
+                                            aria-label="Link to section"
+-                                           style={{--darkreader-inline-stroke:"currentColor"}}
+-                                           data-darkreader-inline-stroke=""
+                                          >
+                              <ul>
+                              <MDXContent>
+                                <h2>
+                                  <Heading>
+                                    <h2 className="flex scrol..." id="getting-st...">
+                                      <a>
+                                      <Link>
+                                        <>
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width={24}
+                                            height={24}
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth={2}
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="lucide lucide-link size-3.5 shrink-0 text-fd-muted-foreground o..."
+                                            aria-label="Link to section"
+-                                           style={{--darkreader-inline-stroke:"currentColor"}}
+-                                           data-darkreader-inline-stroke=""
+                                          >
+                              ...
+                      ...
+

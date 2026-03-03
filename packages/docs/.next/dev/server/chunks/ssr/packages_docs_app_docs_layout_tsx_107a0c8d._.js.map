@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///home/anakafeel/linuxworkspace/TheForbiddenLAN/packages/docs/app/docs/layout.tsx"],"sourcesContent":["import { docs } from '@/source';\nimport { DocsLayout } from 'fumadocs-ui/layouts/docs';\n\nexport default function DocLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return (\n    <DocsLayout tree={docs.getTree()} nav={{ title: 'SkyTalk Docs' }}>\n      {children}\n    </DocsLayout>\n  );\n}\n"],"names":[],"mappings":";;;;;;;;;;AACA;;;;AAEe,SAAS,UAAU,EAChC,QAAQ,EAGT;IACC,qBACE,mcAAC,0YAAU;QAAC,MAAM,KAAK,OAAO;QAAI,KAAK;YAAE,OAAO;QAAe;kBAC5D;;;;;;AAGP"}}]
+}
