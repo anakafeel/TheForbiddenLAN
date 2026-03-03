@@ -3,7 +3,7 @@
 **Problem**: Iridium NAT prevents direct P2P between DLS-140 units, making a pure decentralized mesh impossible across remote sites.
 **Decision**: We chose a **Hybrid Approach** with a central DigitalOcean relay. While we lose offline local-mesh capabilities if the internet drops, we prioritize extreme low-bandwidth optimizations (like `sessionId` compression) to ensure the fragile 22kbps satellite link to the centralized server never saturates.
 ## Codec: Opus vs Codec2
-Adaptive. Opus 8kbps default, Codec2 2400bps fallback when signal < 2 bars.
+Adaptive. Opus **6kbps** default (changed from 8kbps — see AES-GCM Overhead section below), Codec2 2400bps fallback when signal < 2 bars.
 
 ## Clock Drift: SYNC_TIME vs Raw Timestamps
 **Problem:** Relying solely on raw device GPS timestamps for floor control means devices with slightly skewed clocks will always win or lose arbitration unfairly.
@@ -60,7 +60,7 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 ## Expo Go (Managed) vs Expo Development Build (Android Only)
 **Problem:** Standard Expo Go only ships a pre-compiled set of native libraries. Our architecture requires `react-native-live-audio-stream` and `react-native-opus` custom C++ bindings for 60ms real-time chunk streaming. These are **not included** in Expo Go.
 **Decision:** We transitioned to an **Expo Development Build (EAS)**. However, because our primary engineering environment is Fedora Linux, compiling the iOS Dev Build locally is impossible (requires macOS/Xcode). We therefore **dropped iOS support** for the current development phase and mandate Android testing.
-**Tradeoff:** We lose the ability to test on iPhones locally. Engineers must use physical Android devices or the Android Studio emulator. This allows us to maintain the strict 60ms Opus streaming requirement for the 22kbps satellite link without paying for Apple Developer accounts or waiting for EAS Cloud iOS build queues.
+**Tradeoff:** We lose the ability to test on iPhones locally. Engineers must use physical Android devices or the Android Studio emulator. This allows us to maintain the strict 60ms / 6kbps Opus streaming requirement for the 22kbps satellite link without paying for Apple Developer accounts or waiting for EAS Cloud iOS build queues.
 
 ## Hybrid Relay Clarification: Centralized DO Relay vs True Decentralized Mesh
 **Problem:** The stated long-term goal is a "decentralized" architecture. However, `RelaySocket.ts` always connects to the DigitalOcean WebSocket relay. If the satellite/internet link drops, phones on the same local helicopter Wi-Fi network cannot communicate with each other at all.
@@ -77,8 +77,32 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 **Decision:** Best-effort delivery. Missed audio during a handoff dropout is not replayed — consistent with walkie-talkie behaviour. V2: client-side jitter buffer with local replay. We removed the Redis store-and-forward system entirely.
 
 ## AES-GCM Overhead vs 22kbps Satellite Budget
-**Problem:** Total bandwidth budget calculation.
-**Decision:** 8 kbps audio + 12B app header + 16B GCM tag + ~46B WS/TCP overhead @ 60ms frames = ~17.9 kbps on the wire. This consumes ~82% of the 22 kbps uplink budget. Signaling traffic (PTT_START, GPS_UPDATE, keepalives) must be kept minimal. Codec2 fallback at 2400 bps reduces audio contribution to ~5.4 kbps on the wire, giving substantial headroom.
+
+**Problem:** Total bandwidth budget calculation — including all protocol layers.
+
+**Measured per-packet breakdown at 60ms frames, 6kbps Opus** (validated by `test-opus-pipeline.ts`):
+
+| Layer | Bytes/frame | bps @ 16.7fps | % of 22kbps |
+|---|---|---|---|
+| Raw Opus audio | 42 | 5,600 | 25.5% |
+| + AES-GCM (12B IV + 16B tag) | 70 | 9,333 | 42.4% |
+| + Base64 encoding | 96 chars | 12,800 | 58.2% |
+| + JSON framing (type+sessionId+chunk+data keys) | **159 bytes total** | **21,200** | **96.4%** |
+
+**Headroom: 800 bps** — reserved for GPS heartbeats and PTT signalling control messages.
+
+**Why 6kbps, not 8kbps:** The full protocol stack (AES-GCM 28B overhead → Base64 +33% inflation → JSON field names 63B/frame) means 8kbps Opus consumes ~24.9 kbps on the wire at worst-case CBR, blowing the 22kbps budget by ~13%. At 6kbps, worst-case is 21.2 kbps — 800 bps under budget. Opus at 6kbps retains excellent voice intelligibility (the quality cliff is below 4kbps). 6kbps CBR is the safe default; 8kbps is acceptable on strong cellular links where the satellite uplink is not the bottleneck.
+
+**Note on field stripping:** AudioChunk messages strip `talkgroup`, `timestamp`, and `seq` fields that were previously sent on every frame. Those fields alone added ~56 bytes/packet (9,333 bps at 16.7fps). The server hub routes PTT_AUDIO via a `sessionId → talkgroup` map seeded at PTT_START — no per-chunk talkgroup field needed.
+
+**Budget guidance:**
+- Opus 6kbps + all overhead: ~21.2 kbps — fits 22kbps satellite uplink with 800 bps headroom ✓
+- Opus 8kbps + all overhead: ~24.9 kbps — use only on cellular/strong satellite (> 3 bars) links
+- Codec2 2400bps + all overhead: ~9.4 kbps — safe for weak satellite signal (< 2 bars)
+- GPS_UPDATE heartbeats (~120 bytes each) at 10s interval: +96 bps — negligible
+- Keep PTT sessions under 60s (watchdog enforced) to prevent link saturation
+
+**Future path:** A binary WebSocket frame format (1B type, 4B sessionId, 3B chunk, raw Opus, 28B AES tag = ~96 bytes/frame) would reduce audio stream to ~12.8 kbps — well within budget with headroom for control messages. Tracked as post-hackathon optimisation.
 
 ## pnpm Workspaces + Metro Bundler Symlink Resolution
 **Problem:** Metro bundler's default configuration doesn't follow symlinks, causing "Unable to resolve `expo-modules-core`" errors when using pnpm workspaces. pnpm's virtual store (`.pnpm/` directory) uses symlinks extensively to deduplicate packages. When Expo tries to import `expo-modules-core`, Metro can't follow the symlink chain through the virtual store.
