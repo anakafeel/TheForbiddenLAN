@@ -91,10 +91,7 @@ export class ForbiddenLANComms {
     this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId, timestamp: synchronizedTime, seq: currentSeq });
     this.audio = new AudioPipeline(
       this.relay,
-      this.activeTalkgroup,
-      sessionId,
-      () => Date.now() + this.serverTimeOffset,
-      currentSeq
+      sessionId
     );
     this.audio.startRecording();
 

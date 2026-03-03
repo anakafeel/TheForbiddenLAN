@@ -1,4 +1,7 @@
-// AudioPipeline — handles sequencing and sending external Opus chunks over the relay
+// AudioPipeline — handles sequencing and sending external Opus chunks over the relay.
+// Sends minimal AudioChunk messages (type + sessionId + chunk + data only) to
+// minimise per-packet JSON overhead on the 22kbps satellite uplink.
+// talkgroup routing and timestamp context live on PTT_START, not on every chunk.
 import type { RelaySocket } from './RelaySocket';
 import type { Encryption } from './Encryption';
 
@@ -8,10 +11,7 @@ export class AudioPipeline {
 
   constructor(
     private relay: RelaySocket,
-    private talkgroup: string,
     private sessionId: number,
-    private getSyncTime: () => number,
-    private seq: number,
     private encryption?: Encryption
   ) {}
 
@@ -30,10 +30,7 @@ export class AudioPipeline {
 
     this.relay.send({
       type: 'PTT_AUDIO',
-      talkgroup: this.talkgroup,
       sessionId: this.sessionId,
-      timestamp: this.getSyncTime(),
-      seq: this.seq,
       chunk: this.chunk++,
       data: payload,
     });

@@ -9,6 +9,9 @@ const rooms = new Map<string, Set<WebSocket>>();
 const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null }>();
 // raw WebSocket → set of talkgroup IDs the socket has joined
 const socketRooms = new Map<WebSocket, Set<string>>();
+// sessionId (4-byte int from PTT_START) → talkgroup — used to route PTT_AUDIO
+// without requiring talkgroup on every audio chunk (bandwidth optimisation)
+const sessionTalkgroup = new Map<number, string>();
 
 // Broadcast PRESENCE (list of online userIds) to all sockets in a talkgroup room
 function broadcastPresence(talkgroup: string) {
@@ -105,9 +108,37 @@ export async function registerHub(app: FastifyInstance) {
           break;
         }
 
-        case 'PTT_START':
-        case 'PTT_AUDIO':
-        case 'PTT_END':
+        case 'PTT_START': {
+          const tg: string = msg.talkgroup;
+          if (!tg) break;
+          // Register sessionId → talkgroup so PTT_AUDIO can route without
+          // carrying talkgroup on every packet (saves ~22 bytes per chunk)
+          if (typeof msg.sessionId === 'number') {
+            sessionTalkgroup.set(msg.sessionId, tg);
+          }
+          fanOut(socket, tg, rawStr);
+          break;
+        }
+
+        case 'PTT_AUDIO': {
+          // Audio chunks no longer include talkgroup — look it up from PTT_START
+          const tg = sessionTalkgroup.get(msg.sessionId as number);
+          if (!tg) break;
+          fanOut(socket, tg, rawStr);
+          break;
+        }
+
+        case 'PTT_END': {
+          const tg: string = msg.talkgroup;
+          if (!tg) break;
+          // Clean up session routing entry
+          if (typeof msg.sessionId === 'number') {
+            sessionTalkgroup.delete(msg.sessionId);
+          }
+          fanOut(socket, tg, rawStr);
+          break;
+        }
+
         case 'TEXT_MSG': {
           const tg: string = msg.talkgroup;
           if (!tg) break;
