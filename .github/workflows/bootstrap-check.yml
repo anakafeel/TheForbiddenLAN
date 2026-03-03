@@ -1,0 +1,49 @@
+name: Bootstrap Health Check
+
+on:
+  push:
+    branches: ['main', 'master', 'develop']
+    paths:
+      - 'scripts/setup-local.sh'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/bootstrap-check.yml'
+  pull_request:
+    branches: ['main', 'master', 'develop']
+    paths:
+      - 'scripts/setup-local.sh'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+jobs:
+  verify-setup:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    
+    name: Verify setup script (Node ${{ matrix.node-version }})
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Run setup:local bootstrap
+        run: pnpm setup:local
+      
+      - name: Verify workspace is functional
+        run: |
+          pnpm -w exec nx --version
+          pnpm list --depth=0
+      
+      - name: Check for setup failures
+        run: |
+          echo "✅ Bootstrap script completed successfully"
+          echo "Node version: $(node -v)"
+          echo "pnpm version: $(pnpm -v)"

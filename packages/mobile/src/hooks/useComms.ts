@@ -1,65 +1,109 @@
-// useComms — wraps ForbiddenLANComms. Swap mock for real by changing the import only.
+// useComms — wraps ForbiddenLANComms with mic capture, audio playback, and AES-GCM encryption.
+// IS_MOCK=false uses MockRelaySocket (no backend needed). Set IS_MOCK=true to bypass comms entirely.
 import { useEffect, useRef } from 'react';
-import { ForbiddenLANComms } from '@forbiddenlan/comms';
+import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { useStore } from '../store';
+import { useAudioCapture } from './useAudioCapture';
+import { useAudioPlayback } from './useAudioPlayback';
+import { CONFIG } from '../config';
 
-// ── MOCK: remove this block and uncomment real config when Saim's package is ready ──
-const MOCK = true;
-// ──────────────────────────────────────────────────────────────────────────────────
+const IS_MOCK = false;
+const DEVICE_ID = 'device-placeholder-uuid';
 
 export function useComms() {
-  const { setSignalStatus, setFloorStatus, setGPS, jwt } = useStore();
+  const { setSignalStatus, setFloorStatus, setGPS, jwt, activeTalkgroup } = useStore();
   const commsRef = useRef<ForbiddenLANComms | null>(null);
+  const encryption = useRef<Encryption | null>(null);
 
+  const { enqueue: playChunk, clear: clearPlayback } = useAudioPlayback();
+
+  // Init encryption once
   useEffect(() => {
-    if (MOCK || !jwt) return;
+    const enc = new Encryption();
+    enc.init().then(() => { encryption.current = enc; });
+  }, []);
+
+  const { start: startMic, stop: stopMic } = useAudioCapture(
+    async (base64Chunk) => {
+      // mic captured a chunk — push to comms layer
+      await commsRef.current?.sendAudioChunk(base64Chunk);
+    }
+  );
+
+  // Initialize comms with MockRelaySocket (no real server needed)
+  useEffect(() => {
     const comms = new ForbiddenLANComms({
-      relayUrl: import.meta.env.VITE_WS_URL ?? 'ws://localhost:3000',
-      dls140Url: import.meta.env.VITE_DLS140_URL,
-      deviceId: 'device-placeholder-uuid',
+      relayUrl: CONFIG.WS_URL,
+      dls140Url: CONFIG.DLS140_URL,
+      deviceId: CONFIG.DEVICE_ID,
+      mock: CONFIG.MOCK_MODE,
     });
-    let cleanupPolling: (() => void) | undefined;
-    comms.connect(jwt).then(() => {
+
+    comms.connect(jwt ?? 'mock-dev-token').then(() => {
       commsRef.current = comms;
-      cleanupPolling = comms.startSignalPolling(10000, setSignalStatus);
-      // We still need to poll GPS manually for now or whenever it updates,
-      // but SignalStatus is now handled by the comms package natively.
+
+      // Wire incoming audio to playback (must run after commsRef is ready)
+      comms.onMessage(async (msg: any) => {
+        if (msg.type === 'PTT_AUDIO' && msg.data) {
+          // Decrypt if encryption is ready
+          const decoded = encryption.current
+            ? await encryption.current.decrypt(msg.data)
+            : msg.data;
+          playChunk(decoded);
+        }
+        if (msg.type === 'FLOOR_GRANT') {
+          setFloorStatus(commsRef.current!.getFloorStatus(activeTalkgroup));
+        }
+      });
     });
-    
-    // GPS Polling (to match what we had before)
+
+    const cleanupPolling = comms.startSignalPolling(10000, setSignalStatus);
+
     const gpsInterval = setInterval(() => {
       const g = comms.getGPS();
       if (g) setGPS(g);
     }, 10_000);
 
-    return () => { 
+    return () => {
       clearInterval(gpsInterval);
-      if (cleanupPolling) cleanupPolling();
-      comms.disconnect(); 
+      cleanupPolling();
+      comms.disconnect();
     };
-  }, [jwt]);
+  }, [jwt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startPTT = (tg: string) => {
-    if (MOCK) { console.log('[MOCK] PTT start', tg); return; }
+  const startPTT = async (tg: string) => {
+    if (IS_MOCK) {
+      console.log('[MOCK] PTT start', tg);
+      return;
+    }
     commsRef.current?.startPTT();
+    await startMic(); // start capturing mic — browser will prompt for permission
   };
+
   const stopPTT = () => {
-    if (MOCK) { console.log('[MOCK] PTT stop'); return; }
+    if (IS_MOCK) {
+      console.log('[MOCK] PTT stop');
+      return;
+    }
+    stopMic(); // stop capturing mic
+    clearPlayback(); // discard any buffered incoming audio (half-duplex)
     commsRef.current?.stopPTT();
   };
+
   const sendText = (tg: string, text: string) => {
-    if (MOCK) { console.log('[MOCK] text', tg, text); return; }
+    if (IS_MOCK) { console.log('[MOCK] text', tg, text); return; }
     commsRef.current?.sendText(tg, text);
   };
+
   const onMessage = (handler: (msg: any) => void) => {
-    if (MOCK) return;
+    if (IS_MOCK) return;
     commsRef.current?.onMessage(handler);
   };
 
-  const sendAudioChunk = (base64OpusData: string) => {
-    if (MOCK) return;
-    commsRef.current?.sendAudioChunk(base64OpusData);
+  const sendAudioChunk = async (base64OpusData: string) => {
+    if (IS_MOCK) return;
+    await commsRef.current?.sendAudioChunk(base64OpusData);
   };
 
-  return { startPTT, stopPTT, sendText, onMessage, sendAudioChunk };
+  return { startPTT, stopPTT, sendText, onMessage, sendAudioChunk, deviceId: DEVICE_ID };
 }

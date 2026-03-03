@@ -1,5 +1,9 @@
-// AudioPipeline — handles sequencing and sending external Opus chunks over the relay
+// AudioPipeline — handles sequencing and sending external Opus chunks over the relay.
+// Sends minimal AudioChunk messages (type + sessionId + chunk + data only) to
+// minimise per-packet JSON overhead on the 22kbps satellite uplink.
+// talkgroup routing and timestamp context live on PTT_START, not on every chunk.
 import type { RelaySocket } from './RelaySocket';
+import type { Encryption } from './Encryption';
 
 export class AudioPipeline {
   private chunk = 0;
@@ -7,10 +11,8 @@ export class AudioPipeline {
 
   constructor(
     private relay: RelaySocket,
-    private talkgroup: string,
     private sessionId: number,
-    private getSyncTime: () => number,
-    private seq: number
+    private encryption?: Encryption
   ) {}
 
   startRecording(): void {
@@ -19,21 +21,26 @@ export class AudioPipeline {
   }
 
   // Mobile app (React Native) calls this with base64-encoded Opus frames
-  enqueueChunk(base64OpusData: string): void {
+  async enqueueChunk(base64OpusData: string): Promise<void> {
     if (!this.isRecording) return;
-    
+
+    const payload = this.encryption
+      ? await this.encryption.encrypt(base64OpusData)
+      : base64OpusData;
+
     this.relay.send({
       type: 'PTT_AUDIO',
-      talkgroup: this.talkgroup,
       sessionId: this.sessionId,
-      timestamp: this.getSyncTime(),
-      seq: this.seq,
       chunk: this.chunk++,
-      data: base64OpusData,
+      data: payload,
     });
   }
 
   stopRecording(): void {
     this.isRecording = false;
+  }
+
+  static async decryptChunk(base64: string, enc: Encryption): Promise<string> {
+    return enc.decrypt(base64);
   }
 }

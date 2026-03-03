@@ -20,10 +20,14 @@ export interface PTTMessage {
   seq: number;
 }
 
-export interface AudioChunk extends Omit<PTTMessage, 'sender'> {
+// AudioChunk strips talkgroup, timestamp, and seq from PTTMessage to minimise
+// per-packet JSON size on the 22kbps satellite uplink.
+// talkgroup routing is handled server-side via the sessionId→talkgroup map
+// seeded by PTT_START. timestamp is only needed for floor control (PTT_START).
+export interface AudioChunk extends Omit<PTTMessage, 'sender' | 'talkgroup' | 'timestamp' | 'seq'> {
   type: 'PTT_AUDIO';
   chunk: number;
-  data: string;         // base64-encoded Opus frame
+  data: string;         // base64-encoded Opus frame (AES-GCM encrypted)
 }
 
 export interface FloorGrant {
@@ -77,7 +81,7 @@ export type RelayMessage =
   | SyncTimeMessage;
 
 export interface SignalStatus {
-  certusSignalBars: number;   // 0–5 from DLS-140 /device/status
+  certusDataBars: number;   // 0–5 from DLS-140 /device/status
   cellularSignal: number;     // 0–100
   activeLink: 'cellular' | 'satellite' | 'none';
   certusDataUsedKB: number;

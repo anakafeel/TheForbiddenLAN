@@ -5,18 +5,38 @@
   "projectType": "application",
   "tags": ["scope:mobile"],
   "targets": {
-    "build": {
-      "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
-      "options": { "outputPath": "dist/packages/mobile" }
-    },
     "serve": {
-      "executor": "@nx/vite:dev-server",
-      "options": { "buildTarget": "mobile:build" }
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "expo start",
+        "cwd": "packages/mobile"
+      }
+    },
+    "android": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "expo start --android",
+        "cwd": "packages/mobile"
+      }
+    },
+    "ios": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "expo start --ios",
+        "cwd": "packages/mobile"
+      }
+    },
+    "export": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "expo export --platform all",
+        "cwd": "packages/mobile"
+      }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "options": { "lintFilePatterns": ["packages/mobile/**/*.{ts,tsx}"] }
+      "options": { "lintFilePatterns": ["packages/mobile/**/*.{ts,tsx,jsx}"] }
     }
   }
 }

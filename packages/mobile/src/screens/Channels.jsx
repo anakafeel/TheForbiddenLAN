@@ -96,7 +96,7 @@ export default function ChannelsScreen({ navigation }) {
   const [channelSpeakers, setChannelSpeakers] = useState({}); // Track speakers per channel
 
   useEffect(() => {
-    if (!CONFIG.MOCK_MODE) {
+    if (!CONFIG.MOCK_MODE && socket) {
       socket.emit('list-channels');
       socket.on('channels', list => setChannels(list));
       return () => socket.off('channels');

@@ -1,0 +1,15 @@
+{
+  "ignore_dirs": [
+    ".git",
+    ".nx",
+    "node_modules",
+    "build",
+    "dist",
+    ".gradle",
+    "gradle-dist",
+    ".idea",
+    ".vscode",
+    "__pycache__"
+  ],
+  "idle_time_ms": 200
+}

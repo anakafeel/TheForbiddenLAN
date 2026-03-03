@@ -1,0 +1,11 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "files.watcherExclude": {
+        "**/node_modules/.pnpm/**": true,
+        "**/.gradle/**": true,
+        "**/android/build/**": true,
+        "**/.expo/**": true,
+        "**/gradle-dist/**": true,
+        "**/.nx/**": true
+    }
+}

@@ -1,0 +1,15 @@
+# Ignore everything except source
+node_modules
+.cache
+.expo
+.next
+dist
+build
+*.log
+.git
+.nx
+.idea
+.vscode
+__pycache__
+gradle-dist
+docs

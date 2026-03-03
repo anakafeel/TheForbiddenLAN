@@ -68,7 +68,7 @@ export type RelayMessage =
   | GPSUpdate;
 
 export interface SignalStatus {
-  certusSignalBars: number;   // 0–5 from DLS-140 /device/status
+  certusDataBars: number;   // 0–5 from DLS-140 /device/status
   cellularSignal: number;     // 0–100
   activeLink: 'cellular' | 'satellite' | 'none';
   certusDataUsedKB: number;

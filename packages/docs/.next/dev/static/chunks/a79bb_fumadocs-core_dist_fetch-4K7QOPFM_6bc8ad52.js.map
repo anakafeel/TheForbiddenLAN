@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///home/anakafeel/linuxworkspace/TheForbiddenLAN/node_modules/.pnpm/fumadocs-core%4014.7.7_%40types%2Breact%4019.2.14_next%4016.1.6_%40babel%2Bcore%407.29.0_babel-plugin-r_bf3a097180b8007f7ecdc618f44bfe67/node_modules/fumadocs-core/dist/fetch-4K7QOPFM.js"],"sourcesContent":["import \"./chunk-MLKGABMK.js\";\n\n// src/search/client/fetch.ts\nasync function fetchDocs(query, locale, tag, options) {\n  const params = new URLSearchParams();\n  params.set(\"query\", query);\n  if (locale) params.set(\"locale\", locale);\n  if (tag) params.set(\"tag\", tag);\n  const res = await fetch(\n    `${options.api ?? \"/api/search\"}?${params.toString()}`\n  );\n  if (!res.ok) throw new Error(await res.text());\n  return await res.json();\n}\nexport {\n  fetchDocs\n};\n"],"names":[],"mappings":";;;;AAAA;;AAEA,6BAA6B;AAC7B,eAAe,UAAU,KAAK,EAAE,MAAM,EAAE,GAAG,EAAE,OAAO;IAClD,MAAM,SAAS,IAAI;IACnB,OAAO,GAAG,CAAC,SAAS;IACpB,IAAI,QAAQ,OAAO,GAAG,CAAC,UAAU;IACjC,IAAI,KAAK,OAAO,GAAG,CAAC,OAAO;IAC3B,MAAM,MAAM,MAAM,MAChB,GAAG,QAAQ,GAAG,IAAI,cAAc,CAAC,EAAE,OAAO,QAAQ,IAAI;IAExD,IAAI,CAAC,IAAI,EAAE,EAAE,MAAM,IAAI,MAAM,MAAM,IAAI,IAAI;IAC3C,OAAO,MAAM,IAAI,IAAI;AACvB","ignoreList":[0]}}]
+}

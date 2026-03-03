@@ -91,10 +91,7 @@ export class ForbiddenLANComms {
     this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId, timestamp: synchronizedTime, seq: currentSeq });
     this.audio = new AudioPipeline(
       this.relay,
-      this.activeTalkgroup,
-      sessionId,
-      () => Date.now() + this.serverTimeOffset,
-      currentSeq
+      sessionId
     );
     this.audio.startRecording();
 
@@ -105,12 +102,12 @@ export class ForbiddenLANComms {
   }
 
   // React Native developers will call this from their audio recorder library
-  sendAudioChunk(base64OpusData: string): void {
+  async sendAudioChunk(base64OpusData: string): Promise<void> {
     if (!this.isTransmitting) {
       console.warn('[ForbiddenLANComms] Ignored sendAudioChunk because PTT is not active');
       return;
     }
-    this.audio?.enqueueChunk(base64OpusData);
+    await this.audio?.enqueueChunk(base64OpusData);
   }
 
   stopPTT(): void {
@@ -143,11 +140,17 @@ export class ForbiddenLANComms {
     });
   }
 
+  // Bypass the half-duplex filter — use for loopback testing and signal monitoring.
+  // Receives every relay message including echoed PTT_AUDIO while transmitting.
+  onRawMessage(handler: (msg: RelayMessage) => void): void {
+    this.relay.on('*', handler);
+  }
+
   async getSignalStatus(): Promise<SignalStatus> {
     try {
       return await this.dls.toSignalStatus();
     } catch {
-      return { certusSignalBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 };
+      return { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 };
     }
   }
 

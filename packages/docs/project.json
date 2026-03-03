@@ -1,0 +1,27 @@
+{
+  "projectType": "application",
+  "name": "docs",
+  "sourceRoot": "packages/docs",
+  "tags": ["type:docs"],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm -C packages/docs dev",
+        "cwd": "."
+      },
+      "configurations": {
+        "development": {
+          "command": "pnpm -C packages/docs dev"
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm -C packages/docs build",
+        "cwd": "."
+      }
+    }
+  }
+}

@@ -10,3 +10,5 @@ android/
 ios/
 *.raucb
 CLAUDE.md
+# Expo
+.expo/

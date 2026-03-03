@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js';
 import { talkgroupRoutes } from './routes/talkgroups.js';
 import { deviceRoutes } from './routes/devices.js';
 import { keyRoutes } from './routes/keys.js';
+import { userRoutes } from './routes/users.js';
 import { registerHub } from './ws/hub.js';
 
 const app = Fastify({ logger: true });
@@ -23,6 +24,7 @@ await app.register(authRoutes,       { prefix: '/auth' });
 await app.register(talkgroupRoutes,  { prefix: '/talkgroups' });
 await app.register(deviceRoutes,     { prefix: '/devices' });
 await app.register(keyRoutes,        { prefix: '/keys' });
+await app.register(userRoutes,       { prefix: '/users' });
 
 // WebSocket hub
 await registerHub(app);

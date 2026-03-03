@@ -106,7 +106,7 @@ export class DLS140Client {
           ? "satellite"
           : "none";
     return {
-      certusSignalBars: status.certusDataBars ?? 0,
+      certusDataBars: status.certusDataBars ?? 0,
       cellularSignal: status.cellularSignalStrength,
       activeLink,
       certusDataUsedKB: usage?.certus?.txusage ?? 0,

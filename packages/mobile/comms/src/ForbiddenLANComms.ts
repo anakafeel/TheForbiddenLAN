@@ -80,7 +80,7 @@ export class ForbiddenLANComms {
     try {
       return await this.dls.toSignalStatus();
     } catch {
-      return { certusSignalBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 };
+      return { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 };
     }
   }
 
