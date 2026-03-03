@@ -3,11 +3,11 @@ import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import type { WebSocket } from 'ws';
 
-// talkgroup ID → set of connected sockets
+// talkgroup ID → set of connected raw WebSockets
 const rooms = new Map<string, Set<WebSocket>>();
-// socket → { userId, deviceId }
+// raw WebSocket → { userId, deviceId }
 const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null }>();
-// socket → set of talkgroup IDs the socket has joined
+// raw WebSocket → set of talkgroup IDs the socket has joined
 const socketRooms = new Map<WebSocket, Set<string>>();
 
 // Broadcast PRESENCE (list of online userIds) to all sockets in a talkgroup room
@@ -37,7 +37,10 @@ function fanOut(sender: WebSocket, talkgroup: string, raw: string) {
 }
 
 export async function registerHub(app: FastifyInstance) {
-  app.get('/ws', { websocket: true }, async (socket, req) => {
+  app.get('/ws', { websocket: true }, async (connection, req) => {
+    // @fastify/websocket passes a SocketStream; the raw ws.WebSocket is at .socket
+    const socket: WebSocket = (connection as any).socket;
+
     // Authenticate via query param: ws://host/ws?token=<jwt>
     const token = (req.query as any).token;
     let userId = '';
@@ -45,13 +48,13 @@ export async function registerHub(app: FastifyInstance) {
 
     try {
       const payload = app.jwt.verify(token) as any;
-      userId = payload.sub; // sub = userId (see auth.ts)
+      userId = payload.sub;
     } catch {
       socket.close(1008, 'unauthorized');
       return;
     }
 
-    // Look up device_id — needed to write GPS updates to the correct device row
+    // Look up device_id for GPS writes
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -59,28 +62,26 @@ export async function registerHub(app: FastifyInstance) {
       });
       deviceId = user?.device_id ?? null;
     } catch {
-      // DB lookup failed — continue without deviceId; GPS writes will be skipped
+      // DB lookup failed — continue without deviceId
     }
 
     socketUser.set(socket, { userId, deviceId });
     socketRooms.set(socket, new Set());
-    console.log('[hub] client connected, userId:', userId, 'readyState:', (socket as any).readyState, 'typeof socket.on:', typeof (socket as any).on);
+    console.log('[hub] client connected, userId:', userId, 'readyState:', socket.readyState);
 
     socket.on('message', async (raw) => {
-      console.log('[hub] raw message received:', raw.toString());
+      console.log('[hub] message received:', raw.toString());
       let msg: any;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       const rawStr = raw.toString();
 
       switch (msg.type) {
         case 'GPS_UPDATE': {
-          // Persist to DB (best-effort — never crash the hub on a GPS write failure)
           if (deviceId) {
             await prisma.gpsUpdate.create({
               data: { device_id: deviceId, lat: msg.lat, lng: msg.lng, alt: msg.alt },
             }).catch(() => {});
           }
-          // Fan out to all talkgroups this socket has joined so others can update their map
           for (const tg of socketRooms.get(socket) ?? []) {
             fanOut(socket, tg, rawStr);
           }
@@ -106,7 +107,6 @@ export async function registerHub(app: FastifyInstance) {
           break;
         }
 
-        // PTT and text messages: relay to all other members of the talkgroup
         case 'PTT_START':
         case 'PTT_AUDIO':
         case 'PTT_END':
@@ -116,13 +116,10 @@ export async function registerHub(app: FastifyInstance) {
           fanOut(socket, tg, rawStr);
           break;
         }
-
-        // Unknown message types are silently ignored
       }
     });
 
     socket.on('close', () => {
-      // Remove from all rooms and notify remaining members
       for (const tg of socketRooms.get(socket) ?? []) {
         rooms.get(tg)?.delete(socket);
         broadcastPresence(tg);
