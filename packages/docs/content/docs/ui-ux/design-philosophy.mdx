@@ -1,0 +1,90 @@
+---
+title: Design Philosophy
+description: The core UX principle behind SkyTalk — the interface disappears, the communication doesn't. Apple HIG principles applied to PTT.
+---
+
+# Design Philosophy
+
+## The Core Principle
+
+> **The interface disappears. The communication doesn't.**
+
+A walkie-talkie has one job: let you speak and let you hear. The best radio handset is the one you stop thinking about — you press, you talk, you release. SkyTalk is software that has to feel like hardware.
+
+This shapes every UI decision in the mobile app. If a screen element doesn't serve the act of communicating, it doesn't belong on the primary view.
+
+---
+
+## Apple HIG Alignment
+
+SkyTalk mobile is built on React Native targeting iOS (and Android via the same codebase). We apply the three core Apple Human Interface Guidelines lenses throughout:
+
+### Clarity
+
+The interface is immediately legible under stress:
+- **One large PTT button** dominates the screen. There is no ambiguity about what to press.
+- **Talkgroup name** is displayed prominently at the top — you always know which channel you're on.
+- **Floor state** (who is transmitting) is shown in plain text, not abstract icons. "Alice transmitting" is better than a waveform icon the pilot has never seen before.
+- Font sizes are large. Cockpit lighting and gloves affect readability.
+
+### Deference
+
+The UI steps back for the content (the communication):
+- No gradients, decorative textures, or visual chrome that doesn't carry information.
+- Status indicators (GPS lock, connection state) are peripheral — visible on a second glance, not demanding attention on first look.
+- Color is used functionally: **green** = you have the floor, **red** = someone else has the floor, **grey** = channel is free.
+
+### Depth
+
+Navigation layers are flat:
+- **Primary screen**: talkgroup + PTT button + floor status.
+- **One level deep**: talkgroup member list, text messages.
+- **Settings**: separate, rarely accessed.
+
+Pilots shouldn't navigate menus during critical phases of flight. Everything needed for normal operation is on one screen.
+
+---
+
+## One-Tap PTT
+
+The PTT interaction is designed around a single constraint: **the user must be able to initiate a transmission with one thumb, without looking at the screen**.
+
+This means:
+- The PTT button is **centred and large** — target area exceeds Apple's recommended minimum of 44×44 pt by a wide margin (see [Mobile App UX →](/docs/ui-ux/mobile-app-ux)).
+- The button uses **touch-down / touch-up** events, not tap. Speech starts on press, not on release. This is how every radio handset in the world works.
+- Visual and (optionally) haptic feedback confirm floor acquisition.
+
+---
+
+## Cognitive Load Budget
+
+Aircrew are operating in high-workload environments. SkyTalk assumes the user can spare:
+
+- **~100 ms of attention** to find the PTT button.
+- **~0 ms of attention** to interpret the floor state — it must be glanceable.
+- **0 deliberate steps** to switch from listening to transmitting.
+
+This is why features like push notifications, settings links, and admin controls are absent from the primary screen. The app boots directly to the active talkgroup with the PTT button ready.
+
+---
+
+## Satellite Latency and Perceived Responsiveness
+
+Over Iridium Certus, round-trip time is 500–1500 ms. Users will hear audio from the other end with this delay. The UI should not amplify this uncertainty.
+
+- **Floor grant is local and instant.** The app immediately shows "you have the floor" when PTT is pressed, without waiting for a server acknowledgment. The [floor arbitration algorithm](/docs/architecture/floor-control) is deterministic — every device reaches the same outcome independently, so there is no server round trip.
+- **Latency is expected, not an error.** The app does not show a loading spinner or "connecting…" state during the transmission delay — this is normal radio behaviour.
+- **Disconnection vs high latency is distinguished.** A WebSocket drop shows a clear "offline" indicator. Slow audio is not treated as an error.
+
+---
+
+## Summary
+
+| Principle | Implementation |
+|-----------|----------------|
+| One-tap PTT | Large centred button, touch-down event |
+| Clarity under stress | Big text, plain-language floor state |
+| Deference | No decorative chrome, functional colour only |
+| Flat navigation | One screen for all normal operation |
+| No server round trip | Client-side floor arbitration |
+| Glanceable status | Connection + GPS indicators at screen edge |

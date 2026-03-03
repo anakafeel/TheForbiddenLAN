@@ -1,0 +1,59 @@
+---
+title: Mobile App
+description: Why React Native + Expo SDK 54, how the same source code targets browser and Android via different build tools, and why iOS was dropped for this phase.
+---
+
+# Mobile App Stack
+
+## Decision
+
+**React Native + Expo SDK 54 (Development Build, Android-first).** Same `.jsx` source files compile to browser (via Vite + react-native-web), Android (via Metro + Gradle), and iOS (via Metro + Xcode — currently excluded from active development).
+
+## Constraints That Drove This
+
+- Two developers (Maisam + Annie) building a mobile app in one week.
+- The app must run on Android devices physically attached to aircraft LANs.
+- The comms library (`packages/comms`) is TypeScript. Mobile and comms must share types without a build step.
+- Need real native audio APIs — the Web Audio API is unavailable on the satellite hardware environment.
+- Primary engineering environment is Linux (Carleton labs). iOS development requires macOS + Xcode.
+
+## Alternatives Considered
+
+| Option | Why We Didn't Choose It |
+|--------|------------------------|
+| **Flutter** | Different language (Dart). Team's expertise is JavaScript/TypeScript. Sharing typed interfaces with `packages/comms` (TypeScript) would require code generation. |
+| **Capacitor (Web + native wrapper)** | We started here. Capacitor wraps a WebView around a web app. `MediaRecorder` (browser) works for audio in the web view, but we needed 60ms chunk streaming with native codecs (Opus, Codec2). Native audio libraries (`react-native-live-audio-stream`, `react-native-opus`) don't exist for Capacitor. Switched to React Native. |
+| **Native Android (Kotlin/Java)** | No prior team experience. Cannot share comms library code. PTT UI would need to be built from scratch. |
+| **Expo Go (managed workflow)** | Expo Go ships a fixed set of pre-compiled native libraries. `react-native-live-audio-stream` and `react-native-opus` (custom C++ bindings) are not included. An Expo Development Build (EAS) is required. |
+
+## Why React Native + Expo Dev Build
+
+**Shared codebase.** The same screen and component files target browser, Android, and iOS. Three build targets from one source:
+
+| Target | Build tool | Command |
+|--------|-----------|---------|
+| Browser (dev/testing) | Vite + react-native-web | `pnpm dev:mobile` |
+| Android | Metro + Gradle | `pnpm android` |
+| iOS | Metro + Xcode | (excluded this phase) |
+
+**react-native-web** re-implements every React Native primitive as a DOM equivalent (`View` → `<div>`, `Text` → `<span>`, `StyleSheet` → CSS-in-JS). Vite redirects `react-native` imports to `react-native-web` at bundle time. The full PTT loop can be developed and tested in a browser with no device needed.
+
+**Expo SDK 54** abstracts platform differences for permissions, audio session management, file system access, and secure storage. The dev build allows custom native modules.
+
+**TypeScript throughout.** `packages/comms` exports typed interfaces that the mobile app imports directly without a code generation step. Floor control types, audio chunk types, and WebSocket message types are shared at compile time.
+
+## Why iOS Was Dropped This Phase
+
+Compiling a custom Expo Dev Build for iOS requires macOS and Xcode. Our primary dev environment is Fedora Linux. EAS Cloud (remote build service) is available but adds build queue latency and requires an Apple Developer account.
+
+The decision: develop and demo on Android, document iOS as a post-hackathon enable. The `packages/mobile` code is platform-agnostic; re-enabling iOS requires setting up Xcode, adding the iOS EAS build profile, and testing `react-native-audio-recorder-player` on iOS — no code changes.
+
+## Tradeoffs We Accepted
+
+**Audio is whole-file-per-press in current implementation.** Ideal PTT sends 60 ms chunks as the user speaks (streaming pipeline). Current implementation records to a file, then reads the file on PTT release. This means no audio is heard until the user releases the button. Streaming requires `react-native-live-audio-stream` + an EAS build with native modules compiled in — committed to the roadmap.
+
+**Pass-through crypto for mock mode.** The Web Crypto API (`crypto.subtle`) is unavailable in Hermes (React Native's JS engine). A pass-through polyfill (`packages/mobile/src/shims/setup-crypto.js`) mimics the interface but performs no encryption. This is acceptable for local mock testing; production requires replacing it with `@noble/ciphers` or `react-native-quick-crypto`.
+
+**Two App entry points.** `App.jsx` (native, uses React Navigation) and `App.web.jsx` (browser, uses manual state navigation — React Navigation's native modules don't exist in a browser). This adds a small maintenance surface.
+
+**pnpm + Metro symlink resolution.** pnpm's virtual store uses symlinks that Metro doesn't follow by default. We enable `unstable_enableSymlinks` and add workspace `node_modules` to `watchFolders`. Adds ~2–3 seconds to Metro cold start and increases memory usage by ~200 MB. The alternative (switching to npm/yarn flat `node_modules`) loses pnpm's 2–3x install speed advantages and disk savings across the monorepo.

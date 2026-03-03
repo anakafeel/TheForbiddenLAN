@@ -1,11 +1,25 @@
 import { source } from '@/source';
 import { notFound } from 'next/navigation';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { DocsPage, DocsBody, DocsTitle, DocsDescription } from 'fumadocs-ui/page';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+import { File, Files, Folder } from 'fumadocs-ui/components/files';
 import type { MDXComponents } from 'mdx/types';
 
 export function getMDXComponents(components?: MDXComponents): MDXComponents {
   return {
     ...defaultMdxComponents,
+    Steps,
+    Step,
+    Tabs,
+    Tab,
+    Accordions,
+    Accordion,
+    File,
+    Files,
+    Folder,
     ...components,
   };
 }
@@ -20,17 +34,13 @@ export default async function DocPage(props: {
   const MDX = page.data.body;
 
   return (
-    <main className="flex-1 container mx-auto py-8">
-      <h1 className="text-4xl font-bold mb-4">{page.data.title}</h1>
-      {page.data.description && (
-        <p className="text-lg text-muted-foreground mb-8">
-          {page.data.description}
-        </p>
-      )}
-      <article className="prose dark:prose-invert max-w-none">
+    <DocsPage toc={page.data.toc ?? []} full={false}>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsDescription>{page.data.description}</DocsDescription>
+      <DocsBody>
         <MDX components={getMDXComponents()} />
-      </article>
-    </main>
+      </DocsBody>
+    </DocsPage>
   );
 }
 

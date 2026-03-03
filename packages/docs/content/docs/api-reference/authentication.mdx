@@ -1,0 +1,162 @@
+---
+title: Authentication
+description: JWT-based auth flow — registration, login, token shape, and how protected routes verify identity.
+---
+
+# Authentication
+
+All SkyTalk API access is secured with JWTs (JSON Web Tokens). This page covers the full auth lifecycle.
+
+---
+
+## Registration
+
+```http
+POST /auth/register
+Content-Type: application/json
+
+{
+  "username": "pilot1",
+  "password": "test",
+  "deviceSerial": "SN-12345",  // optional
+  "site": "YVR"               // optional, used if deviceSerial provided
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "jwt": "eyJhbGci...",
+  "userId": "037008e8-ec33-4cac-b83c-f28b42adf155"
+}
+```
+
+**Response `409 Conflict`:**
+```json
+{ "error": "username taken" }
+```
+
+**Notes:**
+- All new users are created with `role: "user"`. There is no public endpoint to register as admin. Promote via the seed script or direct SQL.
+- If `deviceSerial` is provided, the server looks up or creates a `Device` row and links it to the new user.
+- Password is hashed with bcrypt (cost 10) before storage. The hash is never returned by any endpoint.
+
+---
+
+## Login
+
+```http
+POST /auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin"
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "jwt": "eyJhbGci..."
+}
+```
+
+**Response `401 Unauthorized`:**
+```json
+{ "error": "invalid credentials" }
+```
+
+---
+
+## Change Password
+
+```http
+POST /auth/changepassword
+Authorization: Bearer <jwt>
+Content-Type: application/json
+
+{
+  "oldPassword": "admin",
+  "newPassword": "new-secure-password"
+}
+```
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+---
+
+## JWT Shape
+
+```json
+{
+  "sub": "037008e8-ec33-4cac-b83c-f28b42adf155",
+  "username": "admin",
+  "role": "admin",
+  "iat": 1234567890
+}
+```
+
+| Claim | Value |
+|-------|-------|
+| `sub` | User UUID from the `User` table |
+| `username` | Login name |
+| `role` | `"admin"` or `"user"` |
+| `iat` | Issued-at timestamp |
+
+<Callout type="warn">
+JWTs are currently issued without an `exp` (expiry) claim during development. Add `expiresIn: '24h'` to the `app.jwt.sign()` call in `src/routes/auth.ts` before any production deployment.
+</Callout>
+
+---
+
+## Using a JWT
+
+### REST API
+
+Pass the JWT in the `Authorization` header:
+
+```http
+GET /talkgroups
+Authorization: Bearer eyJhbGci...
+```
+
+Any protected route that receives a request without a valid JWT returns `401 Unauthorized`.
+
+Admin-only routes additionally return `403 Forbidden` if `role !== "admin"`.
+
+### WebSocket
+
+Pass the JWT as a query parameter on the initial upgrade request:
+
+```
+ws://134.122.32.45:3000/ws?token=eyJhbGci...
+```
+
+The server verifies the JWT before completing the WebSocket handshake. Invalid tokens result in a `1008 Policy Violation` close.
+
+---
+
+## Getting a JWT for Testing
+
+```bash
+curl -X POST http://134.122.32.45:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}'
+```
+
+To store it as a shell variable:
+
+```bash
+JWT=$(curl -s -X POST http://134.122.32.45:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | \
+  grep -o '"jwt":"[^"]*"' | cut -d'"' -f4)
+```
+
+<Callout type="info">
+Shell variables are per-session. If you open a new terminal pane (e.g. in zellij), the `$JWT` variable won't be set — re-run the login command.
+</Callout>
