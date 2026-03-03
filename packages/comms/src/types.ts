@@ -7,6 +7,8 @@ export type MessageType =
   | 'FLOOR_GRANT'
   | 'FLOOR_DENY'
   | 'PRESENCE'
+  | 'JOIN_TALKGROUP'
+  | 'LEAVE_TALKGROUP'
   | 'TEXT_MSG'
   | 'GPS_UPDATE'
   | 'SYNC_TIME';

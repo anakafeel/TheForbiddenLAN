@@ -78,7 +78,9 @@ export class ForbiddenLANComms {
 
   joinTalkgroup(talkgroupId: string): void {
     this.activeTalkgroup = talkgroupId;
-    this.relay.send({ type: 'PRESENCE', talkgroup: talkgroupId, online: [this.config.deviceId], sender: this.config.deviceId, timestamp: Date.now(), seq: 0 });
+    // Server hub.ts routes on JOIN_TALKGROUP to add socket to the room Set.
+    // PRESENCE is broadcast *by* the server, not consumed from clients.
+    this.relay.send({ type: 'JOIN_TALKGROUP', talkgroup: talkgroupId } as any);
   }
 
   startPTT(): void {
@@ -88,6 +90,7 @@ export class ForbiddenLANComms {
     const synchronizedTime = Date.now() + this.serverTimeOffset;
     // Generate a quick random sessionId for this PTT press
     const sessionId = Math.floor(Math.random() * 0xFFFFFFFF);
+    console.log(`[comms] PTT_START sessionId: 0x${sessionId.toString(16).toUpperCase()} — share with server operator to verify relay routing`);
     this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId, timestamp: synchronizedTime, seq: currentSeq });
     this.audio = new AudioPipeline(
       this.relay,
