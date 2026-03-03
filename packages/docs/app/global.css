@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/style.css';
+
+body {
+  @apply bg-background text-foreground;
+}

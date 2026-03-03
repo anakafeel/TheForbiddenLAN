@@ -56,6 +56,13 @@ pnpm install --frozen-lockfile
 print_section "Validating workspace"
 pnpm -w exec nx --version >/dev/null
 
+# Validate Fumadocs docs package
+if [[ ! -d "packages/docs" ]]; then
+  yellow "Warning: packages/docs directory not found. Documentation site may not be available."
+else
+  green "Documentation site package found (packages/docs)"
+fi
+
 green "Workspace dependencies installed successfully"
 
 print_section "Android toolchain check (optional)"

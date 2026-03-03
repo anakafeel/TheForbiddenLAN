@@ -12,6 +12,7 @@
     "dev:server": "nx serve server",
     "dev:mobile": "nx serve mobile",
     "dev:web": "nx serve portal",
+    "dev:docs": "nx serve docs",
     "build:comms": "nx build comms",
     "build:all": "nx run-many --target=build --all",
     "test:all": "nx run-many --target=test --all",
@@ -38,9 +39,15 @@
   },
   "dependencies": {
     "expo": "~54.0.33",
+    "next": "16.1.6",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-get-random-values": "^2.0.0",
-    "react-native-quick-crypto": "^1.0.15"
+    "react-native-quick-crypto": "^1.0.15",
+    "fumadocs-core": "^14.2.9",
+    "fumadocs-mdx": "^14.2.9",
+    "fumadocs-ui": "^14.2.9",
+    "tailwindcss": "^4.0.0"
   }
 }
