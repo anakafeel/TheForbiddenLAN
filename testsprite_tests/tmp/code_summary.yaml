@@ -1,0 +1,105 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - React 18
+  - Vite 5
+  - React Router v6
+  - CSS (inline styles)
+routes:
+  - path: /
+    file: src/App.tsx
+    auth_required: false
+    description: Redirects to /dashboard
+  - path: /dashboard
+    file: src/pages/Dashboard.tsx
+    auth_required: false
+    description: System overview — device counts and device status table
+  - path: /devices
+    file: src/pages/Devices.tsx
+    auth_required: false
+    description: Device management — list devices, enable/disable each device
+  - path: /talkgroups
+    file: src/pages/Talkgroups.tsx
+    auth_required: false
+    description: Talkgroup management — list talkgroups, create new talkgroup
+  - path: /users
+    file: src/pages/Users.tsx
+    auth_required: false
+    description: User listing — read-only table of usernames and roles
+features:
+  - name: Dashboard Overview
+    description: Shows stat cards for devices online, total devices, active talkgroups, and a device status table
+    files:
+      - src/pages/Dashboard.tsx
+    entry_route: /dashboard
+    user_interactions:
+      - View Devices Online count card
+      - View Total Devices count card
+      - View Active Talkgroups card (hardcoded to dash)
+      - View device status table with name, site, and online/offline badge
+    api_calls:
+      - method: GET
+        endpoint: /devices
+    auth_required: false
+  - name: Device Management
+    description: List all registered devices and toggle their active/inactive status
+    files:
+      - src/pages/Devices.tsx
+    entry_route: /devices
+    user_interactions:
+      - View device list table with serial, name, site columns
+      - Click Enable button to activate a disabled device
+      - Click Disable button to deactivate an active device
+      - See updated device status after toggle
+    api_calls:
+      - method: GET
+        endpoint: /devices
+      - method: PATCH
+        endpoint: /devices/:id/status
+    auth_required: false
+  - name: Talkgroup Management
+    description: List existing talkgroups and create new ones
+    files:
+      - src/pages/Talkgroups.tsx
+    entry_route: /talkgroups
+    user_interactions:
+      - View list of existing talkgroups
+      - Type a talkgroup name into the input field
+      - Click Create button to submit
+      - See new talkgroup appear in the list
+      - See empty input rejected (no empty name allowed)
+    api_calls:
+      - method: GET
+        endpoint: /talkgroups
+      - method: POST
+        endpoint: /talkgroups
+    auth_required: false
+  - name: User Listing
+    description: Read-only view of all registered users and their roles
+    files:
+      - src/pages/Users.tsx
+    entry_route: /users
+    user_interactions:
+      - View user table with username and role columns
+      - See admin vs user role labels
+    api_calls:
+      - method: GET
+        endpoint: /users
+    auth_required: false
+known_limitations:
+  - issue: No login screen — portal renders all pages without auth; JWT must be manually set in localStorage
+    location: src/App.tsx
+    impact: Unauthenticated access to all admin pages; API calls sent with empty Bearer token
+  - issue: All non-auth server routes use supabase stub (C1) — device, talkgroup, user endpoints return errors
+    location: packages/server/src/routes
+    impact: Dashboard, Devices, Talkgroups, Users pages all show empty data
+  - issue: GET /users endpoint does not exist on server (C4) — Users page always gets 404
+    location: src/pages/Users.tsx
+    impact: Users page permanently empty
+  - issue: All fetch errors silently swallowed with .catch(() => {}) — no error messages shown to user
+    location: src/pages/Dashboard.tsx, src/pages/Devices.tsx, src/pages/Talkgroups.tsx, src/pages/Users.tsx
+    impact: Users see blank tables with no feedback when API calls fail
+  - issue: Active Talkgroups stat on Dashboard is hardcoded to dash, not fetched from API
+    location: src/pages/Dashboard.tsx
+    impact: Stat always shows placeholder value regardless of actual data

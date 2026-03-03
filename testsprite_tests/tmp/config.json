@@ -1,0 +1,18 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:5174",
+  "executionArgs": {
+    "projectName": "TheForbiddenLAN",
+    "projectPath": "/home/anakafeel/linuxworkspace/TheForbiddenLAN",
+    "testIds": [],
+    "additionalInstruction": "The portal has no login screen. All pages (dashboard, devices, talkgroups, users) load without auth. The backend API at localhost:3000 is NOT running, so all API calls will fail — test UI rendering, navigation, and interactions that don't depend on live API data.",
+    "serverMode": "development",
+    "envs": {
+      "API_KEY": "sk-user-MiZG-Ax3o2WLktR6qsWNpMvZ-Lh8pplTE-yyS5l0ShpVzIt7dfFNEMwo5gpCdCen7d4AJVExGGpRyo3wa8Nvo09ntwKRi_qGsEc_MWxBurAVhKcY2MXxdLaT81RAbs4IdGs"
+    }
+  },
+  "serverPort": 46865,
+  "proxy": "http://f5ab7351-3eb2-4287-b336-8ba0a504a207:aYOJrAB4Y0D04i02UTrtiClGpFgKVJQT@tun.testsprite.com:8080"
+}

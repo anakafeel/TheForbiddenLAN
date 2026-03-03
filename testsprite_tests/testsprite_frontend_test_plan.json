@@ -1,0 +1,589 @@
+[
+  {
+    "id": "TC001",
+    "title": "Dashboard loads and shows all overview stat cards",
+    "description": "Verifies the Dashboard renders the three stat cards and the device status table section.",
+    "category": "Dashboard Overview",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Dashboard\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Devices Online\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total Devices\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active Talkgroups\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"device status table\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Active Talkgroups stat shows the hardcoded placeholder value",
+    "description": "Verifies the Active Talkgroups card displays the hardcoded placeholder value as implemented.",
+    "category": "Dashboard Overview",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active Talkgroups\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"-\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Devices Online\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total Devices\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Device status table shows expected column headers/fields",
+    "description": "Verifies the device status table presents the expected visible fields (name, site, status/badge).",
+    "category": "Dashboard Overview",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"device status table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Name\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Site\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Status\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Online\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Dashboard remains usable (no visible crash) even when device data is empty",
+    "description": "Verifies the Dashboard UI still renders stat cards and the table container even if no device rows appear.",
+    "category": "Dashboard Overview",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Devices Online\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Total Devices\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Active Talkgroups\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"device status table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Device status area shows online/offline badge wording when present",
+    "description": "Verifies the table’s status badge wording is displayed consistently (Online/Offline) when any status text is rendered.",
+    "category": "Dashboard Overview",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"device status table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Online\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Offline\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Devices Online\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Open Devices page and verify Device Management UI shell renders",
+    "description": "Verifies the Devices page loads and shows the device list section even when data is empty due to known backend limitations.",
+    "category": "Device Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /devices"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify page title contains \"Devices\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Devices\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Serial\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Name\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Site\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Attempt to enable a disabled device from the list (if any rows are present)",
+    "description": "Verifies the Enable action is available from the device list and can be clicked end-to-end when a disabled device row is present.",
+    "category": "Device Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /devices"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Serial\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the device list table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Enable\" on any visible device row that appears disabled"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Disable\" is visible in that same device row"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Enable\" is not visible in that same device row"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Attempt to disable an active device from the list (if any rows are present)",
+    "description": "Verifies the Disable action is available from the device list and can be clicked end-to-end when an active device row is present.",
+    "category": "Device Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /devices"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Serial\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the device list table"
+      },
+      {
+        "type": "action",
+        "description": "Click \"Disable\" on any visible device row that appears active"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Enable\" is visible in that same device row"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Disable\" is not visible in that same device row"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "No toggle controls appear when there are no device rows",
+    "description": "Verifies that when the device list is empty, there are no Enable/Disable controls visible on the page.",
+    "category": "Device Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /devices"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Serial\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Name\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Site\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Enable\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Disable\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Open Talkgroups page shows Talkgroups UI even when list is empty",
+    "description": "Verifies the Talkgroups page loads and basic create controls are visible.",
+    "category": "Talkgroup Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/talkgroups\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Talkgroups\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Talkgroup name\" input field is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Create\" button is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Create talkgroup with a valid name (happy path UI flow)",
+    "description": "Verifies a user can enter a talkgroup name and submit it using the Create button.",
+    "category": "Talkgroup Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "action",
+        "description": "Type \"Ops Team Alpha\" into the talkgroup name input field"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Ops Team Alpha\" is visible"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Ops Team Alpha\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Empty name is rejected when creating a talkgroup",
+    "description": "Verifies client-side validation prevents creating a talkgroup with an empty name.",
+    "category": "Talkgroup Management",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "action",
+        "description": "Click on the talkgroup name input field"
+      },
+      {
+        "type": "action",
+        "description": "Press \"Enter\" key"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"See empty input rejected (no empty name allowed)\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Whitespace-only name is rejected (edge validation)",
+    "description": "Verifies the UI does not allow a talkgroup name that is only spaces.",
+    "category": "Talkgroup Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "action",
+        "description": "Type \"     \" into the talkgroup name input field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Talkgroup name\" input field is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/talkgroups\""
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Create button does not navigate away from Talkgroups page",
+    "description": "Verifies clicking Create keeps the user on the Talkgroups page (no unexpected navigation).",
+    "category": "Talkgroup Management",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "action",
+        "description": "Type \"QA TG 001\" into the talkgroup name input field"
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Create\" button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/talkgroups\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Create\" button is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Refresh Talkgroups page still shows controls and stable layout",
+    "description": "Verifies reloading the Talkgroups page keeps the create input and button available.",
+    "category": "Talkgroup Management",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Talkgroup name\" input field is visible"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /talkgroups"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"Create\" button is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Talkgroups\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Open Users page and verify Users view renders (page shell and table area visible)",
+    "description": "Verifies the Users page loads and shows the user table area with expected column headers.",
+    "category": "User Listing",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /users"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/users\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Users\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"user table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Username\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Role\" is visible"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Users page does not show placeholder/mock user entries by default",
+    "description": "Verifies the table does not display any obvious placeholder users when data cannot be loaded.",
+    "category": "User Listing",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /users"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"user table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"admin\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"user\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"test\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Verify role label vocabulary is not displayed when there are no rows",
+    "description": "Verifies role labels are not rendered in the empty state (no stray badges/labels visible).",
+    "category": "User Listing",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /users"
+      },
+      {
+        "type": "action",
+        "description": "Wait for \"user table\" to be visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"user table\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Admin\" is not visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"User\" is not visible"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Navigate to Users from Dashboard via main navigation (if present)",
+    "description": "Verifies the admin can reach the Users listing from another page using in-app navigation.",
+    "category": "User Listing",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/dashboard\""
+      },
+      {
+        "type": "action",
+        "description": "Click on \"Users\" in the main navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify URL contains \"/users\""
+      },
+      {
+        "type": "assertion",
+        "description": "Verify text \"Users\" is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify element \"user table\" is visible"
+      }
+    ]
+  }
+]
