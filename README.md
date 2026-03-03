@@ -19,6 +19,16 @@ pnpm install      # corepack intercepts and uses pnpm@10.23.0 automatically
 
 No global `npm install -g pnpm` needed. If corepack isn't available, upgrade Node to 20+.
 
+### One-command local bootstrap (recommended)
+
+```sh
+pnpm setup:local
+```
+
+This command enables Corepack, activates pinned `pnpm@10.23.0`, installs workspace dependencies, and performs Android environment sanity checks.
+
+See [docs/LOCAL_DEV_BOOTSTRAP.md](docs/LOCAL_DEV_BOOTSTRAP.md) for details.
+
 ## Running the Android App
 
 ```sh
