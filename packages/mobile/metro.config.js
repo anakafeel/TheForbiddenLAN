@@ -6,10 +6,37 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
-// 1. Watch all files within the monorepo
-config.watchFolders = [workspaceRoot];
+// 1. Watch only the packages that need hot-reload support.
+//    DO NOT watch workspaceRoot — FallbackWatcher opens one fd per directory
+//    and a pnpm monorepo has ~600k dirs including node_modules, which exhausts
+//    the kernel's EMFILE limit even after ulimit adjustments.
+//    Module resolution is handled by nodeModulesPaths below (separate concern).
+config.watchFolders = [
+  path.resolve(workspaceRoot, "packages/comms"),
+];
 
-// 2. Add node_modules paths for Metro to search
+// Exclude ALL node_modules from file watching to prevent Linux EMFILE (too many open files).
+// Metro's FallbackWatcher opens an inotify watch per-directory; a pnpm monorepo
+// has ~600k files which exhausts the default kernel limit of 8192 watches.
+// Listed here: monorepo root, mobile package, and comms package node_modules.
+config.resolver.blockList = [
+  /.*\/node_modules\/.*/,
+];
+
+// EMFILE fix: tell FallbackWatcher (used when Watchman is absent) to skip these
+// directories entirely — it checks `ignore` BEFORE opening fs.watch() fds AND
+// before recursing into subdirectories.
+// NOTE: the initial file crawl that builds Metro's module-resolution map is a
+// separate code path and still runs, so module resolution is unaffected.
+config.watcher = {
+  ...(config.watcher ?? {}),
+  watcherOptions: {
+    ...(config.watcher?.watcherOptions ?? {}),
+    ignore: /node_modules|\.gradle|[/\\]android[/\\]|\.expo[/\\]|[/\\]dist[/\\]|[/\\]build[/\\]/,
+  },
+};
+
+// 2. Add node_modules paths for Metro to resolve from (searching is different from watching)
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),

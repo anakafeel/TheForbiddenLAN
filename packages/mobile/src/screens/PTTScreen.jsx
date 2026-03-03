@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-nativ
 import { ChannelContext } from '../context/ChannelContext';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { emitStartTalking, emitStopTalking } from '../utils/socket';
+import { CONFIG } from '../config';
 import theme from '../theme';
 
 const { colors, spacing, radius, typography } = theme;
@@ -35,14 +36,16 @@ export default function PTTScreen({ navigation }) {
     if (!current) return;
     
     if (isTransmitting) {
-      // Stop transmitting
+      // Stop transmitting: finish capture and send the chunk BEFORE clearing
+      // the PTT state. ForbiddenLANComms.sendAudioChunk() guards on isTransmitting —
+      // calling emitStopTalking first would set it to false and silently drop the audio.
       setIsTransmitting(false);
-      emitStopTalking('user123');
-      stopAudioStream();
+      await stopAudioStream();   // reads file → encrypts → sendAudioChunk() while still active
+      emitStopTalking(CONFIG.DEVICE_ID);  // clears isTransmitting + sends PTT_END
     } else {
       // Start transmitting
       setIsTransmitting(true);
-      emitStartTalking('user123');
+      emitStartTalking(CONFIG.DEVICE_ID);
       try {
         await startAudioStream();
       } catch (e) {
