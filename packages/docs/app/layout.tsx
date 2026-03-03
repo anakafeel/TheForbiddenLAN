@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react';
-import { RootProvider } from 'fumadocs-ui/provider';
-import './global.css';
+import type { ReactNode } from "react";
+import { RootProvider } from "fumadocs-ui/provider";
+import "./global.css";
 
 export const metadata = {
-  title: 'SkyTalk Documentation',
-  description: 'Documentation for TheForbiddenLAN Satellite PTT System',
+  title: "SkyTalk Documentation",
+  description: "Documentation for TheForbiddenLAN Satellite PTT System",
 };
 
 export default function Layout({ children }: { children: ReactNode }) {

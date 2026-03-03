@@ -1,43 +1,65 @@
 // Login screen — username/password → POST /auth/login → store JWT
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useStore } from '../store';
+import { connectComms } from '../utils/socket';
+import { CONFIG } from '../config';
 
-export function LoginScreen() {
+export function LoginScreen({ navigation }: any) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
   const setJwt = useStore(s => s.setJwt);
 
   const login = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
+      const res = await fetch(`${CONFIG.API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Login failed'); return; }
+      
       setJwt(data.jwt);
-      navigate('/ptt');
-    } catch {
-      setError('Cannot reach server');
+      await connectComms(data.jwt);
+      navigation.replace('Channels');
+    } catch (e: any) {
+      setError(`Cannot reach server: ${e.message}`);
     }
   };
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16 }}>
-      <h1 style={{ fontSize:32, fontWeight:'bold' }}>ForbiddenLAN</h1>
-      <input placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)}
-        style={{ padding:12, fontSize:16, width:280, borderRadius:8, border:'1px solid #ccc' }} />
-      <input placeholder="Password" type="password" value={password} onChange={e=>setPassword(e.target.value)}
-        style={{ padding:12, fontSize:16, width:280, borderRadius:8, border:'1px solid #ccc' }} />
-      {error && <p style={{ color:'red' }}>{error}</p>}
-      <button onClick={login}
-        style={{ padding:'14px 40px', fontSize:18, backgroundColor:'#0D6EFD', color:'white', border:'none', borderRadius:8, cursor:'pointer' }}>
-        Connect
-      </button>
-    </div>
+    <View style={styles.container}>
+      <Text style={styles.title}>ForbiddenLAN</Text>
+      <TextInput 
+        placeholder="Username" 
+        value={username} 
+        onChangeText={setUsername}
+        style={styles.input} 
+        autoCapitalize="none"
+      />
+      <TextInput 
+        placeholder="Password" 
+        secureTextEntry 
+        value={password} 
+        onChangeText={setPassword}
+        style={styles.input} 
+      />
+      {!!error && <Text style={styles.errorText}>{error}</Text>}
+      
+      <TouchableOpacity onPress={login} style={styles.button}>
+        <Text style={styles.buttonText}>Connect</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 20 },
+  input: { padding: 12, fontSize: 16, width: '100%', borderRadius: 8, borderWidth: 1, borderColor: '#ccc', marginBottom: 10 },
+  errorText: { color: 'red', marginBottom: 10 },
+  button: { paddingVertical: 14, paddingHorizontal: 40, backgroundColor: '#0D6EFD', borderRadius: 8, marginTop: 10 },
+  buttonText: { color: 'white', fontSize: 18, fontWeight: 'bold' }
+});

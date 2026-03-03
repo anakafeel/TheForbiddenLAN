@@ -1,8 +1,9 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
-import socket from '../utils/socket';
+import socket, { emitStartTalking, emitStopTalking } from '../utils/socket';
 import { CONFIG } from '../config';
+import { useStore } from '../store';
 import theme from '../theme';
 
 const { colors, spacing, radius, shadows, typography } = theme;
@@ -88,7 +89,8 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
 
 export default function ChannelsScreen({ navigation }) {
   const { setCurrent, current } = useContext(ChannelContext);
-  const [channels, setChannels] = useState(CONFIG.MOCK_MODE ? MOCK_CHANNELS : []);
+  // const [channels, setChannels] = useState(CONFIG.MOCK_MODE ? MOCK_CHANNELS : []);
+  const [channels, setChannels] = useState(MOCK_CHANNELS); // Initial state before fetch
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isTransmitting, setIsTransmitting] = useState(false);
@@ -146,17 +148,23 @@ export default function ChannelsScreen({ navigation }) {
 
   const selectChannel = channel => {
     if (current?.id === channel.id) {
-      setCurrent(null); // Deselect if already selected
+      setCurrent(null);
     } else {
       setCurrent(channel);
+      navigation.navigate('PTT');
     }
   };
 
   const handlePTTToggle = useCallback(() => {
     if (!current) return;
-    setIsTransmitting(prev => !prev);
-    // TODO: Start/stop audio capture and transmission
-  }, [current]);
+    if (isTransmitting) {
+      setIsTransmitting(false);
+      emitStopTalking(CONFIG.DEVICE_ID);
+    } else {
+      setIsTransmitting(true);
+      emitStartTalking(CONFIG.DEVICE_ID);
+    }
+  }, [current, isTransmitting]);
 
   const filteredChannels = channels.filter(ch => {
     if (searchQuery && !ch.name.toLowerCase().includes(searchQuery.toLowerCase())) {

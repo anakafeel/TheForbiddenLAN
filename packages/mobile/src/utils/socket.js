@@ -16,7 +16,7 @@ import { CONFIG } from '../config';
 
 // MVP Testing: auto-connect on import using the fake JWT from config.
 // In production, this should be removed and connectComms(jwt) called explicitly after auth.
-initComms(CONFIG.MOCK_JWT).catch(err => console.warn('[comms] init error:', err));
+// initComms(CONFIG.MOCK_JWT).catch(err => console.warn('[comms] init error:', err));
 
 /**
  * Connect to Shri's real relay with a JWT obtained from his /auth/login endpoint.
@@ -51,7 +51,8 @@ function _simulatePresence(callback) {
 
 export function subscribeToUserActivity(callback) {
   // Simulated presence keeps the UI lively while no real backend is connected
-  _simulatePresence(callback);
+  // _simulatePresence(callback);
+  
   // Real PRESENCE messages from the relay also surface here
   comms.onMessage((msg) => {
     if (msg.type === 'PRESENCE' && Array.isArray(msg.online)) {

@@ -27,14 +27,30 @@ export class RelaySocket {
 
     const wsUrl = this.url.includes('?') ? `${this.url}&token=${this.jwt}` : `${this.url}?token=${this.jwt}`;
     this.ws = new WebSocket(wsUrl);
-    this.ws.on('message', (data) => {
+    // this.ws.on('message', (data) => {
+    //   try {
+    //     const msg = JSON.parse(data.toString()) as RelayMessage;
+    //     this.emit(msg.type, msg);
+    //     this.emit('*', msg);
+    //   } catch { /* ignore malformed messages */ }
+    // });
+    
+    // React Native WebSocket uses addEventListener
+    this.ws.addEventListener('message', (event) => {
       try {
-        const msg = JSON.parse(data.toString()) as RelayMessage;
+        const msg = JSON.parse(event.data) as RelayMessage;
+        
+        // Log audio packets for testing
+        if (msg.type === 'PTT_AUDIO') {
+          console.log(`[RelaySocket] RX PTT_AUDIO from ${msg.talkgroup} | seq: ${msg.seq} | chunk: ${msg.chunk} | bytes: ${msg.data?.length || 0}`);
+        }
+        
         this.emit(msg.type, msg);
         this.emit('*', msg);
       } catch { /* ignore malformed messages */ }
     });
-    this.ws.on('open', () => {
+    // this.ws.on('open', () => {
+    this.ws.addEventListener('open', () => {
       this.reconnectAttempts = 0;
       this.emit('connect', { type: 'PRESENCE' } as unknown as RelayMessage); // Using a dummy cast to satisfy the internal emit signature for the 'connect' string
       
@@ -45,13 +61,18 @@ export class RelaySocket {
       }, 60000); // Resync every 60s
     });
 
-    this.ws.on('close', () => {
+    // this.ws.on('close', () => {
+    this.ws.addEventListener('close', () => {
       this.handleReconnect();
     });
 
-    this.ws.on('error', (err) => {
-      console.warn('[RelaySocket] error', err.message);
-      this.handleReconnect();
+    // this.ws.on('error', (err) => {
+    //   console.warn('[RelaySocket] error', err.message);
+    //   this.handleReconnect();
+    // });
+    this.ws.addEventListener('error', (event) => {
+      console.warn('[RelaySocket] error', event);
+      // close event fires after error, so reconnect is handled there
     });
   }
 
@@ -78,6 +99,9 @@ export class RelaySocket {
 
   send(msg: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      if ((msg as any).type === 'PTT_AUDIO') {
+        console.log(`[RelaySocket] TX PTT_AUDIO to ${(msg as any).talkgroup} | seq: ${(msg as any).seq} | chunk: ${(msg as any).chunk} | bytes: ${(msg as any).data?.length || 0}`);
+      }
       this.ws.send(JSON.stringify(msg));
     }
   }
