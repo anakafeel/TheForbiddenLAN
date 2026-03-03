@@ -64,6 +64,7 @@ export async function registerHub(app: FastifyInstance) {
 
     socketUser.set(socket, { userId, deviceId });
     socketRooms.set(socket, new Set());
+    console.log('[hub] client connected, userId:', userId, 'readyState:', (socket as any).readyState, 'typeof socket.on:', typeof (socket as any).on);
 
     socket.on('message', async (raw) => {
       console.log('[hub] raw message received:', raw.toString());
