@@ -19,6 +19,14 @@ pnpm install      # corepack intercepts and uses pnpm@10.23.0 automatically
 
 No global `npm install -g pnpm` needed. If corepack isn't available, upgrade Node to 20+.
 
+## Running the Android App
+
+```sh
+./run-android.sh  # starts emulator and builds APK
+```
+
+See [docs/MOBILE_SETUP_TROUBLESHOOTING.md](docs/MOBILE_SETUP_TROUBLESHOOTING.md) for detailed setup instructions, common issues, and debugging tips.
+
 ## Commands
 ```sh
 pnpm dev:server        # start relay server

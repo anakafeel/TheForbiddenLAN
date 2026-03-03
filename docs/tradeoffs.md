@@ -79,3 +79,38 @@ The RN CLI web mode is noticeably slower to start and harder to configure inside
 ## AES-GCM Overhead vs 22kbps Satellite Budget
 **Problem:** Total bandwidth budget calculation.
 **Decision:** 8 kbps audio + 12B app header + 16B GCM tag + ~46B WS/TCP overhead @ 60ms frames = ~17.9 kbps on the wire. This consumes ~82% of the 22 kbps uplink budget. Signaling traffic (PTT_START, GPS_UPDATE, keepalives) must be kept minimal. Codec2 fallback at 2400 bps reduces audio contribution to ~5.4 kbps on the wire, giving substantial headroom.
+
+## pnpm Workspaces + Metro Bundler Symlink Resolution
+**Problem:** Metro bundler's default configuration doesn't follow symlinks, causing "Unable to resolve `expo-modules-core`" errors when using pnpm workspaces. pnpm's virtual store (`.pnpm/` directory) uses symlinks extensively to deduplicate packages. When Expo tries to import `expo-modules-core`, Metro can't follow the symlink chain through the virtual store.
+**Decision:** Enable Metro's experimental `unstable_enableSymlinks` flag and add workspace `node_modules/` to `watchFolders`. Implement a smart ignore function that only watches Expo source files in `.pnpm/expo-*/node_modules/*/src/` to avoid opening 600k+ file handles for the entire node_modules tree.
+**Tradeoff:**  
+- **Memory overhead:** Metro now tracks ~200MB more file paths in memory
+- **Startup time:** Metro cold start increases by ~2-3 seconds
+- **inotify limits (Linux):** Requires increasing `fs.inotify.max_user_watches` from 8192 to 524288 to avoid "EMFILE: too many open files" errors
+- **Benefits:** Keeps pnpm's ~3GB disk space savings and 2-3x faster install times compared to npm/yarn. Strict dependency isolation catches phantom dependencies early.
+
+Alternative would be switching to npm/yarn with flat `node_modules`, which works with Metro out of the box but loses all pnpm benefits. For a monorepo with 3+ packages and shared dependencies, pnpm's advantages outweigh the Metro configuration complexity.
+
+See [MOBILE_SETUP_TROUBLESHOOTING.md](./MOBILE_SETUP_TROUBLESHOOTING.md#issue-1-metro-bundler-cant-resolve-expo-modules-core) for implementation details.
+
+## Web Crypto API Polyfill: Pass-Through for MVP vs Real AES-GCM
+**Problem:** React Native's Hermes JavaScript engine doesn't implement the Web Crypto API (`crypto.subtle`). The `@forbiddenlan/comms` package uses `crypto.subtle.importKey()`, `encrypt()`, and `decrypt()` for AES-GCM audio encryption. Without this API, the app crashes immediately on initialization with "Property 'crypto' doesn't exist".
+**Decision:** For MVP/hackathon testing, implement a **pass-through crypto polyfill** that mimics the Web Crypto API interface but performs no actual encryption. The polyfill prepends the IV to the data buffer (for API compatibility) but doesn't encrypt/decrypt the payload.
+**Tradeoff:**  
+- ⚠️ **SECURITY CRITICAL:** Audio is transmitted in plaintext. This is acceptable ONLY for:
+  - Local testing with `MockRelaySocket` (no network transmission)
+  - Hackathon demo environment with trusted network
+  - **NOT acceptable for production deployment**
+- **Time savings:** Implementing real AES-GCM (using `@noble/ciphers` or `react-native-quick-crypto`) would require 1-2 days for integration and testing
+- **Testing:** Audio pipeline, PTT signaling, floor control, and UI can all be tested and demoed without encryption
+- **Architecture:** Since encryption is end-to-end (relay server just forwards encrypted blobs), the pass-through approach unblocks all other development work
+
+**Production Path Forward:**  
+Replace `packages/mobile/src/shims/setup-crypto.js` with a real AES-GCM implementation:
+- Option 1: `@noble/ciphers` (pure JS, 8KB gzipped, audited)
+- Option 2: `react-native-quick-crypto` (native bindings, faster but requires custom native build)
+- Option 3: `crypto-browserify` + `@aws-crypto/aes-gcm` (browser-compatible fallback)
+
+Test with actual DLS-140 satellite hardware to verify performance doesn't degrade the 60ms chunk pipeline. Add key rotation testing once encryption is live.
+
+See [MOBILE_SETUP_TROUBLESHOOTING.md](./MOBILE_SETUP_TROUBLESHOOTING.md#issue-2-crypto-doesnt-exist--cryptosubtle-is-undefined) for polyfill implementation details.
