@@ -66,6 +66,7 @@ export async function registerHub(app: FastifyInstance) {
     socketRooms.set(socket, new Set());
 
     socket.on('message', async (raw) => {
+      console.log('[hub] raw message received:', raw.toString());
       let msg: any;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       const rawStr = raw.toString();
