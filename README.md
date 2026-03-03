@@ -27,6 +27,15 @@ No global `npm install -g pnpm` needed. If corepack isn't available, upgrade Nod
 
 See [docs/MOBILE_SETUP_TROUBLESHOOTING.md](docs/MOBILE_SETUP_TROUBLESHOOTING.md) for detailed setup instructions, common issues, and debugging tips.
 
+## UI Development (Mobile App)
+
+**For Maisam & Annie:** See [docs/UI_DEVELOPMENT_GUIDE.md](docs/UI_DEVELOPMENT_GUIDE.md) for:
+- Where to put your UI code (screens, components, styling)
+- Page flow and navigation structure
+- Theme system and styling guide
+- React Native basics and common UI tasks
+- What NOT to touch (backend integration files)
+
 ## Commands
 ```sh
 pnpm dev:server        # start relay server
