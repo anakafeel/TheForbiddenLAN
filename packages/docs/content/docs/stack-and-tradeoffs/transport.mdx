@@ -1,0 +1,71 @@
+---
+title: Transport Layer
+description: Why WebSocket for v1, why UDP is the right answer for audio in v2, and why MQTT, WebRTC, and HTTP polling were all ruled out for satellite PTT.
+---
+
+# Transport Layer
+
+## Decision
+
+**WebSocket (TCP) for all traffic in v1.** Audio chunks and control messages (PTT_START, PRESENCE, TEXT_MSG) travel on the same persistent WebSocket connection. Phase 2 roadmap moves audio to UDP/RTP while keeping control on WebSocket.
+
+## Constraints That Drove This
+
+- 500–1500 ms one-way satellite latency makes anything requiring multiple handshakes prohibitively expensive.
+- 22 kbps uplink is tight. Protocol overhead matters — every header byte counts.
+- One week to implement. The transport must ship, not be perfect.
+- The server performs fan-out relay only — no audio processing. The transport must be server-agnostic to audio content.
+- TCP head-of-line blocking at 1500 ms RTT causes multi-second audio freezes on packet loss. This is a known problem, not an oversight.
+
+## Alternatives Considered
+
+| Option | Why We Didn't Choose It |
+|--------|------------------------|
+| **MQTT** | Designed for low-bandwidth IoT telemetry, not real-time audio. Message ordering and QoS overhead adds latency. Broker-based architecture adds another service to deploy. |
+| **WebRTC** | Requires ICE/STUN/TURN for NAT traversal. The DLS-140 is behind Iridium's carrier-grade NAT — STUN fails, TURN is required. TURN adds relay overhead on top of our relay. WebRTC peer negotiation requires multiple RTTs to establish — at 1500 ms each, setup takes 3–10 seconds. SDP signaling is complex for a relay architecture. |
+| **HTTP polling** | Per-request overhead at 500–1500 ms latency means polling at useful rate (~5 Hz) would consume the entire uplink budget for control traffic before any audio. |
+| **HTTP/2 server push** | One-directional from server to client. Clients cannot push audio to the server over server push — it's a downlink-only mechanism. |
+| **Raw TCP socket** | WebSocket is TCP with a standardized framing layer and HTTP upgrade handshake. No meaningful benefit to dropping the WebSocket layer, and it breaks browser compatibility. |
+
+## Why WebSocket for v1
+
+**Single persistent connection** — no per-message handshake overhead. At 500–1500 ms latency, a new connection per audio chunk would add seconds of setup per transmission.
+
+**Bidirectional** — client pushes audio, server fans out audio, control messages flow both ways on the same socket.
+
+**Ships in one week** — every Node.js framework has first-class WebSocket support. `@fastify/websocket` adds WebSocket to our existing Fastify server with no additional infrastructure.
+
+**Sufficient for demo** — TCP reliability means we don't need application-layer retransmission logic for the hackathon scope.
+
+## Why WebSocket Is Wrong for Audio Long-Term
+
+TCP provides guaranteed ordered delivery. It achieves this by retransmitting lost packets and stalling the receiver until they arrive (head-of-line blocking).
+
+At 1500 ms satellite RTT:
+- One lost audio packet → server retransmits
+- Client waits ~1500 ms for retransmission
+- Audio buffer empties → ~3 seconds of silence
+- This happens on every satellite handoff dropout (~every 8 minutes)
+
+A dropped voice frame in PTT causes a brief click. A 3-second stall destroys intelligibility. The tradeoff is wrong.
+
+## Phase 2: UDP/RTP for Audio
+
+The correct solution is well-established in professional PTT (TETRA, ISSI, P25):
+
+| Plane | v1 | v2 |
+|-------|----|----|
+| Control (PTT_START, PRESENCE, TEXT) | WebSocket (TCP) | WebSocket (TCP) |
+| Audio chunks (PTT_AUDIO) | WebSocket (TCP) | UDP/RTP |
+
+UDP drops frames without stalling. A dropped voice frame causes a brief click. The jitter buffer (50–200 ms) on the receiver absorbs burst packet timing. The listening experience on a lossy satellite link is fundamentally better.
+
+**Why not v1?** UDP requires a separate socket, a custom RTP framing implementation, and a jitter buffer — a full additional subsystem. The server relay logic needs to handle both protocols. At one week, we ship WebSocket and document the upgrade path.
+
+## Tradeoffs We Accepted
+
+**TCP head-of-line blocking.** Packet loss on the satellite link causes audio freezes. We have a jitter buffer spec (50–200 ms) but have not implemented it. This is the most significant v1 limitation.
+
+**No forward error correction.** RTP typically carries FEC for voice. We don't implement FEC in v1. Phase 2 adds this alongside UDP.
+
+**Mixed traffic on one socket.** Control messages (small, infrequent, need reliability) and audio (large, frequent, can tolerate loss) share the same WebSocket connection. They have different optimal transport characteristics. v2 separates them.

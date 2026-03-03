@@ -1,0 +1,9 @@
+{
+  "title": "Architecture",
+  "pages": [
+    "index",
+    "satellite-constraints",
+    "floor-control",
+    "key-management"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "authentication",
+    "talkgroups",
+    "devices",
+    "websocket-protocol"
+  ]
+}

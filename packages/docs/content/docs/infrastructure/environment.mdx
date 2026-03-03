@@ -1,0 +1,105 @@
+---
+title: Environment & Config
+description: All environment variables across all packages — what they control, safe defaults, and which are required before deploying.
+---
+
+# Environment & Config
+
+## Server (`packages/server/.env`)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `POSTGRES_USER` | Yes | — | Postgres username |
+| `POSTGRES_PASSWORD` | Yes | — | Postgres password |
+| `POSTGRES_DB` | Yes | — | Postgres database name |
+| `JWT_SECRET` | Yes | `"dev-secret"` | Secret for signing JWTs. Use a long random string in production. |
+| `DATABASE_URL` | Yes | — | Full Prisma connection string: `postgresql://<user>:<pass>@db:5432/<db>` |
+| `PORT` | No | `3000` | Port the Fastify server listens on |
+
+The `DATABASE_URL` host must be `db` (the Docker Compose service name) when running in Docker. Use `localhost` for running the server outside Docker.
+
+### Example `.env`
+
+```bash
+POSTGRES_USER=skytalk
+POSTGRES_PASSWORD=skytalkpass
+POSTGRES_DB=skytalk
+JWT_SECRET=dev-jwt-secret-change-in-prod
+DATABASE_URL=postgresql://skytalk:skytalkpass@db:5432/skytalk
+```
+
+<Callout type="warn">
+The `.env` file is not in source control. It must be created manually on each machine. Never commit real credentials.
+</Callout>
+
+---
+
+## Mobile App (`packages/mobile/.env.local`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EXPO_PUBLIC_MOCK_MODE` | `true` | `true` = MockRelaySocket loopback. `false` = connect to real server. |
+| `EXPO_PUBLIC_API_URL` | `http://localhost:3000` | Base URL for REST API calls |
+| `EXPO_PUBLIC_WS_URL` | `ws://localhost:9999` | WebSocket relay endpoint |
+| `EXPO_PUBLIC_DLS140_URL` | `http://192.168.111.1:3000` | DLS-140 local REST API |
+| `EXPO_PUBLIC_TALKGROUP` | `alpha` | Default talkgroup ID on connect |
+| `EXPO_PUBLIC_DEVICE_ID` | random per launch | Device UUID for floor control. Set explicitly for consistent arbitration. |
+
+All variables use the `EXPO_PUBLIC_` prefix — required for Expo to expose them to the JavaScript bundle.
+
+### For real server connection
+
+```bash
+EXPO_PUBLIC_MOCK_MODE=false
+EXPO_PUBLIC_API_URL=http://134.122.32.45:3000
+EXPO_PUBLIC_WS_URL=ws://134.122.32.45:3000/ws
+EXPO_PUBLIC_DLS140_URL=http://192.168.111.1:3000
+EXPO_PUBLIC_DEVICE_ID=<stable-device-uuid>
+```
+
+---
+
+## JWT Shape
+
+All protected routes validate a JWT in the `Authorization: Bearer <token>` header.
+
+```json
+{
+  "sub": "<userId>",
+  "username": "<username>",
+  "role": "admin | user",
+  "iat": 1234567890
+}
+```
+
+`sub` is the user's UUID from the `User` table. `role` determines access to admin endpoints. JWTs are currently issued without `exp` (no expiry) during development — add `expiresIn` to the `app.jwt.sign()` call in `src/routes/auth.ts` before production deployment.
+
+---
+
+## WebSocket Connection
+
+```
+ws://134.122.32.45:3000/ws?token=<jwt>
+```
+
+The JWT is passed as a query parameter on the initial HTTP upgrade request. The server verifies it before accepting the WebSocket connection. Invalid or missing tokens result in a `1008 Policy Violation` close code.
+
+---
+
+## Docker Compose Variable Interpolation
+
+`docker-compose.yml` reads variables from `.env` via Docker Compose's built-in interpolation. The server container receives `DATABASE_URL`, `JWT_SECRET`, and `PORT` as process environment variables. Postgres receives `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`.
+
+```yaml
+# docker-compose.yml (simplified)
+services:
+  db:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+  server:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+```

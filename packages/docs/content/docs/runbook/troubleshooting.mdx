@@ -1,0 +1,263 @@
+---
+title: Troubleshooting
+description: Common failure modes and fixes for the SkyTalk server, WebSocket hub, mobile app, and infrastructure.
+---
+
+## Server
+
+<Accordions type="single" collapsible>
+
+<Accordion title="`curl /ping` returns connection refused">
+
+The server container is not running or did not start cleanly.
+
+```bash
+cd packages/server
+docker compose ps
+```
+
+If `server` shows `Exit 1` or is not listed, check the logs:
+
+```bash
+docker compose logs server --tail 50
+```
+
+Common causes:
+
+| Symptom in logs | Cause | Fix |
+|----------------|-------|-----|
+| `Can't reach database server` | Postgres not ready yet | Wait a few seconds; server retries. If persistent: `docker compose ps db` |
+| `Environment variable not found: DATABASE_URL` | `.env` missing or incomplete | Create/fix `packages/server/.env` |
+| `Cannot find module` | Build failed or `node_modules` missing | `docker compose build server --no-cache` |
+| `prisma db push` failed | Schema error or DB connection issue | Check logs for Prisma error; verify `DATABASE_URL` |
+
+</Accordion>
+
+<Accordion title="`prisma db push` fails on startup (P1001)">
+
+```
+Error: P1001: Can't reach database server
+```
+
+The `db` container wasn't ready when the server container started. The `entrypoint.sh` adds a sleep, but on slow systems this may not be enough.
+
+Fix: restart the server container a few seconds after Postgres comes up:
+
+```bash
+docker compose restart server
+```
+
+</Accordion>
+
+<Accordion title="JWT returns 401 on a valid token">
+
+The `JWT_SECRET` changed. Tokens signed with the old secret are invalid.
+
+Fix: log in again to get a new JWT. If you changed `JWT_SECRET` in `.env`, restart the server container.
+
+</Accordion>
+
+<Accordion title="`POST /auth/register` returns 409">
+
+Username already taken. Use a different username, or wipe and re-seed for a dev environment:
+
+```bash
+docker compose down -v
+docker compose up -d
+docker compose exec server npx tsx prisma/seed.ts
+```
+
+</Accordion>
+
+</Accordions>
+
+---
+
+## WebSocket
+
+<Accordions type="single" collapsible>
+
+<Accordion title="`wscat` connects but `JOIN_TALKGROUP` gets no response">
+
+1. Verify the JWT is valid: `curl -H "Authorization: Bearer $JWT" http://localhost:3000/talkgroups`
+2. Check the talkgroup UUID is correct — copy it from the `/talkgroups` response.
+3. Check server logs: `docker compose logs server -f`
+
+</Accordion>
+
+<Accordion title="`wscat` closes immediately with code 1008">
+
+JWT is missing or invalid. The 1008 close (Policy Violation) is sent before the WebSocket handshake completes.
+
+```bash
+# Make sure $JWT is set
+echo $JWT
+
+# Re-login if empty
+JWT=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | \
+  grep -o '"jwt":"[^"]*"' | cut -d'"' -f4)
+```
+
+</Accordion>
+
+<Accordion title="PTT audio is not received by other clients">
+
+1. Confirm both clients sent `JOIN_TALKGROUP` for the **same** talkgroup UUID.
+2. Confirm `PTT_START` was sent before `PTT_AUDIO` — the server maps `sessionId` to a talkgroup at `PTT_START` time.
+3. Check `sessionId` in `PTT_AUDIO` matches the value used in `PTT_START`.
+4. Self-echo prevention: a sender does not receive its own audio. Use two separate WebSocket connections to test fan-out.
+
+</Accordion>
+
+<Accordion title="PRESENCE not received after JOIN_TALKGROUP">
+
+Check server logs. If the talkgroup UUID doesn't exist in the database, the server still adds the socket to an in-memory room and sends PRESENCE — but the talkgroup won't appear in REST API responses. Create the talkgroup via `POST /talkgroups` first.
+
+</Accordion>
+
+</Accordions>
+
+---
+
+## Mobile App
+
+<Accordions type="single" collapsible>
+
+<Accordion title="App can't connect to local server">
+
+The phone and laptop must be on the same LAN. `localhost` on the phone refers to the phone itself — use your machine's LAN IP:
+
+```bash
+# Find your LAN IP (macOS / Linux)
+ifconfig | grep "inet " | grep -v 127.0.0.1
+```
+
+Set in `packages/mobile/.env.local`:
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.x:3000
+EXPO_PUBLIC_WS_URL=ws://192.168.1.x:3000/ws
+```
+
+</Accordion>
+
+<Accordion title="Expo QR code doesn't open on device">
+
+- Confirm phone and laptop are on the same WiFi network.
+- Try manually entering the Expo URL in Expo Go.
+- If behind a VPN, disable it — VPNs often block LAN discovery.
+
+</Accordion>
+
+<Accordion title="`EXPO_PUBLIC_*` variable changes not taking effect">
+
+Expo reads `.env.local` only at start time. Restart the dev server with the cache cleared:
+
+```bash
+cd packages/mobile
+pnpm start --clear
+```
+
+</Accordion>
+
+<Accordion title="Floor arbitration fires incorrectly (wrong user gets the floor)">
+
+- Check that `EXPO_PUBLIC_DEVICE_ID` is set to a stable UUID on each device — if it's random per launch, the lexicographic tiebreaker is unpredictable.
+- Check that GPS is locked. Without a GPS fix, `PTT_START.timestamp` falls back to `Date.now()`, which may differ from satellite-updated GPS time.
+
+</Accordion>
+
+</Accordions>
+
+---
+
+## Docker
+
+<Accordions type="single" collapsible>
+
+<Accordion title="Port 3000 already in use">
+
+```bash
+# Find the process
+lsof -i :3000
+
+# Kill it, or change PORT in .env and ports in docker-compose.yml
+```
+
+</Accordion>
+
+<Accordion title="Volume mounts not working (permission denied)">
+
+Docker may be the snap variant. Remove it and install real Docker:
+
+```bash
+snap remove docker
+curl -fsSL https://get.docker.com | sh
+```
+
+</Accordion>
+
+<Accordion title="Container exits immediately with no logs">
+
+Add `--no-cache` to rule out stale layer issues:
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+</Accordion>
+
+</Accordions>
+
+---
+
+## Database
+
+<Accordions type="single" collapsible>
+
+<Accordion title="REST API returns empty but seed ran correctly">
+
+The REST API queries by the authenticated user's ID. If memberships weren't created in seed, `GET /talkgroups` returns empty.
+
+Re-run the seed:
+
+```bash
+docker compose exec server npx tsx prisma/seed.ts
+```
+
+</Accordion>
+
+<Accordion title="Prisma client out of sync with schema">
+
+After any `prisma/schema.prisma` change, regenerate the TypeScript client:
+
+```bash
+cd packages/server
+npx prisma generate
+```
+
+If running in Docker, rebuild the container:
+
+```bash
+docker compose build server
+docker compose up -d server
+```
+
+</Accordion>
+
+</Accordions>
+
+---
+
+## Logs Reference
+
+| What to check | Command |
+|---------------|---------|
+| Server logs (live) | `docker compose logs server -f` |
+| Server last 50 lines | `docker compose logs server --tail 50` |
+| Postgres logs | `docker compose logs db --tail 50` |
+| All services | `docker compose logs -f` |
+| Container status | `docker compose ps` |

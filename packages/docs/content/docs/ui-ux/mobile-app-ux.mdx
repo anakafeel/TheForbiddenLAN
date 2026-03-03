@@ -1,0 +1,163 @@
+---
+title: Mobile App UX
+description: PTT button design, floor control UX, talkgroup switching, status indicators, and accessibility details for the SkyTalk React Native mobile app.
+---
+
+# Mobile App UX
+
+The mobile app (`packages/mobile`) is the primary client for aircrew. It targets iOS and Android via React Native + Expo.
+
+---
+
+## Primary Screen Layout
+
+```
+┌─────────────────────────────┐
+│  [●] Ground Ops        [GPS]│  ← talkgroup name + GPS lock indicator
+│  3 online                   │  ← member count
+├─────────────────────────────┤
+│                             │
+│   ┌─── ALICE ───┐           │  ← floor state (who is transmitting)
+│   │  TRANSMIT   │           │
+│   └─────────────┘           │
+│                             │
+│                             │
+│       ╔═══════════╗         │
+│       ║           ║         │
+│       ║    PTT    ║         │  ← large centred PTT button
+│       ║           ║         │
+│       ╚═══════════╝         │
+│                             │
+│  [≡ Text]    [⚙ Settings]   │  ← secondary nav, bottom
+└─────────────────────────────┘
+```
+
+---
+
+## PTT Button
+
+### Size and Placement
+
+The PTT button meets and exceeds Apple HIG's minimum interactive target size (44×44 pt). The current implementation uses a diameter of **120 pt** centred on screen.
+
+This is intentional:
+- Gloved hands can hit a 120 pt circle reliably.
+- The button occupies the natural thumb zone when the phone is held one-handed.
+- It is impossible to miss on a glance.
+
+### Interaction Model
+
+| Event | Action |
+|-------|--------|
+| `onPressIn` | Begin PTT session — sends `PTT_START` over WebSocket, acquires floor locally, starts Opus encode pipeline |
+| `onPressOut` | End PTT session — sends `PTT_END`, releases floor, stops encode pipeline |
+| Long press (>10 s) | Same as normal press — no timeout cutoff in v1 |
+
+The app does **not** use `onPress` (tap gesture). Transmission starts on touch-down, not touch-up, matching physical radio handset behaviour.
+
+### Floor State Visual Feedback
+
+| State | Button Colour | Status Text |
+|-------|--------------|-------------|
+| Channel free | Grey | "" |
+| You have the floor | Green | "TRANSMITTING" |
+| Someone else has the floor | Red | "\<username\> TRANSMITTING" |
+| Floor collision (you lost) | Orange (brief) | "Channel busy" |
+
+Colour is not the only indicator — the status text always describes state in words, satisfying colour-blind accessibility requirements.
+
+### Haptic Feedback
+
+- **Floor acquired**: short impact haptic on `onPressIn` confirmation.
+- **Floor lost (collision)**: distinct double-tap haptic so user knows without looking.
+
+---
+
+## Floor Control UX
+
+The [floor control algorithm](/docs/architecture/floor-control) runs client-side. From the UX perspective:
+
+1. User presses PTT (`onPressIn`).
+2. App immediately shows "TRANSMITTING" — no waiting for server.
+3. App sends `PTT_START` to server, which fans it out.
+4. If a competing `PTT_START` arrives within 50 ms (collision), the app runs arbitration:
+   - If the local device's GPS timestamp is lower → user keeps the floor, no UI change.
+   - If the remote device's GPS timestamp is lower → user loses the floor:
+     - Button returns to grey.
+     - Status shows "Channel busy — \<other user\>".
+     - Haptic double-tap fires.
+     - Audio encode pipeline stops.
+
+The goal: the user is never left uncertain. They have the floor or they don't, and the UI reflects this within one animation frame.
+
+---
+
+## Talkgroup Switching
+
+In v1, the app connects to a single talkgroup at startup (configured via `EXPO_PUBLIC_TALKGROUP` env var or set at login). Multi-talkgroup switching is a v2 feature.
+
+The talkgroup name is shown at the top of the primary screen at all times. If the WebSocket connection drops and reconnects, the app automatically re-issues `JOIN_TALKGROUP` for the current talkgroup.
+
+---
+
+## Text Messages
+
+The text message view is one level below the primary screen, accessible via the `[≡ Text]` button. It shows a scrollable message history for the current talkgroup and a text input field.
+
+Messages are fan-out only — there is no persistence in v1. Messages sent before you joined are not replayed.
+
+A badge count on the `[≡ Text]` button indicates unread messages received while on the primary screen.
+
+---
+
+## Status Indicators
+
+Two peripheral indicators sit in the top corners of the primary screen.
+
+### Connection Status (top-left)
+
+| Indicator | Meaning |
+|-----------|---------|
+| Green dot `●` | WebSocket connected, talkgroup joined |
+| Yellow dot `●` | Reconnecting |
+| Red dot `●` | Disconnected |
+
+### GPS Lock (top-right)
+
+| Indicator | Meaning |
+|-----------|---------|
+| `[GPS]` (solid) | Valid GPS fix — used for floor arbitration timestamp |
+| `[GPS]` (faded) | No GPS fix — floor arbitration falls back to `Date.now()` |
+
+The GPS indicator matters for floor control: a stale or absent GPS fix means the floor arbitration timestamp may be slightly less reliable. The user should be aware if GPS is not locked.
+
+---
+
+## Accessibility
+
+### Touch Target Sizes
+
+All interactive elements meet Apple HIG's 44×44 pt minimum. The PTT button (120 pt diameter) significantly exceeds this.
+
+### VoiceOver
+
+Primary screen elements are labelled:
+- PTT button: "Push to talk. Double-tap and hold to transmit."
+- Floor status: reads aloud when status changes (e.g. "Alice transmitting").
+- Connection indicator: "Connected" / "Disconnected".
+
+### Dynamic Type
+
+Text elements use system font sizes that scale with the user's iOS Dynamic Type setting. The talkgroup name and floor status are set to `title2` and `headline` styles respectively, which scale well up to accessibility sizes.
+
+### Colour Contrast
+
+All text-on-background combinations meet WCAG AA (4.5:1 contrast ratio) in both light and dark mode.
+
+---
+
+## Mock Mode
+
+During development, the app can run without a server using `EXPO_PUBLIC_MOCK_MODE=true`. In mock mode, a `MockRelaySocket` loopback replaces the real WebSocket — PTT audio is echoed back to the sender, simulating a one-person talkgroup. This lets the UI team develop without a running server.
+
+See [Environment & Config →](/docs/infrastructure/environment) for the full variable list.

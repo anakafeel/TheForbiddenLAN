@@ -1,19 +1,73 @@
 ---
-title: Welcome to SkyTalk Docs
-description: Documentation for TheForbiddenLAN Satellite PTT System
+title: SkyTalk
+description: Satellite push-to-talk communication for aircrew in remote areas. Built for the SKYTRAC 2026 Hackathon by team QWERTY (Carleton University).
 ---
 
-Welcome to the SkyTalk documentation site. This is a comprehensive guide covering architecture, setup, development, and troubleshooting for the Satellite PTT system.
+SkyTalk is a push-to-talk satellite communication system for aircrew operating in remote areas. It must feel like a walkie-talkie while running over **Iridium Certus** — a 22 kbps uplink, 500–1500 ms latency, expensive-per-byte satellite link.
 
-## Quick Navigation
+Every decision documented here exists to answer one question: **how do you make that feel like a walkie-talkie given those constraints?**
 
-- **Setup & Infrastructure** — Local development bootstrap, mobile app setup
-- **Development Guides** — UI development, backend integration
-- **Architecture** — System design, tradeoffs, API contracts
-- **Troubleshooting** — Common issues and solutions
+---
 
-## Getting Started
+## The Constraint That Drives Everything
 
-Start with the [Local Dev Bootstrap](./infra/local-dev-bootstrap) to set up your development environment.
+The SKYTRAC DLS-140 satellite router on each aircraft is outbound-only. The Iridium network uses carrier-grade NAT — no inbound connections are possible. This makes direct aircraft-to-aircraft communication physically impossible. Every phone connects outbound to a relay server on DigitalOcean, and the server fans audio out.
 
-For mobile app development, see [UI Development Guide](./guides/ui-development-guide).
+This is not a design choice. It is a hardware constraint we designed around.
+
+---
+
+## What This Site Documents
+
+<Cards>
+  <Card
+    title="Architecture"
+    description="Relay design, client-side floor control, key management, and the physical data path from aircraft to ground."
+    href="/docs/architecture"
+  />
+  <Card
+    title="Stack & Tradeoffs"
+    description="Every technology choice — Fastify, Prisma, WebSocket, React Native — with the specific constraints that drove it."
+    href="/docs/stack-and-tradeoffs"
+  />
+  <Card
+    title="Infrastructure"
+    description="DigitalOcean droplet, Docker Compose services, Postgres schema, and environment configuration."
+    href="/docs/infrastructure"
+  />
+  <Card
+    title="API Reference"
+    description="All REST endpoints and the full WebSocket protocol with payload schemas, error codes, and floor control behaviour."
+    href="/docs/api-reference"
+  />
+  <Card
+    title="UI / UX"
+    description="Design philosophy, PTT interaction model, HIG principles, and accessibility for the mobile app and admin portal."
+    href="/docs/ui-ux"
+  />
+  <Card
+    title="Runbook"
+    description="Local dev setup, DigitalOcean deployment steps, and a troubleshooting guide for common failure modes."
+    href="/docs/runbook"
+  />
+</Cards>
+
+---
+
+## The Team
+
+| Person | Package | Role |
+|--------|---------|------|
+| Shri | `packages/server` | Backend relay server, Postgres, DigitalOcean infra |
+| Saim | `packages/comms` | Comms library, audio pipeline, DLS-140 client |
+| Maisam + Annie | `packages/mobile`, `packages/portal` | React Native app and admin web portal |
+
+---
+
+## Start Here
+
+<Cards>
+  <Card title="Getting Started" href="/docs/getting-started" description="Run the full stack locally in under 10 minutes." />
+  <Card title="Satellite Constraints" href="/docs/architecture/satellite-constraints" description="The numbers that constrain every decision: 22 kbps, 500–1500 ms, carrier-grade NAT." />
+  <Card title="WebSocket Protocol" href="/docs/api-reference/websocket-protocol" description="Full message schemas, floor control behaviour, and connection lifecycle." />
+</Cards>

@@ -1,0 +1,45 @@
+---
+title: Backend
+description: Why we chose Fastify + TypeScript + Prisma + Postgres for the relay server — and why we ruled out Supabase, Express, GraphQL, and managed database services.
+---
+
+# Backend Stack
+
+## Decision
+
+**Fastify + TypeScript + Prisma + self-hosted Postgres 16** running in Docker on a DigitalOcean droplet.
+
+## Constraints That Drove This
+
+- The team is building in a one-week hackathon. Every technology decision has to ship fast.
+- The server must handle both REST (for admin/app control) and WebSocket (for real-time audio relay) on the same process.
+- Data model is known and stable — 6 tables defined before any code was written.
+- We need direct, predictable control over the database schema because key management depends on specific column semantics (`master_secret`, `rotation_counter`).
+- The droplet has 4 GB RAM and we're deploying via Docker Compose. No managed infrastructure budget.
+
+## Alternatives Considered
+
+| Option | Why We Didn't Choose It |
+|--------|------------------------|
+| **Supabase** | Adds vendor lock-in, requires their client SDK, uses Row Level Security policies instead of application-level auth. We started with it, ran into friction migrating auth, and cut it before the first working endpoint. Prisma + self-hosted Postgres gives us identical capability with no lock-in. |
+| **Express** | Fastify is faster, has native TypeScript support, and its plugin system (`@fastify/jwt`, `@fastify/websocket`) is cleaner than Express middleware for our use case. No meaningful reason to choose Express. |
+| **NestJS** | Too much boilerplate for a one-week build. Decorator-heavy patterns slow down iteration. |
+| **GraphQL** | Our data access patterns are simple and well-defined (auth, talkgroup CRUD, device status, key fetch). GraphQL solves a flexibility problem we don't have, and adds resolver complexity we don't need. |
+| **Managed DB (RDS, Supabase, Neon)** | Per-byte satellite traffic and constrained budget meant no managed database cost. Self-hosted Postgres in the same Docker Compose stack eliminates network latency between server and DB. |
+| **Redis for ephemeral state** | In-memory Node.js Maps and Sets are sufficient for v1. Sessions re-establish on reconnect. Adding Redis is a single-line config change when needed. |
+
+## Why Fastify + Prisma + Self-Hosted Postgres
+
+**Fastify:** Handles both REST and WebSocket on one process via `@fastify/websocket`. Plugin-based architecture (`onRequest` hooks for JWT auth) is clean and testable. Schema validation via JSON Schema is built in. Outperforms Express significantly under load.
+
+**Prisma:** Generates a TypeScript client from a schema file. Queries are type-safe at compile time. Migrations are visible, version-controlled files. The schema is the documentation. Alternative ORMs (Sequelize, TypeORM) have heavier runtime overhead and worse TypeScript integration.
+
+**Self-hosted Postgres 16:** Full control over schema, no row-level security complexity, co-located with the server in Docker Compose (sub-millisecond query latency), zero vendor dependency. `prisma db push` syncs schema to the live database on every container start — no migration runner needed for v1.
+
+## Tradeoffs We Accepted
+
+**No Redis:** In-memory Maps are lost on server restart. Clients reconnect and re-establish rooms. For PTT, a brief reconnect window is acceptable. If the server restarts mid-transmission, the audio is lost — same as a dropped satellite link.
+
+**Single-process, single-droplet:** No horizontal scaling. One server handles all relay. For hackathon scope (a few concurrent users over satellite) this is fine. DigitalOcean allows vertical scaling without config changes.
+
+**JWT with no expiry in v1:** We issue JWTs without short expiry during development to avoid re-login friction. Production requires `exp` to be set.
