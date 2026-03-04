@@ -45,11 +45,11 @@ config.watcher = {
         return true;
       }
       
-      // In node_modules, only watch .pnpm/expo-*/node_modules/expo-*/src/
+      // In node_modules, only watch .pnpm/expo-*/node_modules/expo-*/
       // Ignore all other node_modules content
       if (filename.includes("node_modules")) {
         const inPnpmExpo = filename.includes(".pnpm") && 
-                           /\/expo[^/]*\/node_modules\/expo[^/]*\/src\//.test(filename);
+                           /\/expo[^/]*\/node_modules\/expo[^/]*\//.test(filename);
         return !inPnpmExpo;
       }
       
@@ -103,6 +103,37 @@ const NODE_BUILTIN_SHIMS = new Set([
 ]);
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // ─── pnpm monorepo: expo/AppEntry fix ────────────────────────────────────────
+  // When the native Android binary requests the virtual entry bundle, Metro
+  // resolves it from the pnpm virtual store:
+  //   node_modules/.pnpm/expo@54.../node_modules/expo/AppEntry.js
+  // That file contains a hardcoded relative import `../../App` which traverses
+  // UP into the pnpm hash folder root — not our project root.
+  //
+  // Solutions:
+  //   1. Intercept "expo/AppEntry" and serve our local index.js directly.
+  //   2. When AppEntry.js tries to resolve "../../App", redirect it to App.jsx.
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (moduleName === "expo/AppEntry") {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(projectRoot, "index.js"),
+    };
+  }
+
+  // This handles the "../../App" import INSIDE AppEntry.js when Metro somehow
+  // bypasses the intercept above (e.g., when originModulePath is inside .pnpm).
+  if (
+    moduleName === "../../App" &&
+    context.originModulePath.includes("node_modules") &&
+    context.originModulePath.includes("/expo/AppEntry")
+  ) {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(projectRoot, "src/App.jsx"),
+    };
+  }
+
   // Redirect @forbiddenlan/comms to TypeScript source so no pre-built dist is required.
   // babel-preset-expo transforms the .ts files at bundle time via Metro's Babel transformer.
   // ws and Node built-ins imported by comms/src are caught by the shims below.
