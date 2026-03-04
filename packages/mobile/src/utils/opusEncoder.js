@@ -23,7 +23,7 @@ export async function initOpusEncoder() {
   }
   await OpusEncoder.initialize(SAMPLE_RATE, CHANNEL_COUNT, BIT_RATE);
   _initialized = true;
-  console.log('[opus] native encoder initialized — 16kHz mono 16kbps (MediaCodec)');
+  console.log('[opus] native encoder initialized — 16kHz mono 16kbps CBR, 60ms frames (MediaCodec)');
 }
 
 /**

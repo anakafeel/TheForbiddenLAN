@@ -1,17 +1,20 @@
 // audio.js — live mic capture → native Opus encode → relay
 //
 // Architecture:
-//   react-native-live-audio-stream  → raw 16-bit PCM (8192-byte chunks)
-//   OpusEncoderModule (Kotlin)      → Opus frames via Android MediaCodec (no WASM)
+//   react-native-live-audio-stream  → raw 16-bit PCM (1920-byte / 60ms chunks)
+//   OpusEncoderModule (Kotlin)      → Opus frames via Android MediaCodec (VoIP tuned)
 //   Encryption.ts (AES-GCM)        → encrypted Opus frame (pass-through in MVP mode)
 //   comms.sendAudioChunk()         → PTT_AUDIO relay message
+//
+// VoIP tuning: 16kHz mono, 16kbps CBR, 60ms frames.
+// Budget: ~120-200 bytes/frame → ≤16 kbps payload (6 kbps headroom on 22 kbps SATCOM).
 //
 // Why native module?  opusscript uses WebAssembly — Hermes JS engine has no WASM support.
 // Why MediaCodec?     Android ships c2.android.opus.encoder since API 29. No extra deps.
 
 import LiveAudioStream from 'react-native-live-audio-stream';
 import { PermissionsAndroid, Platform } from 'react-native';
-import { comms, encryption } from './comms';
+import { comms, encryption, loopbackStash } from './comms';
 import { initOpusEncoder, encodeOpusFrame, destroyOpusEncoder } from './opusEncoder';
 
 let isRecording = false;
@@ -19,9 +22,14 @@ let chunkIndex = 0;
 
 const SAMPLE_RATE = 16000;
 const CHANNELS = 1;
-// 8192 bytes > AudioRecord.getMinBufferSize() on SM-A225M.
-// At 16kHz/16-bit/mono = 256ms of audio = ~4 Opus frames per chunk.
-const BUFFER_SIZE = 8192;
+// 60ms frame alignment: 960 samples × 2 bytes/sample × 1 channel = 1920 bytes.
+// This matches the Opus encoder's 60ms frame duration exactly, so each
+// LiveAudioStream callback delivers one clean frame to the native encoder —
+// avoiding the over-quantization / static caused by 256ms (8192 byte) buffers.
+// 1920 > AudioRecord.getMinBufferSize(16000, MONO, PCM_16) ≈ 1280 on SM-A225M.
+const FRAME_DURATION_MS = 60;
+const FRAME_SAMPLES = (SAMPLE_RATE * FRAME_DURATION_MS) / 1000; // 960
+const BUFFER_SIZE = FRAME_SAMPLES * CHANNELS * 2; // 1920 bytes
 
 export async function startAudioStream() {
   try {
@@ -62,11 +70,18 @@ export async function startAudioStream() {
         for (const frame of opusFrames) {
           const opusBytes = Math.floor((frame.length * 3) / 4);
           const encrypted = await encryption.encrypt(frame);
+          const encBytes = typeof encrypted === 'string'
+            ? Math.floor((encrypted.length * 3) / 4)
+            : encrypted?.byteLength ?? opusBytes;
           comms.sendAudioChunk(encrypted);
+          // Stash for loopback (single-device testing) — no-op when loopback is off
+          loopbackStash(encrypted);
+          // Budget check: expect ~120–200 bytes per 60ms → ≤ 16 kbps payload
           console.log(
-            `[audio] TX chunk ${chunkIndex++}` +
-            ` | PCM ${rawBytes}B → Opus ${opusBytes}B` +
-            ` | compression ${(rawBytes / opusBytes).toFixed(0)}x`
+            `[audio] TX #${chunkIndex++}` +
+            ` | PCM ${rawBytes}B → Opus ${opusBytes}B → enc ${encBytes}B` +
+            ` | ${((opusBytes * 8) / (FRAME_DURATION_MS / 1000) / 1000).toFixed(1)}kbps` +
+            ` | ${(rawBytes / opusBytes).toFixed(0)}x compression`
           );
         }
       } catch (err) {
@@ -77,7 +92,10 @@ export async function startAudioStream() {
     LiveAudioStream.start();
     isRecording = true;
     chunkIndex = 0;
-    console.log('[audio] started — native Opus 16kHz mono 16kbps via Android MediaCodec');
+    console.log(
+      `[audio] started — Opus 16kHz mono 16kbps CBR, ${FRAME_DURATION_MS}ms frames ` +
+      `(${BUFFER_SIZE}B PCM/frame) via Android MediaCodec`
+    );
   } catch (err) {
     console.warn('[audio] startAudioStream failed:', err.message);
     throw err;
