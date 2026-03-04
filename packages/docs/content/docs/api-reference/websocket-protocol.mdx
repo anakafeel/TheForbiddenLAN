@@ -1,0 +1,179 @@
+---
+title: WebSocket Protocol
+description: Complete message schema for the SkyTalk WebSocket relay — PTT events, floor control behavior, presence, GPS, and text messages.
+---
+
+# WebSocket Protocol
+
+## Connection
+
+```
+ws://134.122.32.45:3000/ws?token=<jwt>
+```
+
+The JWT is verified on the HTTP upgrade request. Invalid tokens receive a `1008 Policy Violation` close. Once connected, the client must send `JOIN_TALKGROUP` to start receiving messages for a talkgroup.
+
+---
+
+## Message Format
+
+All messages are UTF-8 JSON. Both directions use the same structure.
+
+---
+
+## Client → Server Messages
+
+### JOIN_TALKGROUP
+
+Subscribe to a talkgroup's message stream. Triggers a `PRESENCE` broadcast to all room members (including the joining client).
+
+```json
+{
+  "type": "JOIN_TALKGROUP",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7"
+}
+```
+
+### LEAVE_TALKGROUP
+
+Unsubscribe from a talkgroup. Triggers a `PRESENCE` broadcast with the updated member list.
+
+```json
+{
+  "type": "LEAVE_TALKGROUP",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7"
+}
+```
+
+### PTT_START
+
+Signals the start of a PTT transmission. Fan-out to all other talkgroup members. The `timestamp` is used by receiver clients for floor arbitration.
+
+```json
+{
+  "type": "PTT_START",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+  "sender": "037008e8-ec33-4cac-b83c-f28b42adf155",
+  "timestamp": 1772507157015,
+  "seq": 42
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `talkgroup` | UUID string | Target talkgroup |
+| `sender` | UUID string | Sending device UUID |
+| `timestamp` | integer | GPS epoch milliseconds — used for floor arbitration |
+| `seq` | integer | Sequence number for this PTT session |
+
+### PTT_AUDIO
+
+An encrypted audio chunk. Does **not** carry `talkgroup` — the server routes by `sessionId` (set at `PTT_START`). This saves ~30 bytes per chunk at 22 kbps.
+
+```json
+{
+  "type": "PTT_AUDIO",
+  "sessionId": 12345,
+  "seq": 42,
+  "chunk": 1,
+  "data": "<base64-encoded AES-GCM-256 encrypted Opus>"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionId` | 4-byte integer | Maps to talkgroup via server's session map (set at PTT_START) |
+| `seq` | integer | Session sequence number |
+| `chunk` | integer | Chunk index within this PTT press |
+| `data` | base64 string | AES-GCM-256 encrypted Opus audio. IV (12B) prepended to ciphertext. |
+
+### PTT_END
+
+Signals end of PTT transmission. Fan-out to talkgroup. Server cleans up `sessionId` mapping.
+
+```json
+{
+  "type": "PTT_END",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+  "sender": "037008e8-ec33-4cac-b83c-f28b42adf155",
+  "seq": 42
+}
+```
+
+### TEXT_MSG
+
+Text message fan-out. Delivered to all other talkgroup members.
+
+```json
+{
+  "type": "TEXT_MSG",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+  "sender": "037008e8-ec33-4cac-b83c-f28b42adf155",
+  "text": "Landing in 5"
+}
+```
+
+### GPS_UPDATE
+
+Pushes a GPS fix. Written to the database and fanned out to all talkgroups the sender has joined (for moving map).
+
+```json
+{
+  "type": "GPS_UPDATE",
+  "device": "ff831579-b875-4a30-b909-c4f776b60f15",
+  "lat": 49.2827,
+  "lng": -123.1207,
+  "alt": 200.0
+}
+```
+
+---
+
+## Server → Client Messages
+
+### PRESENCE
+
+Broadcast to all room members when any client joins, leaves, or disconnects. Lists all currently connected user IDs in the talkgroup.
+
+```json
+{
+  "type": "PRESENCE",
+  "talkgroup": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+  "online": [
+    "037008e8-ec33-4cac-b83c-f28b42adf155",
+    "8a04b71d-be49-4e6a-a1dd-d61036d17040"
+  ]
+}
+```
+
+All other message types (`PTT_START`, `PTT_AUDIO`, `PTT_END`, `TEXT_MSG`, `GPS_UPDATE`) are fanned out unchanged to all talkgroup members except the sender.
+
+---
+
+## Floor Control Behavior
+
+The server does **not** send `FLOOR_GRANT` or `FLOOR_DENY`. It fans out `PTT_START` messages only.
+
+Clients run the arbitration algorithm independently:
+
+1. Receive `PTT_START` from another device
+2. If two `PTT_START` messages arrive within 50 ms → collision
+3. Lower GPS timestamp wins; tiebreaker: lexicographically smaller UUID
+4. Loser stops transmitting
+
+See [Floor Control →](/docs/architecture/floor-control) for the full algorithm.
+
+---
+
+## Self-Echo Prevention
+
+The server does not send messages back to the socket that originated them. A device sending `PTT_START` does not receive its own `PTT_START` back. This applies to all message types.
+
+---
+
+## Close Codes
+
+| Code | Meaning |
+|------|---------|
+| `1008` | Policy Violation — JWT missing or invalid |
+| `1000` | Normal closure |

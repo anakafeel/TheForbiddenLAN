@@ -1,0 +1,104 @@
+---
+title: Satellite Constraints
+description: The Iridium Certus link budget — 22 kbps uplink, 88 kbps downlink, 500–1500 ms RTT — and how every architecture decision traces back to these numbers.
+---
+
+# Satellite Constraints
+
+These numbers are not background context. They are the forcing function for every architectural decision in SkyTalk. This page documents the link budget, what it means for the design, and how we verified our bandwidth math.
+
+---
+
+## The DLS-140 Hardware
+
+Each aircraft runs a SKYTRAC DLS-140 satellite router. Phones on board connect to it over Wi-Fi on a private `192.168.111.0/24` LAN. The DLS-140 routes outbound traffic over Iridium Certus.
+
+**The critical constraint:** the DLS-140 is outbound-only. It can open connections to the internet. It cannot accept inbound connections. The Iridium network assigns addresses via PPP and sits behind carrier-grade NAT. Even if the DLS-140 exposed port-forwarding (it does not in current firmware), Iridium's network-level NAT would block packets from reaching it. **There is no path from the internet to a DLS-140.**
+
+This makes peer-to-peer DLS-140 communication impossible. Unit A cannot dial Unit B. Both must connect outbound to a relay server — architecture follows from hardware.
+
+---
+
+## Link Budget
+
+| Property | Value |
+|----------|-------|
+| Uplink (aircraft → internet) | **22 kbps** |
+| Downlink (internet → aircraft) | **88 kbps** |
+| One-way latency | **500–1500 ms** |
+| Round-trip time | **1000–3000 ms** |
+| Satellite handoff interval | ~8 minutes (brief dropout) |
+| Cost model | Per-byte — protocol overhead matters |
+
+The asymmetry is significant: receiving four times more bandwidth than sending is fine for PTT (one sender, multiple receivers), but the 22 kbps uplink is tight for a full audio + encryption + framing stack.
+
+---
+
+## Local Wi-Fi
+
+Phones on the same aircraft connect to the DLS-140 over standard 802.11 Wi-Fi. This link is fast (tens of Mbps), free, and has < 5 ms latency. We exploit this: same-aircraft communication does not need to cross the satellite link. Messages are still routed through the relay server, but the relay is on the internet side — the downlink path is: relay → internet → Iridium → DLS-140 → Wi-Fi → phone, which is fast for the last hop.
+
+---
+
+## Bandwidth Budget
+
+The most important question: does our audio + encryption + framing stack fit in 22 kbps?
+
+At **Opus 6 kbps, 60 ms frames** (validated by `test-opus-pipeline.ts`):
+
+| Layer | Bytes/frame | bps @ 16.7 fps | % of 22 kbps |
+|-------|-------------|----------------|--------------|
+| Raw Opus audio | 42 B | 5,600 | 25.5% |
+| + AES-GCM (12B IV + 16B tag) | 70 B | 9,333 | 42.4% |
+| + Base64 encoding (+33%) | 96 chars | 12,800 | 58.2% |
+| + JSON framing (type, sessionId, chunk, data) | **159 B total** | **21,200** | **96.4%** |
+
+**Headroom: ~800 bps** — reserved for GPS heartbeats and control messages.
+
+<Callout type="warn">
+We use 6 kbps Opus, not 8 kbps. At 8 kbps, worst-case wire usage is ~24.9 kbps — 13% over the 22 kbps uplink budget. The quality cliff for Opus is below 4 kbps; 6 kbps retains excellent voice intelligibility.
+</Callout>
+
+### Adaptive codec selection
+
+| Signal level | Codec | Wire usage |
+|---|---|---|
+| Strong (> 3 bars) | Opus 6 kbps | ~21.2 kbps |
+| Weak (< 2 bars) | Codec2 2400 bps | ~9.4 kbps |
+
+### Bandwidth optimizations applied
+
+**`sessionId` compression:** PTT audio chunks do not carry the sender's UUID (36 chars = 288 bits per chunk). Instead, a random 4-byte integer `sessionId` is generated at `PTT_START`. The server maps `sessionId → talkgroup` for routing. Saves ~30 bytes per chunk, ~400 bps over a 20ms frame rate.
+
+**Field stripping on PTT_AUDIO:** `talkgroup`, `timestamp`, and `seq` are not sent on every audio chunk. Those fields alone would add ~56 bytes/packet (9,333 bps at 16.7 fps). The server routes by `sessionId` instead.
+
+**Half-duplex enforcement:** The comms library drops incoming `PTT_AUDIO` while the microphone is open. This prevents the uplink from carrying both transmitted and received audio simultaneously, which would saturate it.
+
+### Future path (Phase 2)
+
+Switching PTT audio from WebSocket (TCP) to UDP/RTP removes all TCP framing overhead (~400 B/s) and eliminates TCP head-of-line blocking. Binary frame format (1B type + 4B sessionId + 3B chunk + raw Opus + 28B AES tag = ~96 B/frame) would reduce audio stream to ~12.8 kbps, giving 9.2 kbps of headroom.
+
+---
+
+## Latency Implications
+
+The 500–1500 ms one-way latency is the reason floor control cannot involve a server round trip. A server-issued `FLOOR_GRANT` at minimum adds one full RTT (1–3 s) before a user can speak. Professional PTT systems (TETRA, DMR) do not work this way, and neither does SkyTalk.
+
+See [Floor Control →](/docs/architecture/floor-control) for how we handle arbitration without adding round-trip latency.
+
+The same latency makes TCP-based audio problematic: a single lost packet at 1500 ms RTT causes a ~3 second stall while TCP retransmits. TCP head-of-line blocking is a known issue in v1; the Phase 2 UDP roadmap addresses it.
+
+---
+
+## GPS and the DLS-140
+
+The DLS-140 has a built-in GNSS receiver. GPS time is nanosecond-accurate and globally synchronized across all aircraft. SkyTalk's floor control algorithm uses GPS timestamps as the arbitration clock — no external NTP reference needed, no clock drift between sites.
+
+The comms library polls the DLS-140 GPS endpoint via HTTP on the local LAN:
+
+```
+GET http://192.168.111.1/location/gps
+→ { lat, lng, alt, mode }
+```
+
+GPS data is also forwarded to the relay server over WebSocket (`GPS_UPDATE` messages) for the moving map feature in the admin portal.

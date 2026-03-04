@@ -1,0 +1,152 @@
+---
+title: Talkgroups
+description: REST API for talkgroup management — create, list, join, leave, list members, and delete. Includes admin-only restrictions.
+---
+
+# Talkgroups API
+
+Talkgroups are communication channels. All members of a talkgroup receive each other's audio over the WebSocket relay.
+
+---
+
+## List My Talkgroups
+
+```http
+GET /talkgroups
+Authorization: Bearer <jwt>
+```
+
+Returns talkgroups the authenticated user is a member of.
+
+**Response `200 OK`:**
+```json
+{
+  "talkgroups": [
+    {
+      "talkgroup_id": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+      "talkgroup": {
+        "id": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+        "name": "Ground Ops",
+        "rotation_counter": 0,
+        "created_at": "2026-03-02T..."
+      }
+    }
+  ]
+}
+```
+
+Note: `master_secret` is never included in any response. Only the `rotation_counter` (needed for KDF) is returned.
+
+---
+
+## Create Talkgroup
+
+**Admin only.**
+
+```http
+POST /talkgroups
+Authorization: Bearer <admin-jwt>
+Content-Type: application/json
+
+{
+  "name": "Ground Ops"
+}
+```
+
+**Response `200 OK`:**
+```json
+{
+  "talkgroup": {
+    "id": "5d647cf3-7d7f-4f59-b9f1-38a91c3bf4d7",
+    "name": "Ground Ops",
+    "rotation_counter": 0,
+    "created_at": "2026-03-02T..."
+  }
+}
+```
+
+Creates the talkgroup with a random 32-byte `master_secret`. The creator is not automatically added as a member — use `POST /talkgroups/:id/join` separately.
+
+---
+
+## Join a Talkgroup
+
+```http
+POST /talkgroups/:id/join
+Authorization: Bearer <jwt>
+```
+
+Adds the authenticated user to the talkgroup. If already a member, this is a no-op (upsert).
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+The `site` is pulled from the user's linked device. If no device is linked, site defaults to `"unknown"`.
+
+---
+
+## Leave a Talkgroup
+
+```http
+DELETE /talkgroups/:id/leave
+Authorization: Bearer <jwt>
+```
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+---
+
+## List Members
+
+```http
+GET /talkgroups/:id/members
+Authorization: Bearer <jwt>
+```
+
+**Response `200 OK`:**
+```json
+{
+  "members": [
+    {
+      "user_id": "037008e8-...",
+      "site": "YVR",
+      "user": {
+        "id": "037008e8-...",
+        "username": "admin",
+        "role": "admin"
+      }
+    }
+  ]
+}
+```
+
+**Response `404 Not Found`:** Talkgroup does not exist.
+
+---
+
+## Delete Talkgroup
+
+**Admin only.**
+
+```http
+DELETE /talkgroups/:id
+Authorization: Bearer <admin-jwt>
+```
+
+Cascades to all memberships for this talkgroup.
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+---
+
+## Key Rotation (per talkgroup)
+
+See [Keys →](/docs/api-reference/authentication) for `GET /keys/rotation` and `POST /keys/rotate`.

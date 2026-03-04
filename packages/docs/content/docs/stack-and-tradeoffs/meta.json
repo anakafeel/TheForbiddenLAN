@@ -1,0 +1,9 @@
+{
+  "title": "Stack & Tradeoffs",
+  "pages": [
+    "backend",
+    "transport",
+    "mobile",
+    "infrastructure"
+  ]
+}

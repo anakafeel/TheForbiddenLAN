@@ -1,0 +1,108 @@
+---
+title: Devices
+description: REST API for device management — list devices, toggle active status, GPS history, and GPS updates.
+---
+
+# Devices API
+
+Devices are physical hardware units (phones, tablets) registered in the system. Admin controls device access; any authenticated user can read GPS.
+
+---
+
+## List All Devices
+
+**Admin only.**
+
+```http
+GET /devices
+Authorization: Bearer <admin-jwt>
+```
+
+**Response `200 OK`:**
+```json
+{
+  "devices": [
+    {
+      "id": "ff831579-b875-4a30-b909-c4f776b60f15",
+      "name": "Tail N123 - Pilot Phone",
+      "site": "YVR",
+      "serial": "SN-DLS-001",
+      "active": true,
+      "created_at": "2026-03-02T..."
+    }
+  ]
+}
+```
+
+---
+
+## Toggle Device Active Status
+
+**Admin only.** Disabling a device prevents it from authenticating. Used for device revocation — see [Key Management](/docs/architecture/key-management) for the full revocation flow.
+
+```http
+PATCH /devices/:id/status
+Authorization: Bearer <admin-jwt>
+Content-Type: application/json
+
+{
+  "active": false
+}
+```
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+---
+
+## Get Last Known GPS
+
+Returns the most recent GPS fix recorded for a device.
+
+```http
+GET /devices/:id/gps
+Authorization: Bearer <jwt>
+```
+
+**Response `200 OK`:**
+```json
+{
+  "gps": {
+    "id": "abc123...",
+    "device_id": "ff831579-...",
+    "lat": 49.2827,
+    "lng": -123.1207,
+    "alt": 200.0,
+    "updated_at": "2026-03-02T22:15:30Z"
+  }
+}
+```
+
+**Response `404 Not Found`:** No GPS updates recorded for this device yet.
+
+---
+
+## Store a GPS Update
+
+Called by the mobile app to push a GPS fix to the server (e.g. from the DLS-140 GPS poll). Also available via WebSocket `GPS_UPDATE` message.
+
+```http
+POST /devices/:id/gps
+Authorization: Bearer <jwt>
+Content-Type: application/json
+
+{
+  "lat": 49.2827,
+  "lng": -123.1207,
+  "alt": 200.0
+}
+```
+
+**Response `200 OK`:**
+```json
+{ "ok": true }
+```
+
+GPS updates sent via WebSocket (`GPS_UPDATE` message) are written to the database automatically by the hub without requiring a separate REST call.

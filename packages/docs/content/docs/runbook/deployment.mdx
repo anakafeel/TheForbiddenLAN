@@ -1,0 +1,208 @@
+---
+title: Deployment
+description: Deploying SkyTalk to the DigitalOcean droplet — Docker Compose workflow, schema migrations, and nginx setup.
+---
+
+# Deployment
+
+SkyTalk runs on a single DigitalOcean droplet. The server and Postgres are managed by Docker Compose. This page covers the full deploy workflow.
+
+---
+
+## Droplet Specs
+
+| Property | Value |
+|----------|-------|
+| Provider | DigitalOcean |
+| OS | Ubuntu LTS |
+| CPU | 2 vCPU |
+| RAM | 4 GB |
+| Disk | 120 GB |
+| IP | `134.122.32.45` |
+| SSH user | `root` |
+
+---
+
+## First-Time Setup
+
+These steps are done once when the droplet is first provisioned.
+
+### 1. Install Docker
+
+```bash
+ssh root@134.122.32.45
+curl -fsSL https://get.docker.com | sh
+```
+
+<Callout type="warn">
+Do not install Docker via snap (`snap install docker`). Snap Docker has permission issues with bind mounts. Use `get.docker.com` (real Docker CE).
+</Callout>
+
+### 2. Clone the repository
+
+```bash
+git clone <repo-url> /opt/skytalk
+cd /opt/skytalk
+```
+
+### 3. Create the `.env` file
+
+```bash
+cp packages/server/.env.example packages/server/.env
+nano packages/server/.env
+```
+
+Set real values for `POSTGRES_PASSWORD` and `JWT_SECRET`. Leave `DATABASE_URL` using the `db` hostname (Docker internal network).
+
+### 4. Start the stack
+
+```bash
+cd packages/server
+docker compose up -d
+```
+
+### 5. Seed the database
+
+```bash
+docker compose exec server npx tsx prisma/seed.ts
+```
+
+### 6. Verify
+
+```bash
+curl http://134.122.32.45:3000/ping
+# expected: {"pong":true}
+```
+
+---
+
+## Routine Deployment (code updates)
+
+When code changes need to be deployed:
+
+### 1. Pull the latest code
+
+```bash
+cd /opt/skytalk
+git pull
+```
+
+### 2. Rebuild and restart the server container
+
+```bash
+cd packages/server
+docker compose build server
+docker compose up -d server
+```
+
+The `server` container re-runs `prisma db push` on startup via `entrypoint.sh`. If there are new schema changes, they will be applied automatically.
+
+<Callout type="warn">
+`prisma db push` is safe for additive changes (new tables, new columns). If a migration involves dropping columns or tables, verify the impact before deploying.
+</Callout>
+
+### 3. Check the server came up
+
+```bash
+docker compose logs server --tail 30
+curl http://134.122.32.45:3000/ping
+```
+
+---
+
+## Updating Only Postgres
+
+Postgres is not rebuilt on every deploy. To update the Postgres image:
+
+```bash
+docker compose pull db
+docker compose up -d db
+```
+
+This restarts only the `db` container. The server will reconnect automatically (Prisma connection pooling handles transient disconnects).
+
+---
+
+## Viewing Production Logs
+
+```bash
+ssh root@134.122.32.45
+cd /opt/skytalk/packages/server
+docker compose logs server -f
+```
+
+---
+
+## Environment Variable Changes
+
+If `.env` values change (e.g. rotating `JWT_SECRET`):
+
+1. Edit `.env` on the droplet.
+2. Restart the server container: `docker compose up -d server`
+
+Existing JWTs signed with the old secret will be invalid. All active sessions will need to log in again.
+
+---
+
+## nginx (Optional — SSL Termination)
+
+For HTTPS, nginx runs as a reverse proxy in front of Docker.
+
+A config file is at `packages/server/nginx/forbiddenlan.foo.conf`. To activate it:
+
+```bash
+# Copy config to nginx sites
+cp /opt/skytalk/packages/server/nginx/forbiddenlan.foo.conf \
+   /etc/nginx/sites-available/forbiddenlan.foo
+
+ln -s /etc/nginx/sites-available/forbiddenlan.foo \
+      /etc/nginx/sites-enabled/
+
+# Test config
+nginx -t
+
+# Reload
+systemctl reload nginx
+```
+
+Then get a TLS certificate:
+```bash
+apt install certbot python3-certbot-nginx
+certbot --nginx -d forbiddenlan.foo
+```
+
+<Callout type="info">
+When nginx is active, change the docker-compose.yml port binding from `"3000:3000"` to `"127.0.0.1:3000:3000"` so the server is no longer directly accessible on the public IP.
+</Callout>
+
+---
+
+## Rollback
+
+There is no automated rollback. To revert:
+
+```bash
+cd /opt/skytalk
+git log --oneline -10    # find the previous commit hash
+git checkout <hash>
+cd packages/server
+docker compose build server
+docker compose up -d server
+```
+
+If the schema was changed, rollback may require restoring from a database backup. Keep periodic `pg_dump` snapshots for production.
+
+---
+
+## Database Backups
+
+Not automated in v1. Manual backup:
+
+```bash
+docker compose exec db pg_dump -U skytalk skytalk > skytalk_backup_$(date +%Y%m%d).sql
+```
+
+Restore:
+```bash
+docker compose exec -T db psql -U skytalk skytalk < skytalk_backup_20260303.sql
+```

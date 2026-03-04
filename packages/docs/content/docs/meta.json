@@ -1,0 +1,13 @@
+{
+  "title": "SkyTalk",
+  "pages": [
+    "index",
+    "getting-started",
+    "architecture",
+    "stack-and-tradeoffs",
+    "infrastructure",
+    "api-reference",
+    "ui-ux",
+    "runbook"
+  ]
+}

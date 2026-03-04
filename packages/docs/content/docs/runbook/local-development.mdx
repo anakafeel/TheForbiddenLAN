@@ -1,0 +1,251 @@
+---
+title: Local Development
+description: How to run the full SkyTalk stack locally — pnpm workspace setup, Docker Compose, database seeding, and mobile mock mode.
+---
+
+This covers running the full stack on your local machine for development. Everything runs in Docker except the mobile app (Expo runs natively).
+
+## Prerequisites
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Node.js | 20+ | LTS recommended |
+| pnpm | 9+ | `npm install -g pnpm` |
+| Docker | 24+ | Docker Compose v2 (`docker compose`, not `docker-compose`) |
+| Expo Go | Latest | On your iPhone/Android for testing the mobile app |
+
+---
+
+## Monorepo Setup
+
+The project is a pnpm workspace. Install all dependencies from the root once:
+
+```bash
+pnpm install
+```
+
+This installs deps for all packages: `packages/server`, `packages/mobile`, `packages/comms`, `packages/portal`, `packages/docs`.
+
+---
+
+## Server Setup
+
+<Steps>
+
+<Step>
+
+### Create the `.env` file
+
+```bash
+cp packages/server/.env.example packages/server/.env
+```
+
+Edit it with these values:
+
+```bash
+POSTGRES_USER=skytalk
+POSTGRES_PASSWORD=skytalkpass
+POSTGRES_DB=skytalk
+JWT_SECRET=dev-jwt-secret-change-in-prod
+DATABASE_URL=postgresql://skytalk:skytalkpass@db:5432/skytalk
+```
+
+<Callout type="info">
+The `DATABASE_URL` host must be `db` (the Docker Compose service name) when running inside Docker — not `localhost`.
+</Callout>
+
+</Step>
+
+<Step>
+
+### Start with Docker Compose
+
+```bash
+cd packages/server
+docker compose up -d
+```
+
+Starts two containers:
+- `db` — Postgres 16 on port 5432 (internal only)
+- `server` — Fastify on port 3000
+
+The server container runs `prisma db push` on startup via `entrypoint.sh` to sync the schema.
+
+</Step>
+
+<Step>
+
+### Verify the server is running
+
+```bash
+curl http://localhost:3000/ping
+# expected: {"pong":true}
+```
+
+</Step>
+
+<Step>
+
+### Seed the database
+
+```bash
+npx tsx prisma/seed.ts
+```
+
+Creates:
+- Admin user: `admin` / `admin`
+- Pilot user: `pilot1` / `test`
+- Talkgroup: **Ground Ops** (both users as members)
+
+</Step>
+
+<Step>
+
+### Get a JWT for API testing
+
+```bash
+JWT=$(curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | \
+  grep -o '"jwt":"[^"]*"' | cut -d'"' -f4)
+echo $JWT
+```
+
+<Callout type="info">
+`$JWT` is per-terminal-session. If you open a new pane (e.g. in zellij), re-run the login command.
+</Callout>
+
+</Step>
+
+<Step>
+
+### Test the WebSocket
+
+Install `wscat` if needed:
+
+```bash
+npm install -g wscat
+```
+
+Connect and join a talkgroup:
+
+```bash
+wscat -c "ws://localhost:3000/ws?token=$JWT"
+```
+
+Send a `JOIN_TALKGROUP` message:
+
+```json
+{"type":"JOIN_TALKGROUP","talkgroup":"<talkgroup-uuid>"}
+```
+
+You should receive a `PRESENCE` message back immediately.
+
+</Step>
+
+</Steps>
+
+---
+
+## Stopping and Resetting
+
+```bash
+# Stop containers
+docker compose down
+
+# Destroy the database volume (wipe all data)
+docker compose down -v
+```
+
+After wiping, re-seed with `npx tsx prisma/seed.ts`.
+
+---
+
+## Viewing Logs
+
+```bash
+docker compose logs server -f     # follow server logs
+docker compose logs -f            # follow all services
+```
+
+---
+
+## Mobile App
+
+<Tabs items={["Mock Mode", "Real Server"]}>
+
+<Tab value="Mock Mode">
+
+No server needed. `MockRelaySocket` echoes messages back locally.
+
+Set in `packages/mobile/.env.local`:
+
+```bash
+EXPO_PUBLIC_MOCK_MODE=true
+```
+
+Then:
+
+```bash
+cd packages/mobile
+pnpm start
+```
+
+Scan the QR code with Expo Go.
+
+</Tab>
+
+<Tab value="Real Server">
+
+Set in `packages/mobile/.env.local`:
+
+```bash
+EXPO_PUBLIC_MOCK_MODE=false
+EXPO_PUBLIC_API_URL=http://<your-local-ip>:3000
+EXPO_PUBLIC_WS_URL=ws://<your-local-ip>:3000/ws
+```
+
+<Callout type="warn">
+Use your machine's LAN IP (e.g. `192.168.1.x`), not `localhost`. On a physical device, `localhost` refers to the phone itself.
+</Callout>
+
+</Tab>
+
+</Tabs>
+
+---
+
+## Docs Site
+
+```bash
+cd packages/docs
+pnpm dev
+```
+
+Opens at `http://localhost:3000` (or next available port if 3000 is taken by the server).
+
+---
+
+## pnpm Workspace Commands
+
+```bash
+# Run a command in a specific package
+pnpm --filter @skytalk/server <command>
+pnpm --filter @skytalk/mobile <command>
+
+# Build all packages
+pnpm run build --recursive
+```
+
+---
+
+## Prisma Commands
+
+```bash
+cd packages/server
+
+npx prisma db push          # sync schema to database (run after any schema change)
+npx prisma generate         # regenerate TypeScript client (run after any schema change)
+npx prisma studio           # open browser GUI to inspect the database
+npx prisma db push --force-reset   # wipe and re-push schema
+```
