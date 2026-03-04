@@ -1,4 +1,5 @@
 // WebSocket hub — fan-out relay. Receives messages, routes to talkgroup members.
+// Includes server-authoritative floor control to prevent walk-ons.
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import type { WebSocket } from 'ws';
@@ -12,6 +13,65 @@ const socketRooms = new Map<WebSocket, Set<string>>();
 // sessionId (4-byte int from PTT_START) → talkgroup — used to route PTT_AUDIO
 // without requiring talkgroup on every audio chunk (bandwidth optimisation)
 const sessionTalkgroup = new Map<number, string>();
+
+// ── Floor Control (Walk-On Prevention) ────────────────────────────────────────
+// Server is the single source of truth for who holds the floor per talkgroup.
+// Only ONE device may transmit on a talkgroup at a time.
+// The server GRANTS or DENIES PTT_START and drops audio from non-holders.
+interface FloorHolder {
+  socket: WebSocket;
+  senderId: string;
+  sessionId: number;
+  acquiredAt: number;
+}
+const talkgroupFloor = new Map<string, FloorHolder>();
+const FLOOR_WATCHDOG_MS = 65_000; // auto-release floor after 65s (client MAX_TX_MS = 60s + margin)
+let floorWatchdogInterval: ReturnType<typeof setInterval> | null = null;
+
+function startFloorWatchdog() {
+  if (floorWatchdogInterval) return;
+  floorWatchdogInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [tg, holder] of talkgroupFloor) {
+      if (now - holder.acquiredAt > FLOOR_WATCHDOG_MS) {
+        console.log(`[hub] floor watchdog: auto-releasing ${tg} held by ${holder.senderId} for ${now - holder.acquiredAt}ms`);
+        releaseFloor(tg, holder.senderId);
+      }
+    }
+  }, 10_000); // check every 10s
+}
+
+function releaseFloor(talkgroup: string, senderId?: string) {
+  const holder = talkgroupFloor.get(talkgroup);
+  if (!holder) return;
+  // Only release if the requester is the actual holder (or force-release via watchdog/disconnect)
+  if (senderId && holder.senderId !== senderId) return;
+  sessionTalkgroup.delete(holder.sessionId);
+  talkgroupFloor.delete(talkgroup);
+  // Broadcast FLOOR_RELEASED so clients know the channel is free
+  const releaseMsg = JSON.stringify({
+    type: 'FLOOR_RELEASED',
+    talkgroup,
+    previousHolder: holder.senderId,
+  });
+  const room = rooms.get(talkgroup);
+  if (room) {
+    for (const peer of room) {
+      if (peer.readyState === 1) peer.send(releaseMsg);
+    }
+  }
+}
+
+function releaseAllFloors(socket: WebSocket) {
+  // Called on socket disconnect — release any floors held by this socket
+  for (const [tg, holder] of talkgroupFloor) {
+    if (holder.socket === socket) {
+      console.log(`[hub] releasing floor for ${tg} (socket disconnected)`);
+      releaseFloor(tg);
+    }
+  }
+}
+// ── End Floor Control ─────────────────────────────────────────────────────────
 
 // Broadcast PRESENCE (list of online userIds) to all sockets in a talkgroup room
 function broadcastPresence(talkgroup: string) {
@@ -71,6 +131,9 @@ export async function registerHub(app: FastifyInstance) {
     socketUser.set(socket, { userId, deviceId });
     socketRooms.set(socket, new Set());
 
+    // Start the floor watchdog on first connection
+    startFloorWatchdog();
+
     socket.on('message', async (raw) => {
       let msg: any;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
@@ -96,6 +159,18 @@ export async function registerHub(app: FastifyInstance) {
           rooms.get(tg)!.add(socket);
           socketRooms.get(socket)!.add(tg);
           broadcastPresence(tg);
+
+          // If someone is already transmitting on this talkgroup,
+          // notify the new joiner so they know the channel is busy.
+          const currentHolder = talkgroupFloor.get(tg);
+          if (currentHolder) {
+            socket.send(JSON.stringify({
+              type: 'FLOOR_GRANT',
+              talkgroup: tg,
+              winner: currentHolder.senderId,
+              timestamp: currentHolder.acquiredAt,
+            }));
+          }
           break;
         }
 
@@ -111,11 +186,52 @@ export async function registerHub(app: FastifyInstance) {
         case 'PTT_START': {
           const tg: string = msg.talkgroup;
           if (!tg) break;
-          // Register sessionId → talkgroup so PTT_AUDIO can route without
-          // carrying talkgroup on every packet (saves ~22 bytes per chunk)
+
+          const existingHolder = talkgroupFloor.get(tg);
+
+          // ── Walk-On Prevention ──────────────────────────────────────
+          if (existingHolder) {
+            if (existingHolder.socket === socket) {
+              // Same device re-pressing PTT (idempotent) — update session
+              sessionTalkgroup.delete(existingHolder.sessionId);
+              if (typeof msg.sessionId === 'number') {
+                sessionTalkgroup.set(msg.sessionId, tg);
+                existingHolder.sessionId = msg.sessionId;
+                existingHolder.acquiredAt = Date.now();
+              }
+              break;
+            }
+            // Floor is taken by another device → DENY this request
+            console.log(`[hub] FLOOR_DENY: ${userId} denied on ${tg} (held by ${existingHolder.senderId})`);
+            socket.send(JSON.stringify({
+              type: 'FLOOR_DENY',
+              talkgroup: tg,
+              holder: existingHolder.senderId,
+            }));
+            break;
+          }
+
+          // Floor is free → GRANT
           if (typeof msg.sessionId === 'number') {
             sessionTalkgroup.set(msg.sessionId, tg);
           }
+          talkgroupFloor.set(tg, {
+            socket,
+            senderId: msg.sender || userId,
+            sessionId: msg.sessionId,
+            acquiredAt: Date.now(),
+          });
+
+          // Send FLOOR_GRANT to the requester
+          socket.send(JSON.stringify({
+            type: 'FLOOR_GRANT',
+            talkgroup: tg,
+            winner: msg.sender || userId,
+            timestamp: Date.now(),
+          }));
+
+          // Fan out PTT_START to all other peers in the talkgroup
+          console.log(`[hub] FLOOR_GRANT: ${msg.sender || userId} on ${tg} (session 0x${(msg.sessionId || 0).toString(16).toUpperCase()})`);
           fanOut(socket, tg, rawStr);
           break;
         }
@@ -124,6 +240,14 @@ export async function registerHub(app: FastifyInstance) {
           // Audio chunks no longer include talkgroup — look it up from PTT_START
           const tg = sessionTalkgroup.get(msg.sessionId as number);
           if (!tg) break;
+
+          // ── Walk-On Prevention: only relay audio from floor holder ──
+          const holder = talkgroupFloor.get(tg);
+          if (!holder || holder.socket !== socket) {
+            // Drop audio from non-holder — this prevents walk-on audio
+            break;
+          }
+
           fanOut(socket, tg, rawStr);
           break;
         }
@@ -131,7 +255,14 @@ export async function registerHub(app: FastifyInstance) {
         case 'PTT_END': {
           const tg: string = msg.talkgroup;
           if (!tg) break;
-          // Clean up session routing entry
+
+          // ── Floor Release ──────────────────────────────────────────
+          const holder = talkgroupFloor.get(tg);
+          if (holder && holder.socket === socket) {
+            releaseFloor(tg, holder.senderId);
+            console.log(`[hub] floor released: ${tg} by ${holder.senderId}`);
+          }
+          // Clean up session routing entry (redundant safety — releaseFloor also does this)
           if (typeof msg.sessionId === 'number') {
             sessionTalkgroup.delete(msg.sessionId);
           }
@@ -149,6 +280,8 @@ export async function registerHub(app: FastifyInstance) {
     });
 
     socket.on('close', () => {
+      // Release any floors held by this socket before cleaning up
+      releaseAllFloors(socket);
       for (const tg of socketRooms.get(socket) ?? []) {
         rooms.get(tg)?.delete(socket);
         broadcastPresence(tg);

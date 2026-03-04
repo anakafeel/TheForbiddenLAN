@@ -6,6 +6,7 @@ export type MessageType =
   | 'PTT_END'
   | 'FLOOR_GRANT'
   | 'FLOOR_DENY'
+  | 'FLOOR_RELEASED'
   | 'PRESENCE'
   | 'JOIN_TALKGROUP'
   | 'LEAVE_TALKGROUP'
@@ -42,7 +43,13 @@ export interface FloorGrant {
 export interface FloorDeny {
   type: 'FLOOR_DENY';
   talkgroup: string;
-  loser: string;
+  holder: string;   // device that currently holds the floor
+}
+
+export interface FloorReleased {
+  type: 'FLOOR_RELEASED';
+  talkgroup: string;
+  previousHolder: string;
 }
 
 export interface PresenceMessage {
@@ -77,6 +84,7 @@ export type RelayMessage =
   | AudioChunk
   | FloorGrant
   | FloorDeny
+  | FloorReleased
   | PresenceMessage
   | TextMessage
   | GPSUpdate

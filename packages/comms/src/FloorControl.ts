@@ -44,6 +44,14 @@ export class FloorControl {
     return this.floors.get(talkgroup) ?? { holder: null, talkgroup, timestamp: 0 };
   }
 
+  /**
+   * Set the floor status from an authoritative server FLOOR_GRANT message.
+   * Used when the server is the source of truth for floor control.
+   */
+  setFloor(talkgroup: string, holder: string, timestamp: number): void {
+    this.floors.set(talkgroup, { holder, talkgroup, timestamp });
+  }
+
   release(talkgroup: string): void {
     this.floors.delete(talkgroup);
     this.pending.delete(talkgroup);

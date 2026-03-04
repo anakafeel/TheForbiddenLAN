@@ -1,8 +1,9 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
-import { emitStartTalking, emitStopTalking } from '../utils/socket';
+import { emitStartTalking, emitStopTalking, joinChannel } from '../utils/socket';
+import { onFloorDenied, getFloorState } from '../utils/comms';
 import { CONFIG } from '../config';
 import theme from '../theme';
 
@@ -12,25 +13,32 @@ export default function PTTScreen({ navigation }) {
   const { current } = useContext(ChannelContext);
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState(null);
+  const [channelBusy, setChannelBusy] = useState(false);
+  const [busyHolder, setBusyHolder] = useState(null);
 
-  // Simulate random speakers
+  // Register floor-deny callback — fires when server rejects PTT (walk-on prevention)
   useEffect(() => {
-    if (!current || isTransmitting) {
-      setCurrentSpeaker(null);
-      return;
+    onFloorDenied((talkgroup, holder) => {
+      console.warn(`[PTTScreen] Floor denied on ${talkgroup} — held by ${holder}`);
+      setIsTransmitting(false);
+      setChannelBusy(true);
+      setBusyHolder(holder);
+      // Clear the "busy" banner after 3 seconds
+      setTimeout(() => {
+        setChannelBusy(false);
+        setBusyHolder(null);
+      }, 3000);
+    });
+  }, []);
+
+  // Re-join talkgroup every time PTT screen mounts / channel changes.
+  // This covers: first visit, fast-refresh, WebSocket reconnect, back-navigation.
+  useEffect(() => {
+    if (current?.id) {
+      joinChannel(current.id);
+      console.log(`[PTTScreen] joined talkgroup: ${current.id}`);
     }
-    
-    const speakers = ['ECHO-1', 'BRAVO-2', 'CHARLIE-3', 'DELTA-4'];
-    const interval = setInterval(() => {
-      if (Math.random() > 0.6) {
-        const speaker = speakers[Math.floor(Math.random() * speakers.length)];
-        setCurrentSpeaker(speaker);
-        setTimeout(() => setCurrentSpeaker(null), 2000 + Math.random() * 2000);
-      }
-    }, 3000);
-    
-    return () => clearInterval(interval);
-  }, [current, isTransmitting]);
+  }, [current?.id]);
 
   const handlePTTToggle = async () => {
     if (!current) return;
@@ -41,11 +49,20 @@ export default function PTTScreen({ navigation }) {
       // calling emitStopTalking first would set it to false and silently drop the audio.
       setIsTransmitting(false);
       await stopAudioStream();   // reads file → encrypts → sendAudioChunk() while still active
-      emitStopTalking(CONFIG.DEVICE_ID);  // clears isTransmitting + sends PTT_END
+      emitStopTalking(CONFIG.DEVICE_ID, current.id);  // clears isTransmitting + sends PTT_END
     } else {
-      // Start transmitting
+      // Walk-on check: emitStartTalking returns false if floor is taken
+      const accepted = emitStartTalking(CONFIG.DEVICE_ID, current.id);
+      if (accepted === false) {
+        // Floor is taken — show "Channel Busy" feedback
+        const floorState = getFloorState();
+        setChannelBusy(true);
+        setBusyHolder(floorState.holder);
+        setTimeout(() => { setChannelBusy(false); setBusyHolder(null); }, 3000);
+        return;
+      }
+      // Start transmitting (optimistic — server may still deny via FLOOR_DENY)
       setIsTransmitting(true);
-      emitStartTalking(CONFIG.DEVICE_ID);
       try {
         await startAudioStream();
       } catch (e) {
@@ -86,13 +103,19 @@ export default function PTTScreen({ navigation }) {
       </View>
 
       {/* Speaking Status */}
-      <View style={[styles.speakingBar, (currentSpeaker || isTransmitting) && styles.speakingBarActive]}>
+      <View style={[
+        styles.speakingBar, 
+        (currentSpeaker || isTransmitting) && styles.speakingBarActive,
+        channelBusy && styles.speakingBarBusy,
+      ]}>
         <Text style={styles.speakingText}>
-          {isTransmitting 
-            ? '📡 YOU ARE TRANSMITTING' 
-            : currentSpeaker 
-              ? `🎙️ NOW SPEAKING: ${currentSpeaker}` 
-              : '— Channel idle —'}
+          {channelBusy
+            ? `🚫 CHANNEL BUSY — ${busyHolder || 'another device'} is transmitting`
+            : isTransmitting 
+              ? '📡 YOU ARE TRANSMITTING' 
+              : currentSpeaker 
+                ? `🎙️ NOW SPEAKING: ${currentSpeaker}` 
+                : '— Channel idle —'}
         </Text>
       </View>
 
@@ -218,6 +241,9 @@ const styles = StyleSheet.create({
   },
   speakingBarActive: {
     backgroundColor: colors.status.activeGlow,
+  },
+  speakingBarBusy: {
+    backgroundColor: '#FF4444',
   },
   speakingText: {
     color: colors.text.secondary,
