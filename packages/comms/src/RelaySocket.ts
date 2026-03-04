@@ -35,14 +35,15 @@ export class RelaySocket {
     //   } catch { /* ignore malformed messages */ }
     // });
     
-    // React Native WebSocket uses addEventListener
     this.ws.addEventListener('message', (event) => {
       try {
-        const msg = JSON.parse(event.data) as RelayMessage;
+        const dataStr = typeof event.data === 'string' ? event.data : event.data.toString();
+        const msg = JSON.parse(dataStr) as RelayMessage;
         
         // Log audio packets for testing
         if (msg.type === 'PTT_AUDIO') {
-          console.log(`[RelaySocket] RX PTT_AUDIO from ${msg.talkgroup} | seq: ${msg.seq} | chunk: ${msg.chunk} | bytes: ${msg.data?.length || 0}`);
+          const audioMsg = msg as any;
+          console.log(`[RelaySocket] RX PTT_AUDIO from ${audioMsg.talkgroup} | seq: ${audioMsg.seq} | chunk: ${audioMsg.chunk} | bytes: ${audioMsg.data?.length || 0}`);
         }
         
         this.emit(msg.type, msg);

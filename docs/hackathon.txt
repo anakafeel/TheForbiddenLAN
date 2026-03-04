@@ -1,0 +1,118 @@
+HACKATHON 2026
+MISSION: RELIABLE COMMUNICATIONS FOR REMOTE TEAMS
+💪 The Challenge:
+Imagine aircrew teams operating in remote regions. Where communication is essential, they lack reliable, low-latency, group-based
+communication. Satellite networks provide coverage but come with high latency, low bandwidth, and expensive data usage making
+traditional Push-To-Talk systems ineffective.
+
+🛰 Your Mission:
+Build a mobile application that delivers walkie-talkie–style, Push-To-Talk (PTT) communication over a satellite network, enabling
+field teams to stay connected in remote areas. The solution must support group-based communication, where all participants
+register and join talkgroups before exchanging voice or text messages.
+
+💡What You’ll Build:
+Participants are challenged to design a system that:
+
+® Should feel like talking on a Walkie Talkie radio
+® Provides low-latency PTT communication over high-latency satellite networks
+® Minimizes data usage using high compression and lightweight protocols
+® Chooses the best architecture and framework for the application
+® Supports centralized server distribution or multicast-style decentralized message fan-out
+® Includes a web portal to activate devices, and manage authentication/permissions
+
+🔎 Technical Requirements:
+📱 Mobile App Features
+
+®
+
+Push-to-talk button with real-time transmit/receive indicators
+
+®
+
+Group registration & membership control
+
+®
+
+Performance oriented voice messages
+
+®
+
+Ability to function under constrained satellite connections
+
+®
+
+Optional peer-to-peer or multicast-like communication to reduce delay
+
+💻 Backend Server or Distributed Architecture
+
+®
+
+Central server for message relay or peer-to-peer distribution
+
+®
+
+Must preserve message integrity and ensure only authorized users participate
+
+®
+
+Support for user/device authentication
+
+®
+
+Distributed key management to generate, rotate, and share group keys securely
+
+🛜 Web Portal
+
+®
+
+Create & configure talkgroups
+
+®
+
+Activate, authorize, and assign devices/users
+
+®
+
+Override or disable rogue units
+
+®
+
+View system status and logs
+
+📋 Documentation
+®
+
+Present your preliminary design, including use cases, architecture and draft user interface
+
+⭐ Bonus Challenge
+
+® Seamless group switching via intuitive UI
+® Avoid walk-ons when multiple people talk at once
+® Background monitoring of multiple channels
+® Efficient handling of keys and encryption without excess data usage
+® Talk to an ICOM gateway to talk to other radio systems
+® Implement a moving map that shows the location of all the talk group participants
+
+✅ Deliverables on the Final Day:
+
+® Working prototype (mobile app + backend or distributed logic + web portal)
+® Requirements, Designs, Use Cases, Architecture diagram(s) and explanation of design tradeoffs, including why the
+messaging framework was chosen
+
+® Short demo showing talkgroup communication over simulated or real satellite conditions
+
+🏆 Why Compete?
+® Work on real mobile application and backend software development (Full Stack) using satellite & cellular communication
+technology through the phone’s Wi-Fi
+
+® Opportunity to build a powerful portfolio project
+® Compete against top talent and get noticed by industry leaders!
+® Network with professionals and explore potential career opportunities
+® The winning team gets a grand prize of $15,000!!
+
+JOIN THE HACKATHON AND BUILD THE FUTURE OF REMOTE COMMUNICATIONS! 🎙
+
++1.250.765.2393 | www.skytrac.ca
+© SKYTRAC Systems Ltd
+
+

@@ -3,14 +3,19 @@
 // minimise per-packet JSON overhead on the 22kbps satellite uplink.
 // talkgroup routing and timestamp context live on PTT_START, not on every chunk.
 import type { RelaySocket } from './RelaySocket';
+import type { UdpSocket } from './UdpSocket';
 import type { Encryption } from './Encryption';
 
 export class AudioPipeline {
   private chunk = 0;
   private isRecording = false;
 
+  // Mode toggle (set by UI via comms.setTransportMode)
+  public static useUdp = false;
+
   constructor(
     private relay: RelaySocket,
+    private udp: UdpSocket,
     private sessionId: number,
     private talkgroup: string,
     private encryption?: Encryption
@@ -29,13 +34,19 @@ export class AudioPipeline {
       ? await this.encryption.encrypt(base64OpusData)
       : base64OpusData;
 
-    this.relay.send({
+    const msg = {
       type: 'PTT_AUDIO',
       talkgroup: this.talkgroup,
       sessionId: this.sessionId,
       chunk: this.chunk++,
       data: payload,
-    });
+    };
+
+    if (AudioPipeline.useUdp) {
+      this.udp.send(msg);
+    } else {
+      this.relay.send(msg);
+    }
   }
 
   stopRecording(): void {

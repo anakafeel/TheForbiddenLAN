@@ -1,0 +1,1387 @@
+DLS-140 USER GUIDE
+
+DLS-140 USER GUIDE
+DOCUMENT REVISION: 01-001
+(DOC12075)
+
+Applies to: DLS-140 (140-100-01)
+Note: Access the latest revision at https://www.skytrac.ca/resources/documents/
+October 21, 2025
+
+SKYTRAC Systems Ltd.
+Tel. +1 250 765-2393
+Fax +1 250 765-3767
+Web: www.skytrac.ca
+Email: support@skytrac.ca
+
+DLS-140 USER GUIDE
+
+DOCUMENT REVISION HISTORY
+Rev
+
+ECO
+
+Description
+
+Date
+
+Author
+
+01-000
+
+N/A
+
+Initial Release.
+
+7 Dec 2024
+
+J. Fenton
+
+01-001
+
+11283
+
+Added Mod A DLS-140 and new SW.
+
+21 Oct. 2025
+
+J. Memmott
+
+** ESD Caution **
+The DLS-140 contains static sensitive circuitry that could be damaged from large
+electrostatic discharges directly into the connector pins. Be careful not to touch the
+connector pins unless properly grounded.
+** Warning **
+Changes or modifications not expressly approved by SKYTRAC Systems Ltd (SKYTRAC) could
+void the user’s authority to operate the equipment.
+Warranty Information
+SKYTRAC Systems Ltd warrants this product to be free of defects in materials and workmanship, and that the
+product meets or exceeds approved factory acceptance test requirements. SKYTRAC reserves the right to
+replace any warranted product at its sole discretion during the warranty period.
+The components of the DLS-140 are under warranty for one (1) year from date of shipment from SKYTRAC
+Systems Ltd. For failed units caused by defective parts or workmanship, contact SKYTRAC Systems for an RMA
+#. SKYTRAC Systems will provide the return address to ship the equipment at the time of issuing the RMA #.
+
+Proprietary Notice
+The information contained in this document is proprietary and confidential to SKYTRAC Systems Ltd. No part of
+this document may be reproduced or transmitted in any form or by any means, electronic or mechanical, without
+express written permission from SKYTRAC Systems Ltd.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 2 of 27
+
+DLS-140 USER GUIDE
+
+TABLE OF CONTENTS
+1
+
+2
+
+3
+
+4
+
+GENERAL ................................................................................................................................................................ 7
+1.1
+
+Introduction ................................................................................................................................................. 7
+
+1.2
+
+Contents....................................................................................................................................................... 7
+
+1.3
+
+Audience ...................................................................................................................................................... 7
+
+1.4
+
+Printing......................................................................................................................................................... 7
+
+1.5
+
+Acronym list ................................................................................................................................................. 8
+
+SYSTEM OVERVIEW ............................................................................................................................................... 9
+2.1
+
+Manufacturer Label ..................................................................................................................................... 9
+
+2.2
+
+LED Indicator ............................................................................................................................................. 10
+
+2.3
+
+Connectivity Options ................................................................................................................................. 10
+
+2.3.1
+
+WI-FI ................................................................................................................................................. 10
+
+2.3.2
+
+Ethernet ............................................................................................................................................ 11
+
+2.3.3
+
+Cellular .............................................................................................................................................. 11
+
+2.3.4
+
+Certus 100 ........................................................................................................................................ 11
+
+GETTING STARTED.............................................................................................................................................. 12
+3.1
+
+Connecting using Wi-Fi ............................................................................................................................. 12
+
+3.2
+
+Connecting Using Ethernet ....................................................................................................................... 13
+
+3.3
+
+Login........................................................................................................................................................... 13
+
+3.4
+
+Default Network Settings .......................................................................................................................... 13
+
+3.5
+
+Web Interface ............................................................................................................................................ 14
+
+3.5.1
+
+Navigation Tabs ................................................................................................................................ 14
+
+3.5.2
+
+Dashboard Overview ........................................................................................................................ 14
+
+3.5.3
+
+Network ............................................................................................................................................ 15
+
+3.5.4
+
+Network Tab ..................................................................................................................................... 16
+
+3.5.5
+
+Basic View ......................................................................................................................................... 16
+
+3.5.6
+
+Advanced View ................................................................................................................................. 17
+
+3.5.7
+
+Configuration Tab ............................................................................................................................. 18
+
+3.5.8
+
+Diagnostic Tab .................................................................................................................................. 23
+
+TECHNICAL SPECIFICATIONS ............................................................................................................................ 25
+4.1
+
+Cellular Frequency Bands ......................................................................................................................... 25
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 3 of 27
+
+DLS-140 USER GUIDE
+
+5
+
+4.2
+
+Wi-Fi Frequency Bands ............................................................................................................................. 25
+
+4.3
+
+Power Supply Options ............................................................................................................................... 26
+
+4.3.1
+
+Direct Power ..................................................................................................................................... 26
+
+4.3.2
+
+Power Over Ethernet ........................................................................................................................ 26
+
+4.4
+
+Serial AT Commands ................................................................................................................................. 26
+
+4.5
+
+FDM ............................................................................................................................................................ 26
+
+CUSTOMER SUPPORT.......................................................................................................................................... 27
+
+APPENDIX A
+
+LEGACY SW USER GUIDE ............................................................................................................... A-1
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 4 of 27
+
+DLS-140 USER GUIDE
+
+LIST OF TABLES
+Table 1: Acronym List ................................................................................................................................................... 8
+Table 2: Status LED Operation.................................................................................................................................... 10
+Table 3: Default Network Settings ............................................................................................................................. 13
+Table 4: Cellular Frequency Bands ............................................................................................................................ 25
+Table 5: Wi-Fi Frequency Bands................................................................................................................................. 25
+Table 6: Power Requirements .................................................................................................................................... 26
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 5 of 27
+
+DLS-140 USER GUIDE
+
+LIST OF FIGURES
+Figure 1: Mod None DLS-140 Label Location.............................................................................................................. 9
+Figure 2: Mod A DLS-140 Label Location .................................................................................................................... 9
+Figure 3: DLS-140 LED Indicator: Left – Mod None, Right - Mod A ......................................................................... 10
+Figure 4: DLS-140 Default Wi-Fi Credentials ............................................................................................................ 12
+Figure 5: Dashboard Tab ............................................................................................................................................ 14
+Figure 6: Network Tab Basic View ............................................................................................................................. 16
+Figure 7: Network Tab Advanced View ..................................................................................................................... 17
+Figure 8: Configuration Tab ....................................................................................................................................... 18
+Figure 9: Wi-Fi Configuration ..................................................................................................................................... 19
+Figure 10: Cellular Configuration ............................................................................................................................... 19
+Figure 11: Routing Preference Configuration ........................................................................................................... 20
+Figure 12: LAN Configuration..................................................................................................................................... 20
+Figure 13: DHCP Configuration .................................................................................................................................. 21
+Figure 14: Static DHCP Configuration ....................................................................................................................... 21
+Figure 15: Static DHCP Discovered Devices ............................................................................................................. 22
+Figure 16: Edit Device Name ..................................................................................................................................... 22
+Figure 17: Factory Reset ............................................................................................................................................ 23
+Figure 18: Diagnostics Tab ........................................................................................................................................ 23
+Figure 19: Log Downloading ...................................................................................................................................... 24
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 6 of 27
+
+DLS-140 USER GUIDE
+
+1 GENERAL
+1.1 INTRODUCTION
+This document describes the features of the DLS-140 once installed and activated. For all installation
+information, please reference the DLS-140 Installation Manual (DOC11734) and associated STC drawings and
+documentation.
+
+1.2 CONTENTS
+The contents within this user guide provides procedures and other information intended for proper operation. It
+is divided into the sections that follow:
+Section 1 — General
+This section includes an introduction to this guide and acronyms that users should refer to for clarification.
+Section 2 — System Overview
+In this section, users will find descriptions of the system components, features, and functionality. It provides an
+understanding of how the system operates.
+Section 3 — Getting Started
+This section offers step-by-step instructions for setting up and configuring the system for the first time. It
+includes initial setup procedures, required tools, and tips for a smooth start.
+Section 4 — Technical Specifications
+This section provides a detailed overview of the support functions offered for Cellular connectivity, Wi-Fi
+networks, Power specifications, and FDM requirements. It explains the capabilities, integration options, and
+operational features ensuring seamless functionality across various systems.
+Section 5 — Customer Support
+In this concluding section, users will find contact information for customer support, including phone numbers,
+email addresses, and available support hours. This information ensures that users can reach out for assistance
+whenever needed.
+
+1.3 AUDIENCE
+This manual is intended for qualified aircraft avionics installation technicians (referred to as installers) and
+designated aircraft pilots. It requires that the installer have knowledge of the tools, materials, and techniques of
+wiring and computer networking required for configuring and maintaining radios, antennas, and related
+components into aircraft.
+
+1.4 PRINTING
+This document contains pages with color pictures. It is best printed with a color printer.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 7 of 27
+
+DLS-140 USER GUIDE
+
+1.5 ACRONYM LIST
+Table 1: Acronym List
+ACRONYM
+
+DESCRIPTION
+
+APN
+
+Access Point Name
+
+DHCP
+
+Dynamic Host Configuration Protocol
+
+DNS
+
+Domain Name System
+
+ESD
+
+Electrostatic Discharge
+
+FDM
+
+Flight Data Monitoring
+
+GHz
+
+Gigahertz
+
+GPS
+
+Global Positioning System
+
+IMEI
+
+International Mobile Equipment Identity
+
+IP
+
+Internet Protocol
+
+LED
+
+Light-Emitting Diode
+
+LTE
+
+Long Term Evolution (4G Cellular Technology)
+
+MAC
+
+Media Access Control
+
+Mbps
+
+Megabits per second
+
+MHz
+
+Megahertz
+
+OS
+
+Operating System
+
+PC
+
+Personal Computer
+
+PDOP
+
+Position Dilution of Precision
+
+PPP
+
+Point-to-Point Protocol
+
+SIM
+
+Subscriber Identity Module
+
+SOS
+
+Save Our Ship (Emergency)
+
+SSID
+
+Service Set Identifier
+
+VDC
+
+Voltage-Direct Current
+
+WCDMA
+
+Wideband Code Division Multiple Access (3G Cellular Technology)
+
+Wi-Fi
+
+Wireless Fidelity (Wireless Networking)
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 8 of 27
+
+DLS-140 USER GUIDE
+
+2 SYSTEM OVERVIEW
+2.1 MANUFACTURER LABEL
+The label can be found on the top-face of the DLS-140.
+
+Figure 1: Mod None DLS-140 Label Location
+
+Figure 2: Mod A DLS-140 Label Location
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 9 of 27
+
+DLS-140 USER GUIDE
+
+2.2 LED INDICATOR
+The DLS-140 utilizes one status indicator LED for communicating the status of the unit. The operation of the
+DLS-140 status LED is shown in Figure 3. During a normal boot sequence, the LED will show green, followed by
+steady red, then blinking blue as it boots. A steady blue LED indicates that the unit is ready to use.
+
+Figure 3: DLS-140 LED Indicator: Left – Mod None, Right - Mod A
+
+Table 2: Status LED Operation
+COLOR
+
+STATUS
+
+Green (Steady or Blinking)
+
+Initial Power On
+
+Red (Blinking)
+
+Iridium Firmware Upgrade (In Progress) *
+
+Red (Steady)
+
+Unit in Bootloader Mode
+
+Blue (Blinking)
+
+OS is Booting (or DLS-140 Firmware Upgrade*)
+
+Blue (Steady)
+
+Device is Operational
+
+Note: LED indicators labelled with a * are only applicable to the Legacy software.
+
+2.3 CONNECTIVITY OPTIONS
+2.3.1
+
+WI-FI
+
+The DLS-140 is compatible with Wi-Fi standards 802.11 ac/a/b/g/n allowing it to connect to a broad range of
+devices, including those using legacy protocols.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 10 of 27
+
+DLS-140 USER GUIDE
+
+2.3.2
+
+ETHERNET
+
+The DLS-140 Mod A supports two Ethernet ports with negotiation rates of 10/100 Mbps for wired connections.
+The Mod None version supports 1 Gigabit ethernet port with negotiation rates of 10/100/1000 Mbps for wired
+connections.
+
+2.3.3
+
+CELLULAR
+
+The DLS-140 utilizes 3G/4G technology, allowing for high-speed mobile data. It also offers backward
+compatibility with 3G networks, which enhances coverage across various locations.
+
+2.3.4
+
+CERTUS 100
+
+The DLS-140 uses Iridium Certus Midband to deliver reliable satellite connectivity.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 11 of 27
+
+DLS-140 USER GUIDE
+
+3 GETTING STARTED
+**NOTE**
+This guide is for SW# ESW0107. For the Legacy SW User Guide, ESW0097, please refer to
+Appendix A.
+3.1 CONNECTING USING WI-FI
+Locate on the product label the corresponding Wi-Fi SSID/Password to access via Wi-Fi.
+
+Figure 4: DLS-140 Default Wi-Fi Credentials
+
+**NOTE**
+If there are issues in accessing the label after installation, users must use the ethernet
+method below to configure the Wi-Fi settings. It is recommended that users document this
+label prior to installation. Contact SKYTRAC Support for further assistance.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 12 of 27
+
+DLS-140 USER GUIDE
+
+3.2 CONNECTING USING ETHERNET
+Connect using a CAT5/5e ethernet cable and connect to an available ethernet port on the laptop or PC. Once
+connected, ensure DHCP is enabled.
+
+3.3 LOGIN
+To access the DLS-140 Interface, open a web browser and enter the following IP address in the address bar:
+192.168.111.1, then press ‘Enter’. This will take users to the DLS-140 Interface login page. Once the login page
+is visible, enter the credentials below to access, configure, and manage the device:
+Username: skytrac
+Password: skytrac
+Once logged in, users will be redirected to the Dashboard screen, where they will find general system
+information.
+
+3.4 DEFAULT NETWORK SETTINGS
+This section provides a table of default network settings.
+Table 3: Default Network Settings
+NAME
+
+DETAIL
+
+DLS-140
+
+192.168.111.1
+
+Connected Devices
+
+192.168.111.2 – 192.168.111.254
+
+Subnet Mask
+
+255.255.255.0 (/24)
+
+Gateway
+
+192.168.111.1
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 13 of 27
+
+DLS-140 USER GUIDE
+
+3.5 WEB INTERFACE
+3.5.1
+
+NAVIGATION TABS
+
+The interface provides a left-hand navigation menu with the following sections:
+
+•
+•
+•
+•
+3.5.2
+
+Dashboard – Overview of system info, system health, GPS, and network status.
+Network – Displays network diagnostics, routing preferences, and connection details.
+Configuration – Allows device configuration and settings.
+Diagnostics – Provides advanced troubleshooting tools and system logs.
+
+DASHBOARD OVERVIEW
+
+After logging in, the Dashboard, Figure 5, provides a high-level summary of the device's status.
+
+Figure 5: Dashboard Tab
+The dashboard is divided into the following sections:
+
+•
+•
+•
+•
+
+System Info - Displays device identification details.
+System Health - Monitors operational parameters.
+GPS - Displays positional data.
+Network - Displays network details.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 14 of 27
+
+DLS-140 USER GUIDE
+
+3.5.2.1 SYSTEM INFO
+Displays device identification details:
+
+•
+•
+•
+•
+•
+•
+
+Device Name – User-defined identifier for the unit.
+Product Name – Model name (DLS-140).
+Part Number – SKYTRAC part number (e.g., 140-100-01).
+Serial Number – Unique hardware identifier.
+Firmware Version – Currently installed firmware version.
+Mod Status – Indicates the hardware version/modification status.
+
+3.5.2.2 SYSTEM HEALTH
+Monitors operational parameters:
+
+•
+•
+•
+•
+
+Uptime – Time elapsed since last reboot.
+Modem Temperature – Temperature of the 9770 Iridium modem.
+Memory Usage – Current RAM utilization percentage.
+Storage Usage – Current internal storage usage percentage.
+
+3.5.2.3 GPS
+Displays positional data:
+
+•
+•
+
+3.5.3
+
+Latitude, Longitude, Altitude – Current GPS coordinates (N/A if unavailable).
+Mode – Indicates GPS mode:
+o 0 = Error
+o 1 = No Fix
+o 2 = 2D Fix
+o 3 = 3D Fix
+
+NETWORK
+
+Displays network details:
+
+•
+•
+•
+
+Cellular – Shows IMEI, ICCID, and signal strength in dBm and visual bars.
+Satellite – Shows IMEI, ICCID, and signal strength in dBm and visual bars.
+Network Usage – Displays data usage across different time frames:
+o 24h
+o 7d
+o Month
+
+Data is separated into Cellular Sent/Received and Satellite Sent/Received.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 15 of 27
+
+DLS-140 USER GUIDE
+
+3.5.4
+
+NETWORK TAB
+
+This page is divided into Basic and Advanced tabs providing a comprehensive read-only overview of the current
+network status.
+
+3.5.5
+
+BASIC VIEW
+
+This view displays the status of the external (WAN) connections, Figure 6.
+
+•
+
+•
+
+•
+
+•
+
+Wi-Fi Section:
+o SSID – Network name.
+o Country – Configured region.
+o Security – Encryption type (e.g., wpa2).
+o Password – Wi-Fi password (not visible if the security is set to none).
+Cellular Section:
+o Signal – A visual bar representing cellular signal strength.
+o SIM Info – Displays the ICCID, IMEI, and APN for the active SIM.
+Satellite Section:
+o Signal – A visual bar representing satellite signal strength.
+o SIM Info – Displays the ICCID and IMEI for the satellite module.
+Routing Preference:
+o Displays which connection is designated as the Primary (e.g., "Cellular Primary").
+
+Figure 6: Network Tab Basic View
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 16 of 27
+
+DLS-140 USER GUIDE
+
+3.5.6
+
+ADVANCED VIEW
+
+This view displays the advanced networking settings, Figure 7.
+
+•
+
+•
+
+•
+
+•
+
+LAN Section:
+o IP Address – The device's gateway IP address (192.168.111.1).
+o Network Mask – The subnet mask for the LAN.
+o Primary DNS & Secondary DNS – DNS servers used by the network.
+DHCP Section:
+o DHCP range start & DHCP range end – The pool of available IP addresses.
+o Lease Validity – How long an IP address assignment is valid (e.g., 24h).
+Static DHCP Section:
+o Lists all devices that have been assigned a permanent IP address, showing their MAC Address,
+Hostname, and assigned IPv4 Address.
+Firewall Section:
+o Current Profile – Shows the active firewall profile (e.g., unrestricted).
+o Note: Firewall configuration may require a device reboot to take effect.
+
+Figure 7: Network Tab Advanced View
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 17 of 27
+
+DLS-140 USER GUIDE
+
+3.5.7
+
+CONFIGURATION TAB
+
+The Configuration Tab, Figure 8, allows the user to modify the DLS-140 user settings. Each section can be
+expanded to view and edit parameters.
+
+Figure 8: Configuration Tab
+
+•
+
+Configuration Management: Options to download or upload a device configuration file.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 18 of 27
+
+DLS-140 USER GUIDE
+
+•
+
+Wi-Fi, Figure 9: Configure SSID, country, security, password (The length must be more than 8 and less
+than 63 characters, and it should only include letters, numbers and symbols such as abc, ABC, 123, and
+?&!).
+
+Figure 9: Wi-Fi Configuration
+
+•
+
+Cellular, Figure 10: Enable/disable the cell and configure the APN.
+
+Figure 10: Cellular Configuration
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 19 of 27
+
+DLS-140 USER GUIDE
+
+•
+•
+
+Satellite: Enable/disable satellite connection.
+Routing Preference, Figure 11: Set the connection preference.
+
+Figure 11: Routing Preference Configuration
+
+•
+•
+
+Firewall: Manage firewall profiles (unrestricted, nointernet, webonly).
+LAN, Figure 12: Configure the device's local IP address, the network mask, the primary and secondary
+DNS. The IP address and Network mask must be in a private range, which means that it should be one of
+the following:
+o 192.168/16
+o 10/8
+o 172.16/12
+
+Figure 12: LAN Configuration
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 20 of 27
+
+DLS-140 USER GUIDE
+
+•
+
+DHCP, Figure 13: Configure the DHCP address range start and end, and the lease validity period (hours).
+
+Figure 13: DHCP Configuration
+
+•
+
+Static DHCP, Figure 14 and Figure 15: Add or remove reservations for specific devices by entering the
+device’s MAC address, host name, and IPv4 address.
+
+Figure 14: Static DHCP Configuration
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 21 of 27
+
+DLS-140 USER GUIDE
+
+Figure 15: Static DHCP Discovered Devices
+
+•
+•
+
+Firmware Updates: Apply firmware updates to the device by uploading a .raucb file. You can also view
+the current firmware version.
+Edit Device Name, Figure 16: Change the user-defined name of the DLS-140 unit.
+
+Figure 16: Edit Device Name
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 22 of 27
+
+DLS-140 USER GUIDE
+
+•
+
+Factory Reset, Figure 17: Restore the system to its original default settings, erasing all current
+configurations.
+
+Figure 17: Factory Reset
+
+3.5.8
+
+DIAGNOSTIC TAB
+
+The Diagnostic Tab, Figure 18, provides tools for network troubleshooting and access to system logs.
+
+Figure 18: Diagnostics Tab
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 23 of 27
+
+DLS-140 USER GUIDE
+
+3.5.8.1 NETWORK DIAGNOSTICS
+Allows the user to run basic network tests from the device.
+
+•
+•
+•
+•
+•
+
+Operation: The type of diagnostic to run. Currently supports ping only.
+Network Interface: Select which network connection (e.g., Cellular, Satellite, or any) to test from.
+Number of Pings: The number of test packets to send (e.g., 5).
+Destination Address: The IP address to ping (e.g., 8.8.8.8). Note, you can not enter a hostname, only an
+IP address.
+Output: A console window displays the results of the diagnostic test.
+
+Note: The Run button cannot be activated until all required parameters are entered.
+3.5.8.2 LOGS
+Allows the user to download logs from the device for a specified time period, Figure 19.
+
+•
+
+•
+•
+
+Log Type: A dropdown menu to select the type of log to download. Available types include:
+o System
+o Messages
+o GPS
+o Satellite
+o Dmesg
+o Point-to-Point Protocol (PPP)
+Start Date/Time (UTC) & End Date/Time (UTC): Fields to specify the time range for the logs.
+Download: Button to initiate the log file download.
+
+Figure 19: Log Downloading
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 24 of 27
+
+DLS-140 USER GUIDE
+
+4 TECHNICAL SPECIFICATIONS
+This section is intended to describe technical specifications and outline supportability on specific functions.
+
+4.1 CELLULAR FREQUENCY BANDS
+It is recommended that when using the DLS-140, users ensure that sufficient service is available in a specific
+region according to the below table.
+Table 4: Cellular Frequency Bands
+TECHNOLOGY
+
+FREQUENCY BANDS
+
+LTE-FDD
+
+B1, B2, B3, B4, B5, B7, B8, B9, B12, B13,
+B14, B17, B18, B19, B20, B21, B25, B26,
+B28, B29, B30, B32, B66
+
+LTE-TDD
+
+B38, B39, B40, B41
+
+WCDMA
+
+B1, B2, B3, B4, B5, B8, B9, B19
+
+4.2 WI-FI FREQUENCY BANDS
+It is recommended that when choosing what broadcast frequency is configured that the intended devices
+support such frequency bands.
+Table 5: Wi-Fi Frequency Bands
+WI-FI TYPE
+
+FREQUENCY (GHZ)
+
+CHANNELS
+
+802.11b
+
+2.4GHz
+
+1-11 (North America), 1-13
+(Europe, most countries), 1-14
+(Japan)
+
+802.11g
+
+2.4 GHz
+
+1-11 (North America), 1-13
+(Europe, most countries), 1-14
+(Japan)
+
+802.11n
+
+2.4 GHz / 5 GHz
+
+2.4 GHz: 1-13 (worldwide), 5
+GHz: 36-165 (regiondependent)
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 25 of 27
+
+DLS-140 USER GUIDE
+
+WI-FI TYPE
+
+FREQUENCY (GHZ)
+
+CHANNELS
+
+802.11ac
+
+5 GHz
+
+36-48, 52-64, 100-144, 149165 (varies by region, with
+DFS restrictions)
+
+4.3 POWER SUPPLY OPTIONS
+4.3.1
+
+DIRECT POWER
+
+The DLS-140 power requirements are as shown in Table 6.
+Table 6: Power Requirements
+COMPONENT
+
+POWER REQUIREMENTS
+
+DLS-140
+
+Input Voltage: 10 – 34 VDC, 28 VDC Nominal
+Power Consumption: 7W nominal, 18W peak.
+
+4.4 SERIAL AT COMMANDS
+Currently, serial options are not supported.
+
+4.5 FDM
+When using the DLS-140 for processing Flight Data, the following requirements must be met:
+- A DLS-140 with any FW version
+- An ISAT-200A with firmware 00.23.07 or later
+- Accompanying ISAT-200A params.ini file
+There is no other user-initiated change or settings to be performed. The above requirements ensure intended
+functionality.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 26 of 27
+
+DLS-140 USER GUIDE
+
+5 CUSTOMER SUPPORT
+TELEPHONE:
+
+1-250-765-2393
+
+FAX:
+
+1-250-765-3767
+
+EMAIL:
+
+support@skytrac.ca
+
+WEBSITE:
+
+www.skytrac.ca
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Page 27 of 27
+
+DLS-140 USER GUIDE
+
+APPENDIX A
+A.1
+
+LEGACY SW USER GUIDE
+
+WEB INTERFACE
+
+This section offers an overview of the initial screens displayed upon first logging into the web interface, including
+login credentials and a description of the initial status screen.
+
+A.1.1
+
+LOGIN
+
+To access the DLS-140 Interface, open a web browser and enter the following IP address in the address bar:
+192.168.111.1, then press ‘Enter’. This will take users to the DLS-140 Interface login page. Once the login page
+is visible, enter the credentials below to access, configure, and manage the device:
+Username: admin
+Password: admin
+Once logged in, users will be redirected to the Status screen, where they will find information about the system
+and satellite, cellular, and internet data usage.
+
+A.1.2
+
+STATUS
+
+This section is intended to provide users with a comprehensive DLS-140 system overview.
+
+► System Information
+This section provides key details about a user’s DLS-140 device, such as its serial number, model number,
+hardware and firmware versions, and capabilities. It also displays the satellite and cellular IMEI/SIM card
+numbers and current operating temperatures.
+
+► Satellite, Cellular, & Wired Internet
+Here, users can view signal strength and data usage for the Iridium satellite system, cellular modem, and wired
+internet. Each category includes tables showing device’s data usage over the past 24 hours, 7 days, and from
+the beginning of the month.
+
+A.1.3
+
+GENERAL SETTINGS
+
+This section allows users to make configurations such as renaming the DLS-140 device, changing the Wi-Fi
+password, and turning satellite, cellular, and Wi-Fi capabilities on and off. Click ‘Reboot’ at the bottom of the
+screen to restart the device once changes are made.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Appendix A-1
+
+DLS-140 USER GUIDE
+
+► SkyLink
+Edit device name in the Asset Tag field and set a maximum limit for the SkyLink (DLS-140) device’s daily data
+usage in the Max Daily Usage field.
+
+► Satellite
+Toggle the satellite control sliders on or off to enable or disable the connection settings that allow users device
+to establish and manage data sessions over the Iridium Certus network.
+
+► Wi-Fi
+Toggle Wi-Fi on or off and get information on the current Wi-Fi settings. These fields are intended for information
+only and can be changed in the Connection Manager tab.
+SSID: This is the name of the Wi-Fi network. It is a public-facing name that users see when they search for
+available networks.
+Mode: The Wi-Fi Mode refers to the frequency band used by the network. 5 GHz provides faster speeds and less
+interference compared to 2.4 GHz but with a shorter range.
+Country: This specifies the Country of operation, which helps ensure that the device complies with the regional
+Wi-Fi frequency and power regulations. Ensure to select the proper country intended for operation (only
+applicable for 5 GHz.)
+Channel: The Channel is the frequency on which the Wi-Fi signal is broadcast. When set to Auto, the DLS-140
+will automatically select the best channel based on the least interference.
+Security: This refers to the Security protocol used to protect the Wi-Fi network. WPA2-PSK is a strong
+encryption standard that requires a password to connect to the network.
+Password: This is the password required to access the Wi-Fi network. It is hidden by default but clicking the eye
+icon reveals it. It is recommended that users document the label prior to installation.
+
+► Cellular
+Toggle Cellular on or off and get information on the current Cellular settings. These fields are intended for
+information only and can be changed in the General Settings tab.
+APN: This is the network pathway for the cellular connection.
+Username: Some networks require a username for authentication when connecting to an APN.
+Password: Used in conjunction with the username for authentication when connecting to an APN.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Appendix A-2
+
+DLS-140 USER GUIDE
+
+IMEI: The IMEI is a unique identifier for the device on cellular networks. This number is used by the network to
+recognize and validate the device. This is a fixed value and unable to be changed.
+SIM: The SIM card number uniquely identifies the subscriber account with the cellular carrier. This field changes
+when a SIM card is inserted within the SIM tray. This is a fixed value and unable to be changed.
+Network: This shows the current cellular network the device is connected to.
+
+A.1.4
+
+CONNECTION MANAGER
+
+This section covers key aspects of network management for device communication. Users can prioritize data
+routing between satellite and cellular connections and manage firewall policies to manage network access.
+Data Routing: Users can prioritize data routing between satellite and cellular connections.
+Firewall Profile: This defines the firewall rules that manage incoming and outgoing network traffic. Users can
+choose from various predefined firewall profiles in the dropdown menu or create their own whitelist to
+customize settings according to their specific needs. It is recommended users set a Whitelist as soon as possible
+to eliminate any unwanted data traffic.
+
+A.1.5
+
+NETWORK
+
+This section covers network configuration settings.
+
+► LAN
+IP Address: 192.168.111.1 (DLS-140)
+Network Mask: 255.255.255.0
+Primary/Secondary DNS: 8.8.8.8 (Google DNS) and 1.1.1.1 (Cloudflare DNS).
+
+**CAUTION**
+Any changes to LAN settings must be performed with caution. If an unwanted change is
+made, users may need to factory reset the DLS-140 to restore network configuration settings
+to default.
+► DHCP Settings
+DHCP automatically assigns IP addresses to devices on a network, allowing them to communicate without
+manual configuration.
+Range: IPs from 192.168.111.50 to 192.168.111.200 are dynamically assigned to devices by default
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Appendix A-3
+
+DLS-140 USER GUIDE
+
+Lease Validity: Choose the amount of time that the IP lease is valid/renewed.
+
+► Static DHCP Leases
+A static DHCP lease assigns a fixed IP address to a device based on its MAC address, ensuring the device always
+receives the same IP on the network.
+The "Connected Devices" button provides a list of devices currently connected to the DLS-140.
+
+A.1.6
+
+FIREWALL
+
+The section allows users to configure their DLS-140 incoming and outgoing network traffic for specific
+applications or hosts, with two tabs — Whitelist and Port Forwarding — for managing these settings.
+
+► Tab 1: Whitelist
+
+**CAUTION**
+It is recommended that users enable a particular whitelist. Failure in doing so may result in
+heavy data charges as many devices perform background downloads and tasks which may
+affect data usage.
+The Whitelist allows traffic for specified applications or hosts by adding their IP address or hostname. Once
+added, all incoming and outgoing traffic from that host will be allowed. Either is necessary, both are not needed.
+Host Names: Enter the specific host name (e.g., google.com) to allow communication only with that destination.
+IP Addresses: Enter the specific IP addresses (e.g., 8.8.4.4 or 8.8.8.8) to allow communication only with that IP
+address.
+
+► Tab 2: Port Forwarding
+Forward incoming connections to devices on the local network. Use caution when creating these rules, as they
+may expose the network to security risks or disrupt connectivity. For help with setting custom rules, please
+contact SKYTRAC support.
+
+A.1.7
+
+REMOTE MANAGEMENT
+
+Currently, this feature is not supported.
+
+A.1.8
+
+SERIAL TO IP
+
+Currently, this feature is not supported.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Appendix A-4
+
+DLS-140 USER GUIDE
+
+A.1.9
+
+SNMP
+
+This section provides details for SNMP access to configure SNMP v1/v2. MIBs are available and can be
+downloaded by clicking ‘Download MIBs’ link.
+Public (Read-Only) Community: snmp_ro
+Private (Read/Write) Community: snmp_rw
+
+A.1.10
+
+VOICE EXTENSIONS
+
+Currently, this feature is not supported.
+
+A.1.11
+
+ACCESSORIES
+
+Currently, accessories are not supported.
+
+A.1.12
+
+PLUGINS
+
+Currently, plugins are not supported.
+
+A.1.13
+
+CALLS
+
+Currently, call features are not supported.
+
+A.1.14
+
+DIAGNOSTICS
+
+The diagnostic features provide a thorough overview of device status, connection quality, and network
+troubleshooting tools.
+System Information allows monitoring of essential hardware status and functionality.
+Satellite & Cellular Information ensures that both communication pathways are functioning properly.
+Network Troubleshooting tools like Ping help quickly test and resolve connectivity issues.
+
+Document Rev. 01-001
+Restricted Proprietary and Confidential Information
+
+DOC12075
+
+Appendix A-5
+
+

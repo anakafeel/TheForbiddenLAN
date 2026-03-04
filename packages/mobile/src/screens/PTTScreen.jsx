@@ -1,9 +1,10 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TouchableOpacity, Switch } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { emitStartTalking, emitStopTalking, joinChannel } from '../utils/socket';
-import { onFloorDenied, getFloorState } from '../utils/comms';
+import { onFloorDenied, getFloorState, comms } from '../utils/comms';
+import { updateTLEs, getVisibleSatellites } from '../utils/satellitePredictor';
 import { CONFIG } from '../config';
 import theme from '../theme';
 
@@ -15,6 +16,36 @@ export default function PTTScreen({ navigation }) {
   const [currentSpeaker, setCurrentSpeaker] = useState(null);
   const [channelBusy, setChannelBusy] = useState(false);
   const [busyHolder, setBusyHolder] = useState(null);
+  const [isSatcom, setIsSatcom] = useState(false);
+  const [satsVisible, setSatsVisible] = useState(0);
+
+  // Poll for visible Iridium satellites when in SATCOM mode
+  useEffect(() => {
+    let intervalId = null;
+    
+    if (isSatcom) {
+      // First, fetch/cache latest TLEs from our server
+      updateTLEs(CONFIG.DEVICE_ID).then(() => {
+        // Then check visibility every 5 seconds
+        const checkSats = () => {
+          const visible = getVisibleSatellites();
+          setSatsVisible(visible.length);
+        };
+        checkSats(); // Initial check
+        intervalId = setInterval(checkSats, 5000);
+      });
+    } else {
+      setSatsVisible(0); // Reset when not in SATCOM
+    }
+
+    return () => clearInterval(intervalId);
+  }, [isSatcom]);
+
+  const toggleSatcom = () => {
+    const newValue = !isSatcom;
+    setIsSatcom(newValue);
+    comms.setTransportMode(newValue ? 'satcom' : 'cellular');
+  };
 
   // Register floor-deny callback — fires when server rejects PTT (walk-on prevention)
   useEffect(() => {
@@ -107,15 +138,18 @@ export default function PTTScreen({ navigation }) {
         styles.speakingBar, 
         (currentSpeaker || isTransmitting) && styles.speakingBarActive,
         channelBusy && styles.speakingBarBusy,
+        (isSatcom && satsVisible === 0) && styles.speakingBarNoSat,
       ]}>
         <Text style={styles.speakingText}>
           {channelBusy
             ? `🚫 CHANNEL BUSY — ${busyHolder || 'another device'} is transmitting`
-            : isTransmitting 
-              ? '📡 YOU ARE TRANSMITTING' 
-              : currentSpeaker 
-                ? `🎙️ NOW SPEAKING: ${currentSpeaker}` 
-                : '— Channel idle —'}
+            : (isSatcom && satsVisible === 0)
+              ? '🛰️ WAITING FOR SATELLITE... (No line of sight)'
+              : isTransmitting 
+                ? '📡 YOU ARE TRANSMITTING' 
+                : currentSpeaker 
+                  ? `🎙️ NOW SPEAKING: ${currentSpeaker}` 
+                  : '— Channel idle —'}
         </Text>
       </View>
 
@@ -129,10 +163,12 @@ export default function PTTScreen({ navigation }) {
         {/* PTT Button */}
         <Pressable
           onPress={handlePTTToggle}
+          disabled={isSatcom && satsVisible === 0}
           style={({ pressed }) => [
             styles.pttButton,
             isTransmitting && styles.pttButtonActive,
             pressed && styles.pttButtonPressed,
+             (isSatcom && satsVisible === 0) && styles.pttButtonDisabled,
           ]}
         >
           <Text style={styles.pttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
@@ -141,6 +177,28 @@ export default function PTTScreen({ navigation }) {
           </Text>
         </Pressable>
       </View>
+
+      {/* Transport Toggle */}
+      <View style={styles.toggleContainer}>
+        <Text style={[styles.toggleLabel, !isSatcom && styles.toggleLabelActive]}>CELLULAR (WS)</Text>
+        <Switch
+          trackColor={{ false: colors.border.subtle, true: colors.status.active }}
+          thumbColor={colors.text.inverse}
+          onValueChange={toggleSatcom}
+          value={isSatcom}
+          style={styles.switch}
+        />
+        <Text style={[styles.toggleLabel, isSatcom && styles.toggleLabelActive]}>SATCOM (UDP)</Text>
+      </View>
+      
+      {/* Satellite Info Banner */}
+      {isSatcom && (
+        <View style={styles.satInfo}>
+          <Text style={styles.satText}>
+            Visible Satellites: {satsVisible} (Iridium Certus)
+          </Text>
+        </View>
+      )}
 
       {/* Hint */}
       <Text style={styles.hint}>
@@ -245,6 +303,9 @@ const styles = StyleSheet.create({
   speakingBarBusy: {
     backgroundColor: '#FF4444',
   },
+  speakingBarNoSat: {
+    backgroundColor: colors.background.secondary,
+  },
   speakingText: {
     color: colors.text.secondary,
     fontSize: typography.size.sm,
@@ -317,6 +378,43 @@ const styles = StyleSheet.create({
   },
   pttLabelActive: {
     color: colors.text.inverse,
+  },
+  pttButtonDisabled: {
+    backgroundColor: colors.background.tertiary,
+    borderColor: colors.border.subtle,
+    shadowOpacity: 0,
+    elevation: 0,
+    opacity: 0.5,
+  },
+  // Toggle
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+  },
+  toggleLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.wide,
+  },
+  toggleLabelActive: {
+    color: colors.status.active,
+  },
+  switch: {
+    marginHorizontal: spacing.md,
+    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
+  },
+  // Satellite Info
+  satInfo: {
+    alignItems: 'center',
+    paddingBottom: spacing.sm,
+  },
+  satText: {
+    color: colors.status.active,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
   },
   // Hint
   hint: {

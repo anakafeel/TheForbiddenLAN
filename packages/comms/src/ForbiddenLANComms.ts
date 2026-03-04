@@ -1,6 +1,7 @@
 // ForbiddenLANComms — main class consumed by the mobile app via useComms() hook
 import { DLS140Client } from './DLS140Client';
 import { RelaySocket } from './RelaySocket';
+import { UdpSocket } from './UdpSocket';
 import { FloorControl } from './FloorControl';
 import { GPSPoller } from './GPSPoller';
 import { AudioPipeline } from './AudioPipeline';
@@ -18,6 +19,7 @@ export type FloorDenyCallback = (talkgroup: string, holder: string) => void;
 export class ForbiddenLANComms {
   private dls: DLS140Client;
   private relay: RelaySocket;
+  private udp: UdpSocket;
   private floor: FloorControl;
   private gpsPoller: GPSPoller;
   private audio: AudioPipeline | null = null;
@@ -46,6 +48,7 @@ export class ForbiddenLANComms {
   constructor(private config: ForbiddenLANConfig) {
     this.dls   = new DLS140Client(config.dls140Url);
     this.relay = new RelaySocket();
+    this.udp   = new UdpSocket();
     this.floor = new FloorControl();
     this.gpsPoller = new GPSPoller(this.dls, this.relay, config.deviceId);
   }
@@ -67,6 +70,13 @@ export class ForbiddenLANComms {
 
     this.relay.on('connect', () => {
        this.relay.send({ type: 'SYNC_TIME', clientTime: Date.now() });
+
+       // Also connect UDP socket (assume server port is 3000 for UDP based on ws port)
+       const serverPort = this.config.relayUrl.match(/:(\d+)/)?.[1] ? parseInt(this.config.relayUrl.match(/:(\d+)/)![1], 10) : 3000;
+       
+       this.udp.connect(this.config.relayUrl, serverPort, this.config.deviceId).catch(e => {
+         console.warn('[ForbiddenLANComms] Failed to connect UDP socket:', e);
+       });
     });
 
     // ── Floor Control message handling ──────────────────────────────
@@ -153,6 +163,7 @@ export class ForbiddenLANComms {
     // This gives zero-latency PTT start while the server arbitrates.
     this.audio = new AudioPipeline(
       this.relay,
+      this.udp,
       sessionId,
       this.activeTalkgroup
     );
@@ -235,21 +246,30 @@ export class ForbiddenLANComms {
     this.relay.send({ type: 'TEXT_MSG', talkgroup: talkgroupId, sender: this.config.deviceId, text });
   }
 
+  setTransportMode(mode: 'cellular' | 'satcom'): void {
+    AudioPipeline.useUdp = mode === 'satcom';
+    console.log(`[ForbiddenLANComms] Transport mode set to ${mode.toUpperCase()} (UDP ${AudioPipeline.useUdp ? 'enabled' : 'disabled'})`);
+  }
+
   onMessage(handler: (msg: RelayMessage) => void): void {
-    this.relay.on('*', (msg: RelayMessage) => {
+    const internalHandler = (msg: RelayMessage) => {
       // Half-Duplex Strict Buffer Fix
       if (this.isTransmitting && msg.type === 'PTT_AUDIO') {
         // Drop incoming audio while transmitting to avoid 22kbps saturation
         return;
       }
       handler(msg);
-    });
+    };
+
+    this.relay.on('*', internalHandler);
+    this.udp.on('*', internalHandler);
   }
 
   // Bypass the half-duplex filter — use for loopback testing and signal monitoring.
   // Receives every relay message including echoed PTT_AUDIO while transmitting.
   onRawMessage(handler: (msg: RelayMessage) => void): void {
     this.relay.on('*', handler);
+    this.udp.on('*', handler);
   }
 
   async getSignalStatus(): Promise<SignalStatus> {
@@ -287,5 +307,6 @@ export class ForbiddenLANComms {
       this.signalPollingTimer = null;
     }
     this.relay.disconnect();
+    this.udp.disconnect();
   }
 }
