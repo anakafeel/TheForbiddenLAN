@@ -117,24 +117,83 @@ Alternative would be switching to npm/yarn with flat `node_modules`, which works
 
 See [MOBILE_SETUP_TROUBLESHOOTING.md](./MOBILE_SETUP_TROUBLESHOOTING.md#issue-1-metro-bundler-cant-resolve-expo-modules-core) for implementation details.
 
+## Audio Codec: Native Opus via Android MediaCodec
+
+**Problem (discovered during E2E cellular test, 2026-03-03):** `opusscript` (the original Opus encoder) is compiled to WebAssembly. React Native's Hermes JS engine does not implement the `WebAssembly` global. Crash on PTT: `Aborted(no native wasm support detected)`.
+
+**`react-native-opus` v0.3.1** was evaluated and rejected — it is a **decoder-only** TurboModule with no encoder functions.
+
+**Decision:** Wrote a minimal Kotlin native module (`OpusEncoderModule.kt`) wrapping Android's built-in `MediaCodec` Opus encoder (`c2.android.opus.encoder`, available API 29 / Android 10+). Zero external dependencies — the codec is part of the OS.
+
+**Configuration used (cellular E2E test):**
+- Sample rate: 16kHz (narrowband voice, good intelligibility)
+- Channels: 1 (mono)
+- Bitrate: 16kbps (will reduce to 6kbps for SATCOM — see bandwidth table above)
+- Buffer: 8192 bytes PCM input → ~4 Opus frames per callback
+
+**Measured compression (SM-A225M, Galaxy A22):**
+- First frame: ~84 bytes (encoder priming, normal)
+- Steady state: **30–57 bytes/frame** at 16kbps
+- Compression ratio: **~200× vs raw PCM** (8193B PCM → ~40B Opus)
+- Effective bitrate on wire: ~640 bytes/sec → **well within 22kbps satellite budget**
+
+**RX (decoder) status:** `react-native-opus` v0.3.1 is decoder-only — this is now exactly what the RX side needs. Pending integration for the audio playback path. Currently the receiver accumulates raw Opus frames and writes them to a `.m4a` file which expo-av cannot play (format mismatch). Fix: integrate `react-native-opus` decoder, pipe PCM to expo-av or expo-audio.
+
+**Files:**
+- `packages/mobile/android/.../OpusEncoderModule.kt` — Kotlin MediaCodec wrapper
+- `packages/mobile/android/.../OpusEncoderPackage.kt` — ReactPackage registration
+- `packages/mobile/src/utils/opusEncoder.js` — JS bridge (NativeModules.OpusEncoder)
+- `packages/mobile/src/utils/audio.js` — orchestrates LiveAudioStream → OpusEncoder → comms
+
+---
+
 ## Web Crypto API Polyfill: Pass-Through for MVP vs Real AES-GCM
+
 **Problem:** React Native's Hermes JavaScript engine doesn't implement the Web Crypto API (`crypto.subtle`). The `@forbiddenlan/comms` package uses `crypto.subtle.importKey()`, `encrypt()`, and `decrypt()` for AES-GCM audio encryption. Without this API, the app crashes immediately on initialization with "Property 'crypto' doesn't exist".
-**Decision:** For MVP/hackathon testing, implement a **pass-through crypto polyfill** that mimics the Web Crypto API interface but performs no actual encryption. The polyfill prepends the IV to the data buffer (for API compatibility) but doesn't encrypt/decrypt the payload.
-**Tradeoff:**  
+
+**Decision:** For MVP/hackathon testing, implement a **pass-through crypto polyfill** that mimics the Web Crypto API interface but performs no actual encryption.
+
+**What the polyfill actually does** (`packages/mobile/src/shims/setup-crypto.js`):
+```javascript
+// encrypt: prepends the 12-byte IV to plaintext, returns combined buffer
+// → output is: [IV (12 bytes)] + [plaintext audio data]
+// → NO AES-GCM cipher is applied
+
+// decrypt: strips the first 12 bytes (IV), returns remaining bytes as plaintext
+// → NO decryption is applied
+
+// importKey: returns a dummy key object, logs a warning
+```
+
+**What `comms/Encryption.ts` does** (the real implementation):
+```typescript
+// Uses Web Crypto API (crypto.subtle) properly:
+// encrypt: random 12-byte IV → AES-GCM-256 → [IV (12B)] + [ciphertext] + [GCM tag (16B)]
+// decrypt: parse IV → AES-GCM-256 decrypt → plaintext
+// Key: hardcoded test key (0xDEADBEEF...) — KDF integration pending
+```
+
+In production, `Encryption.ts` is correct and uses real AES-GCM. In the current mobile MVP, the polyfill in `setup-crypto.js` intercepts all `crypto.subtle` calls before they reach the real implementation. The relay server only ever sees and forwards the (unencrypted) audio blobs — it never touches the key material.
+
+**Tradeoff:**
 - ⚠️ **SECURITY CRITICAL:** Audio is transmitted in plaintext. This is acceptable ONLY for:
   - Local testing with `MockRelaySocket` (no network transmission)
-  - Hackathon demo environment with trusted network
-  - **NOT acceptable for production deployment**
-- **Time savings:** Implementing real AES-GCM (using `@noble/ciphers` or `react-native-quick-crypto`) would require 1-2 days for integration and testing
-- **Testing:** Audio pipeline, PTT signaling, floor control, and UI can all be tested and demoed without encryption
-- **Architecture:** Since encryption is end-to-end (relay server just forwards encrypted blobs), the pass-through approach unblocks all other development work
+  - Hackathon demo environment on a trusted network
+  - **NOT acceptable for any operational deployment**
+- **Time savings:** Real AES-GCM via `react-native-quick-crypto` requires 1 native rebuild
+- **Architecture preserved:** Encryption is end-to-end (relay forwards opaque blobs). Swapping polyfill for real crypto requires no protocol changes — just replace `setup-crypto.js`.
 
-**Production Path Forward:**  
-Replace `packages/mobile/src/shims/setup-crypto.js` with a real AES-GCM implementation:
-- Option 1: `@noble/ciphers` (pure JS, 8KB gzipped, audited)
-- Option 2: `react-native-quick-crypto` (native bindings, faster but requires custom native build)
-- Option 3: `crypto-browserify` + `@aws-crypto/aes-gcm` (browser-compatible fallback)
+**AES-GCM overhead on the satellite link:**
+Per-packet overhead with real encryption enabled (see bandwidth table above):
+- IV: 12 bytes
+- GCM auth tag: 16 bytes
+- Total overhead: **28 bytes/frame** — factored into the 96.4% budget calculation at 6kbps
 
-Test with actual DLS-140 satellite hardware to verify performance doesn't degrade the 60ms chunk pipeline. Add key rotation testing once encryption is live.
+**Production Path Forward:**
+Replace `packages/mobile/src/shims/setup-crypto.js` with:
+- Option 1: `react-native-quick-crypto` (native bindings, fastest, requires `npx expo run:android`)
+- Option 2: `@noble/ciphers` (pure JS, 8KB gzipped, audited, no native rebuild needed)
+
+Also required: replace the hardcoded `0xDEADBEEF...` test key in `Encryption.ts` with a proper KDF flow — the server's `Talkgroup.master_secret` field (already in the Prisma schema) and a HKDF derivation per talkgroup session.
 
 See [MOBILE_SETUP_TROUBLESHOOTING.md](./MOBILE_SETUP_TROUBLESHOOTING.md#issue-2-crypto-doesnt-exist--cryptosubtle-is-undefined) for polyfill implementation details.

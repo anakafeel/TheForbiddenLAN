@@ -1,79 +1,101 @@
 # Local Dev Bootstrap (Monorepo)
 
-This repo now includes a one-command first-time setup for local development.
+One-command first-time setup for local development.
 
 ## Command
 
-Run from repo root:
-
 ```bash
-pnpm setup:local
+pnpm setup:local        # or: pnpm setup:doctor
 ```
 
-Alias (same behavior):
+## Prerequisites
 
-```bash
-pnpm setup:doctor
-```
+| Tool | Version | Why |
+|------|---------|-----|
+| Node.js | 20+ | Runtime for server, Metro bundler, Nx |
+| npm | (bundled) | Bootstraps Corepack |
+| JDK | 17+ | Gradle builds for Android native modules |
+| Android SDK | API 34+ | Expo bare workflow + native Opus codecs |
 
-## What it does
+The script validates all of these and exits early (or warns) if something is missing.
 
-The script runs `scripts/setup-local.sh` and performs:
+## What it does (9 steps)
 
-1. Checks for required base tools:
-   - `node`
-   - `npm`
-2. Enforces Node.js 20+
-3. Updates Corepack to the latest version (ensures compatibility with pnpm 10.23.0)
-4. Enables Corepack (`corepack enable`)
-5. Activates pinned pnpm version (`pnpm@10.23.0`)
-6. Installs workspace dependencies (`pnpm install --frozen-lockfile`)
-7. Verifies Nx is available
-8. Runs Android toolchain sanity checks:
-   - `ANDROID_HOME` presence
-   - `adb` in `PATH`
-   - `emulator` in `PATH`
+| # | Step | Blocking? |
+|---|------|-----------|
+| 1 | Validate Node 20+, npm | Yes |
+| 2 | Enable Corepack, activate `pnpm@10.23.0` | Yes |
+| 3 | `pnpm install --frozen-lockfile` + verify Nx | Yes |
+| 4 | Build `@forbiddenlan/comms` SDK (`packages/comms/dist/`) | Yes |
+| 5 | `prisma generate` for server's `@prisma/client` | Yes |
+| 6 | Seed `.env` from `.env.example` if missing | No |
+| 7 | Install Playwright chromium browsers | No |
+| 8 | Raise inotify limits on Linux (for Metro/Turbopack) | No |
+| 9 | Validate Android toolchain + `expo prebuild` | No |
 
-## Why this improves dev experience
+Steps 1–5 are blocking — the workspace won't function without them.  
+Steps 6–9 are best-effort warnings.
 
-- Removes manual Corepack/pnpm setup drift between developers
-- Uses the exact pinned package manager version from the repo
-- Gives first-time contributors one clear entry command
-- Catches common Android env issues early with actionable warnings
+## Why each step matters
+
+- **Step 4 (build comms)**: Mobile and portal depend on `@forbiddenlan/comms` via `workspace:*`. Without prebuilding, Metro can't resolve the compiled JS and you get "module not found" errors on first run.
+- **Step 5 (prisma generate)**: The server imports `@prisma/client` which needs a generated client matching the schema. Without this, the server crashes on startup with `Cannot find module '.prisma/client'`.
+- **Step 6 (seed .env)**: The mobile app reads `EXPO_PUBLIC_WS_URL` etc. from `.env`. If the file is missing (fresh clone), config.js falls back to `localhost` which won't work on a physical device.
+- **Step 7 (Playwright)**: E2E tests (`pnpm test:e2e`) need Chromium. Without it you get `browserType.launch: Executable doesn't exist`.
+- **Step 8 (inotify)**: Metro on Linux watches source files via inotify. Default limit (8192) is too low for a monorepo with `node_modules` — causes `ENOSPC: no space left on device` errors.
 
 ## Typical first-run flow
 
 ```bash
-# 1) bootstrap monorepo tooling and dependencies
+# 1) Clone and bootstrap
+git clone <repo-url> && cd TheForbiddenLAN
 pnpm setup:local
 
-# 2) start browser-based mobile UI dev
-pnpm dev:mobile
+# 2) Edit .env with the correct server URL
+vim packages/mobile/.env
+#    EXPO_PUBLIC_WS_URL=ws://134.122.32.45:3000/ws
+#    EXPO_PUBLIC_API_URL=http://134.122.32.45:3000
 
-# 3) run native Android build
-./run-android.sh
+# 3) Start dev
+pnpm dev:mobile         # browser-based mobile UI
+./run-android.sh        # native Android build on device/emulator
+pnpm dev:docs           # documentation site at http://localhost:3000
+pnpm dev:web            # admin portal at http://localhost:5174
 
-# 4) (optional) start documentation site
-pnpm dev:docs
+# 4) Run tests
+pnpm test:e2e           # Playwright E2E (24 tests, portal)
 ```
 
-Documentation site runs on `http://localhost:3000` and displays all markdown docs from `packages/docs/content/docs` using Fumadocs.
+## Environment Variables
+
+### Mobile (`packages/mobile/.env`)
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `EXPO_PUBLIC_WS_URL` | `ws://134.122.32.45:3000/ws` | WebSocket relay URL |
+| `EXPO_PUBLIC_API_URL` | `http://134.122.32.45:3000` | REST API (login, talkgroups) |
+| `EXPO_PUBLIC_DLS140_URL` | `http://192.168.111.1:3000` | DLS-140 SATCOM terminal URL |
+| `EXPO_PUBLIC_TALKGROUP` | `alpha` | Default talkgroup to join |
+| `EXPO_PUBLIC_LOOPBACK` | `false` | Echo TX audio locally (single-device testing) |
+
+### Server (`packages/server/.env`)
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `POSTGRES_USER` | `skytalk` | Postgres username |
+| `POSTGRES_PASSWORD` | `(secret)` | Postgres password |
+| `POSTGRES_DB` | `skytalk` | Database name |
+| `JWT_SECRET` | `(secret)` | HMAC secret for JWT signing |
 
 ## Documentation Site
 
-The documentation site is a separate Next.js + Fumadocs app located in `packages/docs/`.
+Next.js + Fumadocs app in `packages/docs/`.
 
-**Start the docs site:**
 ```bash
-pnpm dev:docs
+pnpm dev:docs           # http://localhost:3000
 ```
 
-**Access at:** http://localhost:3000
-
-**Adding new docs:**
-1. Create `.mdx` files in `packages/docs/content/docs/`
-2. Structure follows directory hierarchy (e.g., `content/docs/guides/setup.mdx` becomes `/docs/guides/setup`)
-3. Each file needs frontmatter:
+Add new docs as `.mdx` files in `packages/docs/content/docs/`:
 ```yaml
 ---
 title: Page Title
@@ -85,30 +107,21 @@ description: Short description
 
 ## Notes
 
-- The script automatically updates Corepack to the latest version before activating pnpm. This ensures compatibility with pnpm 10.23.0 and prevents issues with older Corepack versions bundled with Node.js.
-- If `corepack` is not installed, the script installs it globally via npm.
-- Android checks are warnings (non-blocking) so web/server developers can still bootstrap successfully.
+- If `corepack` is missing, the script installs it globally via npm.
+- Android checks are warnings (non-blocking) so web/server-only developers can still bootstrap.
 - For detailed Android troubleshooting, see [MOBILE_SETUP_TROUBLESHOOTING.md](./MOBILE_SETUP_TROUBLESHOOTING.md).
+- The `run-android.sh` script applies kernel tuning (inotify, ulimit) automatically before launching Metro.
 
 ## Troubleshooting
 
-If `pnpm setup:local` fails or you encounter issues with dev servers, check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for solutions:
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `Cannot find module '@forbiddenlan/comms'` | comms SDK not built | `pnpm --filter @forbiddenlan/comms build` |
+| `Cannot find module '.prisma/client'` | Prisma client not generated | `cd packages/server && npx prisma generate` |
+| `ENOSPC: no space left on device` | inotify limit too low | `sudo sysctl -w fs.inotify.max_user_watches=2097152` |
+| `browserType.launch: Executable doesn't exist` | Playwright browsers missing | `npx playwright install --with-deps` |
+| `Metro bundler symlink error` | PNPM symlinks not resolved | Check `metro.config.js` has `unstable_enableSymlinks: true` |
+| `OpusEncoder native module not found` | Native rebuild needed | `cd packages/mobile && npx expo prebuild --clean && npx expo run:android` |
+| Port 3000/8081 in use | Previous process lingering | `lsof -ti:3000 \| xargs kill -9` |
 
-- **inotify watch limit** / Turbopack crashes when running `pnpm dev:docs`
-- **Port already in use** (3000, 3001, 8081)
-- **Metro bundler failures** with symlink errors
-- **Android build hangs** or NDK/SDK errors
-- **Dependency conflicts** or lock file issues
-- **Node.js version mismatch**
-- And many more...
-
-Each issue includes the root cause, step-by-step solution, and prevention tips.
-
-## CI Validation
-
-The repo includes a GitHub Actions workflow (`.github/workflows/bootstrap-check.yml`) that verifies `pnpm setup:local` stays healthy on every push/PR that touches:
-- `scripts/setup-local.sh`
-- `package.json`
-- `pnpm-lock.yaml`
-
-The workflow tests against Node.js 20 and 22 on Ubuntu to catch regressions early.
+For more, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

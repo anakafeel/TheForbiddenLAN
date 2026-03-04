@@ -1,13 +1,9 @@
-import { source } from '@/source';
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
+import { source } from "@/source";
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
 
-export default function DocLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function DocLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DocsLayout tree={source.getPageTree()} nav={{ title: 'SkyTalk Docs' }}>
+    <DocsLayout tree={source.getPageTree()} nav={{ title: "SkyTalk Docs" }}>
       {children}
     </DocsLayout>
   );

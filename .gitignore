@@ -12,3 +12,7 @@ ios/
 CLAUDE.md
 # Expo
 .expo/
+
+# Playwright
+playwright-report/
+test-results/
