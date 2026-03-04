@@ -13,13 +13,14 @@
 4. [Problems Encountered & Solutions](#problems-encountered--solutions)
 5. [Walk-On Prevention (Floor Control)](#walk-on-prevention-floor-control)
 6. [Opus Codec — Native Android Integration](#opus-codec--native-android-integration)
-7. [Bandwidth Budget (22 kbps SATCOM)](#bandwidth-budget-22-kbps-satcom)
-8. [Half-Duplex Enforcement](#half-duplex-enforcement)
-9. [Loopback Testing Mode](#loopback-testing-mode)
-10. [Encryption](#encryption)
-11. [Deployment Topology](#deployment-topology)
-12. [Known Limitations](#known-limitations)
-13. [File Map (Key Files)](#file-map-key-files)
+7. [Audio Library Decisions](#audio-library-decisions)
+8. [Bandwidth Budget (22 kbps SATCOM)](#bandwidth-budget-22-kbps-satcom)
+9. [Half-Duplex Enforcement](#half-duplex-enforcement)
+10. [Loopback Testing Mode](#loopback-testing-mode)
+11. [Encryption](#encryption)
+12. [Deployment Topology](#deployment-topology)
+13. [Known Limitations](#known-limitations)
+14. [File Map (Key Files)](#file-map-key-files)
 
 ---
 
@@ -222,6 +223,98 @@ We use Android's built-in MediaCodec Opus encoder/decoder via custom Kotlin nati
 ### Module Registration
 
 `OpusEncoderPackage.kt` extends `ReactPackage`, creating both `OpusEncoderModule` and `OpusDecoderModule`. Registered in `MainApplication.kt` via `getPackages()`.
+
+---
+
+## Audio Library Decisions
+
+Four libraries make up the audio pipeline. Each was chosen after evaluating (and rejecting) alternatives.
+
+### 1. `react-native-live-audio-stream` (TX — mic capture)
+
+**What it does**: Captures raw 16-bit PCM from the microphone in real-time via Android's `AudioRecord`, delivering base64-encoded buffers to JS on each callback.
+
+**Why this library**:
+- Delivers raw PCM frames at a configurable buffer size (we use 1920 bytes = 60ms at 16kHz mono)
+- No codec applied at capture time — we need raw PCM to feed our own Opus encoder
+- Lightweight: single native module, no external dependencies
+
+**Alternatives rejected**:
+
+| Library | Why rejected |
+|---------|-------------|
+| `expo-av` Recording API | Records to a file (`.m4a`, `.caf`). Cannot get raw PCM frames in real-time. You only get the file path after `stopAndUnloadAsync()`. Useless for streaming PTT. |
+| `react-native-audio-api` | Web Audio API polyfill. Powerful but massive — pulls in AudioWorklet, AnalyserNode, etc. We only need mic → PCM. Overkill. |
+| `react-native-audio-recorder-player` | Also file-based. Same problem as expo-av Recording. |
+| `cordova-plugin-audioinput` | Capacitor/Cordova plugin. We migrated away from Capacitor. Also abandoned (last commit 2021). |
+
+**Key gotcha**: `LiveAudioStream` holds the Android audio session in recording mode even after `stop()`. If you don't explicitly switch the audio session back to playback mode (`Audio.setAudioModeAsync`), subsequent `expo-av` playback routes to the earpiece or fails silently. This cost us 2 days of debugging.
+
+### 2. `expo-av` (RX — audio playback)
+
+**What it does**: Plays audio files (WAV, MP3, M4A) through the device speaker. We write decoded PCM + WAV header to the filesystem, then `Sound.createAsync()` plays it.
+
+**Why this library**:
+- Already bundled with Expo — zero extra native dependencies
+- Handles audio focus, ducking, and routing (speaker vs earpiece) via `Audio.setAudioModeAsync`
+- Works on both Android and iOS (future)
+
+**Alternatives rejected**:
+
+| Library | Why rejected |
+|---------|-------------|
+| `react-native-audio-api` (AudioBufferSourceNode) | Could play raw PCM from memory without writing a file. But requires a full native rebuild, adds a large AudioWorklet runtime, and is pre-1.0 with breaking API changes. |
+| `expo-speech` | Text-to-speech only. Cannot play arbitrary audio. |
+| Raw `android.media.AudioTrack` via native module | Would eliminate the WAV file write (play PCM directly from memory). Optimal for latency. But requires writing a custom native module for both platforms. Future optimization. |
+
+**Key gotcha**: `expo-av` cannot play raw PCM buffers from memory — it requires a file URI. So the RX pipeline must: (1) accumulate PCM frames, (2) prepend a 44-byte WAV header, (3) write to `FileSystem.cacheDirectory`, (4) create a `Sound` from the file URI. This adds ~200ms latency between PTT_END and audio playback start. A native `AudioTrack` module would eliminate this.
+
+**Key gotcha #2**: When expo-av plays a `.m4a` file, it uses Android's MediaCodec AAC decoder. If you write raw Opus bytes to a `.m4a` file and play it, the AAC decoder interprets the Opus as corrupted AAC and outputs static/noise. This was the root cause of our original "audio static" bug.
+
+### 3. Native Opus via `MediaCodec` (encode + decode)
+
+**What it does**: Android ships `c2.android.opus.encoder` and `c2.android.opus.decoder` as software codecs in AOSP since API 29 (Android 10). Our Kotlin native modules wrap these via React Native's bridge.
+
+**Why native MediaCodec instead of JS libraries**:
+
+| Approach | Why rejected |
+|----------|-------------|
+| `opusscript` (npm) | Uses WebAssembly (Emscripten-compiled libopus). **Hermes JS engine has no WASM support.** Completely non-functional on React Native. Still in `package.json` as a legacy dep — unused. |
+| `@nickvduin/ogg-opus-decoder` | Also WASM-based. Same Hermes problem. |
+| `libopus` compiled to JSI/TurboModule | Would work but requires maintaining a C build chain (CMake, NDK) and cross-compiling for ARM. MediaCodec is already on the device — zero binary size cost. |
+| FFmpeg via `react-native-ffmpeg` | Adds a 15MB+ binary. CLI-based (spawn process per encode). Latency too high for 60ms real-time frames. |
+
+**Why MediaCodec wins**:
+- Zero binary size — already on every Android 10+ device
+- Hardware-accelerated path available on some SoCs (not Exynos 850, but Snapdragon has HW Opus)
+- Clean Java/Kotlin API via `MediaCodec.createByCodecName()`
+- Synchronous `queueInputBuffer` / `dequeueOutputBuffer` — predictable latency
+
+**Exynos 850 quirk**: Samsung's Exynos 850 (Galaxy A22) has `c2.android.opus.encoder` but its `BITRATE_MODE_CBR` flag is silently ignored — the encoder always produces VBR output. We work around this by setting the target bitrate low enough (16kbps) that VBR peaks still fit within the SATCOM budget.
+
+**48kHz decode quirk**: The Opus spec mandates internal processing at 48kHz. Android's decoder outputs 48kHz PCM regardless of the `KEY_SAMPLE_RATE` you set in `MediaFormat`. Our `OpusDecoderModule.kt` downsamples 48→16kHz in native code using a 3-tap averaging filter (every 3 samples → 1 sample). Without this, the WAV header says 16kHz but the data is 48kHz, and expo-av plays it at 1/3 speed.
+
+### 4. `opusscript` (DEAD — do not use)
+
+Still listed in `packages/mobile/package.json` as a dependency from the original Capacitor-era code. **It does not work on React Native** because Hermes lacks WebAssembly support. It should be removed from `package.json` in a future cleanup. All Opus encoding/decoding is done via the native MediaCodec modules described above.
+
+### Library Dependency Summary
+
+```
+TX Path:
+  react-native-live-audio-stream  →  OpusEncoderModule.kt (MediaCodec)  →  WebSocket
+
+RX Path:
+  WebSocket  →  OpusDecoderModule.kt (MediaCodec)  →  WAV file  →  expo-av Sound
+```
+
+| Library | Role | Native rebuild required? | Platform |
+|---------|------|------------------------|----------|
+| `react-native-live-audio-stream` | Mic capture (raw PCM) | Yes (`expo prebuild`) | Android (iOS untested) |
+| `expo-av` | Audio playback (WAV files) | No (bundled with Expo) | Android + iOS |
+| `OpusEncoderModule.kt` | Opus encode (MediaCodec) | Yes (custom native module) | Android only |
+| `OpusDecoderModule.kt` | Opus decode + downsample | Yes (custom native module) | Android only |
+| `opusscript` | **UNUSED** — Hermes has no WASM | N/A | N/A |
 
 ---
 

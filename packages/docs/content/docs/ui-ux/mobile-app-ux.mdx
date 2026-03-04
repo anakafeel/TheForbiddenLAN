@@ -156,8 +156,8 @@ All text-on-background combinations meet WCAG AA (4.5:1 contrast ratio) in both 
 
 ---
 
-## Mock Mode
+## Loopback Testing
 
-During development, the app can run without a server using `EXPO_PUBLIC_MOCK_MODE=true`. In mock mode, a `MockRelaySocket` loopback replaces the real WebSocket — PTT audio is echoed back to the sender, simulating a one-person talkgroup. This lets the UI team develop without a running server.
+For single-device testing, set `EXPO_PUBLIC_LOOPBACK=true` in `.env`. TX audio is stashed locally and played back through the full RX decode pipeline after PTT release. This verifies the entire encode → encrypt → decrypt → decode → playback chain on one device without needing the relay server or a second device.
 
 See [Environment & Config →](/docs/infrastructure/environment) for the full variable list.
