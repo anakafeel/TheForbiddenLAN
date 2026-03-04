@@ -26,4 +26,4 @@ Prior to the Expo migration, the package used Vite + `react-native-web` for brow
 
 ## Resilience and Testing Architecture
 - **Auto-Reconnect**: The `RelaySocket` implements an exponential backoff reconnect strategy starting at 1s, doubling each attempt, capped at 30s maximum interval. **Unlimited retries** — the app must never permanently give up reconnecting because satellite links drop regularly during orbital handoffs.
-- **Local Loopback**: To avoid burning satellite data or requiring the external relay during frontend development, the architecture includes a `MockRelaySocket` implementation. It simulates server RTT latency (50ms) and provides local loopback echo of messages, allowing frontend engineers to build React Native views completely offline.
+- **Loopback Testing**: For single-device testing, the app supports a loopback mode (`EXPO_PUBLIC_LOOPBACK=true`). TX audio is stashed locally and played back through the full RX pipeline after PTT release, verifying the entire encode → encrypt → decrypt → decode → playback chain without needing a second device.
