@@ -6,5 +6,4 @@ export * from './RelaySocket';
 export * from './FloorControl';
 export * from './GPSPoller';
 export * from './AudioPipeline';
-export * from './MockRelaySocket';
 export * from './Encryption';

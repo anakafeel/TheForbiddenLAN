@@ -1,7 +1,6 @@
 // ForbiddenLANComms — main class consumed by the mobile app via useComms() hook
 import { DLS140Client } from './DLS140Client';
 import { RelaySocket } from './RelaySocket';
-import { MockRelaySocket } from './MockRelaySocket';
 import { FloorControl } from './FloorControl';
 import { GPSPoller } from './GPSPoller';
 import { AudioPipeline } from './AudioPipeline';
@@ -11,8 +10,10 @@ export interface ForbiddenLANConfig {
   relayUrl: string;
   dls140Url?: string;
   deviceId: string;
-  mock?: boolean;
 }
+
+// Callback type for floor control events (used by mobile UI)
+export type FloorDenyCallback = (talkgroup: string, holder: string) => void;
 
 export class ForbiddenLANComms {
   private dls: DLS140Client;
@@ -30,15 +31,21 @@ export class ForbiddenLANComms {
   private isTransmitting = false;
 
   // PTT Watchdog
+  private currentSessionId = 0;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly MAX_TX_MS = 60000;
 
   // Signal Polling
   private signalPollingTimer: (() => void) | null = null;
 
+  // Floor Control — server-authoritative walk-on prevention
+  private floorGranted = false;         // true once server sends FLOOR_GRANT for our PTT
+  private onFloorDeny: FloorDenyCallback | null = null;
+  private remoteFloorHolder: string | null = null;  // tracks who currently holds the floor
+
   constructor(private config: ForbiddenLANConfig) {
     this.dls   = new DLS140Client(config.dls140Url);
-    this.relay = config.mock ? new MockRelaySocket() : new RelaySocket();
+    this.relay = new RelaySocket();
     this.floor = new FloorControl();
     this.gpsPoller = new GPSPoller(this.dls, this.relay, config.deviceId);
   }
@@ -60,6 +67,44 @@ export class ForbiddenLANComms {
 
     this.relay.on('connect', () => {
        this.relay.send({ type: 'SYNC_TIME', clientTime: Date.now() });
+    });
+
+    // ── Floor Control message handling ──────────────────────────────
+    this.relay.on('FLOOR_GRANT', (msg: RelayMessage) => {
+      if (msg.type === 'FLOOR_GRANT') {
+        const grantMsg = msg as Extract<RelayMessage, { type: 'FLOOR_GRANT' }>;
+        this.remoteFloorHolder = grantMsg.winner;
+        this.floor.setFloor(grantMsg.talkgroup, grantMsg.winner, grantMsg.timestamp);
+        if (grantMsg.winner === this.config.deviceId) {
+          this.floorGranted = true;
+          console.log(`[ForbiddenLANComms] Floor GRANTED on ${grantMsg.talkgroup}`);
+        } else {
+          console.log(`[ForbiddenLANComms] Floor held by ${grantMsg.winner} on ${grantMsg.talkgroup}`);
+        }
+      }
+    });
+
+    this.relay.on('FLOOR_DENY', (msg: RelayMessage) => {
+      if (msg.type === 'FLOOR_DENY') {
+        const denyMsg = msg as any;
+        console.warn(`[ForbiddenLANComms] Floor DENIED on ${denyMsg.talkgroup} — held by ${denyMsg.holder}`);
+        // Auto-stop our PTT immediately — we can't transmit
+        if (this.isTransmitting) {
+          this._forceStopPTT();
+        }
+        if (this.onFloorDeny) {
+          this.onFloorDeny(denyMsg.talkgroup, denyMsg.holder);
+        }
+      }
+    });
+
+    this.relay.on('FLOOR_RELEASED', (msg: RelayMessage) => {
+      if (msg.type === 'FLOOR_RELEASED') {
+        const relMsg = msg as any;
+        this.remoteFloorHolder = null;
+        this.floor.release(relMsg.talkgroup);
+        console.log(`[ForbiddenLANComms] Floor released on ${relMsg.talkgroup} (was ${relMsg.previousHolder})`);
+      }
     });
 
     if (dlsUser && dlsPass) {
@@ -85,16 +130,31 @@ export class ForbiddenLANComms {
 
   startPTT(): void {
     if (!this.activeTalkgroup) return;
+    // Check if someone else already holds the floor (client-side pre-check).
+    // Server is the authority, but this avoids wasting a round-trip.
+    if (this.remoteFloorHolder && this.remoteFloorHolder !== this.config.deviceId) {
+      console.warn(`[ForbiddenLANComms] PTT blocked — floor held by ${this.remoteFloorHolder}`);
+      if (this.onFloorDeny) {
+        this.onFloorDeny(this.activeTalkgroup, this.remoteFloorHolder);
+      }
+      return;
+    }
+
     this.isTransmitting = true; // Half-Duplex trap fix
+    this.floorGranted = false;  // will be set true by FLOOR_GRANT from server
     const currentSeq = ++this.seq;
     const synchronizedTime = Date.now() + this.serverTimeOffset;
     // Generate a quick random sessionId for this PTT press
     const sessionId = Math.floor(Math.random() * 0xFFFFFFFF);
+    this.currentSessionId = sessionId;
     console.log(`[comms] PTT_START sessionId: 0x${sessionId.toString(16).toUpperCase()} — share with server operator to verify relay routing`);
     this.relay.send({ type: 'PTT_START', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId, timestamp: synchronizedTime, seq: currentSeq });
+    // Start recording optimistically — if FLOOR_DENY arrives, _forceStopPTT() stops it.
+    // This gives zero-latency PTT start while the server arbitrates.
     this.audio = new AudioPipeline(
       this.relay,
-      sessionId
+      sessionId,
+      this.activeTalkgroup
     );
     this.audio.startRecording();
 
@@ -122,10 +182,53 @@ export class ForbiddenLANComms {
     this.audio?.stopRecording();
     this.audio = null;
     this.isTransmitting = false; // Half-Duplex trap fix
+    this.floorGranted = false;
     if (this.activeTalkgroup) {
       const synchronizedTime = Date.now() + this.serverTimeOffset;
-      this.relay.send({ type: 'PTT_END', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, timestamp: synchronizedTime, seq: this.seq });
+      this.relay.send({ type: 'PTT_END', talkgroup: this.activeTalkgroup, sender: this.config.deviceId, sessionId: this.currentSessionId, timestamp: synchronizedTime, seq: this.seq });
     }
+  }
+
+  /**
+   * Force-stop PTT when FLOOR_DENY is received from the server.
+   * Stops recording and releases resources but does NOT send PTT_END
+   * (the server already denied our request — there's nothing to end).
+   */
+  private _forceStopPTT(): void {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    this.audio?.stopRecording();
+    this.audio = null;
+    this.isTransmitting = false;
+    this.floorGranted = false;
+    console.warn('[ForbiddenLANComms] PTT force-stopped due to FLOOR_DENY');
+  }
+
+  /**
+   * Register a callback for floor denial events (walk-on prevention).
+   * The mobile UI should use this to show "Channel Busy" feedback.
+   */
+  setOnFloorDeny(callback: FloorDenyCallback | null): void {
+    this.onFloorDeny = callback;
+  }
+
+  /**
+   * Check if the floor is free on the active talkgroup.
+   * Returns true if no one holds the floor, false if channel is busy.
+   */
+  isFloorFree(talkgroup?: string): boolean {
+    const tg = talkgroup || this.activeTalkgroup;
+    return !this.remoteFloorHolder || this.remoteFloorHolder === this.config.deviceId;
+  }
+
+  /**
+   * Get the current floor holder device ID for a talkgroup.
+   * Returns null if the floor is free.
+   */
+  getRemoteFloorHolder(): string | null {
+    return this.remoteFloorHolder;
   }
 
   sendText(talkgroupId: string, text: string): void {
@@ -177,6 +280,8 @@ export class ForbiddenLANComms {
     this.audio?.stopRecording();
     this.gpsPoller.stop();
     this.isTransmitting = false; // Half-Duplex fix: reset flag on disconnect
+    this.floorGranted = false;
+    this.remoteFloorHolder = null;
     if (this.signalPollingTimer) {
       this.signalPollingTimer();
       this.signalPollingTimer = null;
