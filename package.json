@@ -16,6 +16,9 @@
     "build:comms": "nx build comms",
     "build:all": "nx run-many --target=build --all",
     "test:all": "nx run-many --target=test --all",
+    "test:e2e": "npx playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:ui": "npx playwright test --config=e2e/playwright.config.ts --ui",
+    "test:e2e:headed": "npx playwright test --config=e2e/playwright.config.ts --headed",
     "lint:all": "nx run-many --target=lint --all",
     "android": "expo run:android",
     "ios": "expo run:ios"
@@ -26,6 +29,7 @@
     "@nx/node": "18.0.0",
     "@nx/react": "18.0.0",
     "@nx/vite": "18.0.0",
+    "@playwright/test": "^1.58.2",
     "eslint": "8.57.0",
     "nx": "18.0.0",
     "typescript": "5.3.3"
@@ -39,15 +43,15 @@
   },
   "dependencies": {
     "expo": "~54.0.33",
+    "fumadocs-core": "^14.2.9",
+    "fumadocs-mdx": "^14.2.9",
+    "fumadocs-ui": "^14.2.9",
     "next": "16.1.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-get-random-values": "^2.0.0",
     "react-native-quick-crypto": "^1.0.15",
-    "fumadocs-core": "^14.2.9",
-    "fumadocs-mdx": "^14.2.9",
-    "fumadocs-ui": "^14.2.9",
     "tailwindcss": "^4.0.0"
   }
 }
