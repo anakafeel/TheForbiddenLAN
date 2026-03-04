@@ -1,18 +1,32 @@
 // comms.js — singleton ForbiddenLANComms + Encryption + audio playback.
 // All values come from CONFIG so no code changes are needed when switching to real backend.
+//
+// FAST REFRESH SAFETY: All singletons are stored on `global` so they survive
+// Metro Fast Refresh cycles. Without this, module re-evaluation creates new
+// uninitialized instances, orphaning the WebSocket connection → red screen.
 import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { CONFIG } from '../config';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { initOpusDecoder, decodeOpusFrame, destroyOpusDecoder } from './opusDecoder';
+import { startStreamPlayer, writeStreamPCM, stopStreamPlayer } from './audioStreamPlayer';
 
-export const encryption = new Encryption();
+// ── Fast Refresh–safe singletons ──────────────────────────────────────────────
+// On first load, create and stash on global. On subsequent re-evaluations (hot
+// reload), reuse the existing instances so the WebSocket/crypto state survives.
+if (!global.__COMMS_SINGLETON__) {
+  global.__COMMS_SINGLETON__ = new ForbiddenLANComms({
+    relayUrl:  CONFIG.WS_URL,
+    dls140Url: CONFIG.DLS140_URL,
+    deviceId:  CONFIG.DEVICE_ID,
+  });
+}
+if (!global.__ENCRYPTION_SINGLETON__) {
+  global.__ENCRYPTION_SINGLETON__ = new Encryption();
+}
 
-export const comms = new ForbiddenLANComms({
-  relayUrl:  CONFIG.WS_URL,
-  dls140Url: CONFIG.DLS140_URL,
-  deviceId:  CONFIG.DEVICE_ID,
-});
+export const comms = global.__COMMS_SINGLETON__;
+export const encryption = global.__ENCRYPTION_SINGLETON__;
 
 // ── Floor Control state (walk-on prevention) ──────────────────────────────────
 // Exported so UI components (PTTScreen) can check if channel is busy
@@ -43,22 +57,27 @@ export function getFloorState() {
   return { busy: _channelBusy, holder: _floorHolder };
 }
 
-// ── Audio playback (Opus decode → WAV → expo-av) ─────────────────────────────
+// ── Audio playback (Opus decode → native AudioTrack streaming) ────────────────
 //
-// RX pipeline: PTT_AUDIO → decrypt → Opus decode → accumulate PCM → WAV → play
+// RX pipeline (streaming — low latency):
+//   On first PTT_AUDIO: init decoder + start AudioTrack.
+//   On each PTT_AUDIO:  decrypt → Opus decode → write PCM to AudioTrack (immediate).
+//   On PTT_END:          stop AudioTrack, destroy decoder.
 //
-// On PTT_AUDIO: decrypt → Opus decode → accumulate raw 16-bit PCM.
-// On PTT_END:   concatenate PCM → prepend WAV header → write .wav → play.
+// Fallback: If the native AudioStreamPlayer module is unavailable, falls back to
+// the legacy WAV-buffered path (accumulate → WAV file → expo-av).
 //
 // Loopback mode (LIVE single-device testing):
 //   TX chunks are also fed into the RX accumulator so you can hear yourself.
 //   Enabled via EXPO_PUBLIC_LOOPBACK=true in .env.
 
-const _pcmAccumulator = []; // base64 PCM strings (decoded from Opus)
+const _pcmAccumulator = []; // base64 PCM strings — used by legacy fallback + loopback
 let _decoderReady = false;
 let _audioModeSet = false;
 let _rxInactivityTimer = null;
 const RX_INACTIVITY_TIMEOUT_MS = 8000; // flush accumulated audio if no chunk arrives for 8s
+let _streamPlayerActive = false; // true while AudioTrack is streaming
+let _useStreamPlayer = true; // set to false if native module is missing
 
 /**
  * Ensure the audio subsystem is configured for SPEAKER playback.
@@ -92,28 +111,95 @@ async function _ensurePlaybackMode() {
 function _resetRxTimer() {
   if (_rxInactivityTimer) clearTimeout(_rxInactivityTimer);
   _rxInactivityTimer = setTimeout(async () => {
-    if (_pcmAccumulator.length > 0) {
-      console.warn(`[comms] RX inactivity timeout (${RX_INACTIVITY_TIMEOUT_MS}ms) — flushing ${_pcmAccumulator.length} buffered frames`);
+    if (_streamPlayerActive || _pcmAccumulator.length > 0) {
+      console.warn(`[comms] RX inactivity timeout (${RX_INACTIVITY_TIMEOUT_MS}ms) — flushing (stream=${_streamPlayerActive}, legacy=${_pcmAccumulator.length} frames)`);
       await _flushAudio();
     }
   }, RX_INACTIVITY_TIMEOUT_MS);
 }
 
 /**
- * Decode one incoming Opus frame to PCM and accumulate it.
- * @param {string} base64Opus  base64-encoded Opus frame (already decrypted)
+ * Ensure the Opus decoder is ready (lazy init).
  */
-async function _decodeAndAccumulate(base64Opus) {
-  // Lazy-init the native Opus decoder
+async function _ensureDecoderReady() {
   if (!_decoderReady) {
     try {
       await initOpusDecoder();
       _decoderReady = true;
     } catch (e) {
       console.warn('[comms] failed to init Opus decoder:', e.message);
-      return;
+      return false;
     }
   }
+  return true;
+}
+
+/**
+ * Start the native AudioTrack for streaming playback.
+ * Falls back to legacy WAV mode if the native module is missing.
+ */
+async function _startStreaming() {
+  if (!_useStreamPlayer || _streamPlayerActive) return;
+  try {
+    await startStreamPlayer();
+    _streamPlayerActive = true;
+    console.log('[comms] AudioTrack streaming started');
+  } catch (e) {
+    console.warn('[comms] AudioStreamPlayer unavailable, using legacy WAV fallback:', e.message);
+    _useStreamPlayer = false;
+  }
+}
+
+/**
+ * Stop the native AudioTrack streaming.
+ */
+async function _stopStreaming() {
+  if (!_streamPlayerActive) return;
+  try {
+    await stopStreamPlayer();
+  } catch (e) {
+    console.warn('[comms] stopStreamPlayer error:', e.message);
+  }
+  _streamPlayerActive = false;
+  console.log('[comms] AudioTrack streaming stopped');
+}
+
+/**
+ * Decode one Opus frame and either stream it to AudioTrack or accumulate for legacy path.
+ * @param {string} base64Opus  base64-encoded Opus frame (already decrypted)
+ */
+async function _decodeAndPlay(base64Opus) {
+  if (!(await _ensureDecoderReady())) return;
+
+  const pcmBase64 = await decodeOpusFrame(base64Opus);
+  if (!pcmBase64 || pcmBase64.length === 0) return;
+
+  if (_useStreamPlayer) {
+    // Streaming path: start AudioTrack on first frame, write immediately
+    if (!_streamPlayerActive) {
+      await _ensurePlaybackMode();
+      await _startStreaming();
+    }
+    try {
+      await writeStreamPCM(pcmBase64);
+    } catch (e) {
+      console.warn('[comms] writeStreamPCM error, falling back to legacy:', e.message);
+      _useStreamPlayer = false;
+      _streamPlayerActive = false;
+      _pcmAccumulator.push(pcmBase64);
+    }
+  } else {
+    // Legacy fallback: accumulate for WAV flush
+    _pcmAccumulator.push(pcmBase64);
+  }
+}
+
+/**
+ * Decode one incoming Opus frame to PCM and accumulate it (legacy + loopback path).
+ * @param {string} base64Opus  base64-encoded Opus frame (already decrypted)
+ */
+async function _decodeAndAccumulate(base64Opus) {
+  if (!(await _ensureDecoderReady())) return;
 
   const pcmBase64 = await decodeOpusFrame(base64Opus);
   if (pcmBase64 && pcmBase64.length > 0) {
@@ -122,24 +208,43 @@ async function _decodeAndAccumulate(base64Opus) {
 }
 
 /**
- * Build a valid WAV file (header + PCM) from accumulated base64 PCM chunks.
+ * Stop streaming (if active), destroy decoder, and flush any legacy-accumulated audio.
  */
 async function _flushAudio() {
-  // Clear any pending inactivity timer
+  // ── Streaming path: just stop the AudioTrack (audio already played in real-time)
+  if (_streamPlayerActive) {
+    await _stopStreaming();
+  }
+
+  // Clear any pending inactivity timer early
   if (_rxInactivityTimer) {
     clearTimeout(_rxInactivityTimer);
     _rxInactivityTimer = null;
   }
-
-  if (_pcmAccumulator.length === 0) return;
-
-  const frameCount = _pcmAccumulator.length;
 
   // Destroy decoder after transmission ends (will re-init on next PTT)
   if (_decoderReady) {
     try { await destroyOpusDecoder(); } catch (_) {}
     _decoderReady = false;
   }
+
+  // If there's nothing in the legacy accumulator, we're done
+  // (streaming mode already played everything in real-time)
+  if (_pcmAccumulator.length === 0) return;
+
+  // ── Legacy fallback: flush accumulated PCM as WAV
+  await _flushAudioLegacy();
+}
+
+/**
+ * Legacy WAV-based flush: build WAV file from accumulated base64 PCM chunks.
+ * Used as fallback when AudioStreamPlayer native module is unavailable,
+ * and for loopback playback.
+ */
+async function _flushAudioLegacy() {
+  if (_pcmAccumulator.length === 0) return;
+
+  const frameCount = _pcmAccumulator.length;
 
   // Decode all base64 PCM chunks to binary Uint8Arrays
   const pcmChunks = [];
@@ -256,7 +361,10 @@ export function loopbackStash(encryptedBase64) {
 }
 
 // ── One-time initialization ───────────────────────────────────────────────────
-let _initialized = false;
+// Stored on global so Fast Refresh doesn't reset it to false.
+if (global.__COMMS_INITIALIZED__ === undefined) {
+  global.__COMMS_INITIALIZED__ = false;
+}
 
 /**
  * Connect to the relay and wire up audio playback.
@@ -265,8 +373,8 @@ let _initialized = false;
  * Idempotent — safe to call multiple times, only the first call takes effect.
  */
 export async function initComms(jwt) {
-  if (_initialized) return;
-  _initialized = true;
+  if (global.__COMMS_INITIALIZED__) return;
+  global.__COMMS_INITIALIZED__ = true;
 
   // Init AES-GCM-256 key (hardcoded test key — replaced by KDF when ready)
   await encryption.init();
@@ -306,9 +414,9 @@ export async function initComms(jwt) {
 
       try {
         const decrypted = await encryption.decrypt(msg.data);
-        await _decodeAndAccumulate(decrypted);
+        await _decodeAndPlay(decrypted);
         _resetRxTimer();
-        console.log(`[comms] RX chunk decoded & accumulated (${_pcmAccumulator.length} frames)`);
+        console.log(`[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`);
       } catch (e) {
         console.warn('[comms] audio decrypt/decode error:', e.message);
       }

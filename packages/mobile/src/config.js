@@ -12,11 +12,14 @@
  *   await connectComms(jwt);
  */
 
-/** Returns a stable device ID using Math.random (no localStorage on native). */
+/** Returns a stable device ID that survives Fast Refresh / hot reload. */
 function _stableDeviceId() {
-  // On native we can't use localStorage; a simple unique ID per app launch is fine.
+  // Persist on global so Metro Fast Refresh doesn't generate a new ID each cycle.
   // For production, use expo-secure-store.
-  return 'dev-' + Math.random().toString(36).slice(2, 10);
+  if (!global.__DEVICE_ID__) {
+    global.__DEVICE_ID__ = 'dev-' + Math.random().toString(36).slice(2, 10);
+  }
+  return global.__DEVICE_ID__;
 }
 
 export const CONFIG = {

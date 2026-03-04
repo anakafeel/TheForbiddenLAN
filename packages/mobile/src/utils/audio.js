@@ -17,6 +17,13 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { comms, encryption, loopbackStash } from './comms';
 import { initOpusEncoder, encodeOpusFrame, destroyOpusEncoder } from './opusEncoder';
 
+// Fast Refresh safety: if this module is re-evaluated while recording,
+// stop the old stream so we don't stack up duplicate event listeners.
+if (global.__AUDIO_IS_RECORDING__) {
+  try { LiveAudioStream.stop(); } catch (_) {}
+  global.__AUDIO_IS_RECORDING__ = false;
+}
+
 let isRecording = false;
 let chunkIndex = 0;
 
@@ -91,6 +98,7 @@ export async function startAudioStream() {
 
     LiveAudioStream.start();
     isRecording = true;
+    global.__AUDIO_IS_RECORDING__ = true;
     chunkIndex = 0;
     console.log(
       `[audio] started — Opus 16kHz mono 16kbps CBR, ${FRAME_DURATION_MS}ms frames ` +
@@ -107,6 +115,7 @@ export async function stopAudioStream() {
   try {
     LiveAudioStream.stop();
     isRecording = false;
+    global.__AUDIO_IS_RECORDING__ = false;
     await destroyOpusEncoder();
     console.log('[audio] stopped');
   } catch (err) {
