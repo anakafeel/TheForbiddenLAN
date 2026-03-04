@@ -3,6 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import type { WebSocket } from 'ws';
+import dgram from 'dgram';
 
 // talkgroup ID → set of connected raw WebSockets
 const rooms = new Map<string, Set<WebSocket>>();
@@ -13,6 +14,58 @@ const socketRooms = new Map<WebSocket, Set<string>>();
 // sessionId (4-byte int from PTT_START) → talkgroup — used to route PTT_AUDIO
 // without requiring talkgroup on every audio chunk (bandwidth optimisation)
 const sessionTalkgroup = new Map<number, string>();
+
+// ── UDP Transport Layer ───────────────────────────────────────────────────────
+export const udpServer = dgram.createSocket('udp4');
+// userId → remote UDP address/port
+export const udpClients = new Map<string, dgram.RemoteInfo>();
+
+export function startUdpServer(options: { port: number }) {
+  udpServer.on('message', (msg, rinfo) => {
+    let parsed: any;
+    try { parsed = JSON.parse(msg.toString()); } catch { return; }
+
+    if (parsed.type === 'UDP_REGISTER') {
+      if (parsed.userId) udpClients.set(parsed.userId, rinfo);
+      return;
+    }
+
+    if (parsed.type === 'PTT_AUDIO') {
+      const tg = sessionTalkgroup.get(parsed.sessionId as number);
+      if (!tg) return;
+
+      const holder = talkgroupFloor.get(tg);
+      if (!holder || holder.sessionId !== parsed.sessionId) return;
+
+      // Update sender's UDP address just in case
+      udpClients.set(holder.senderId, rinfo);
+
+      const room = rooms.get(tg);
+      if (!room) return;
+
+      for (const peer of room) {
+        const user = socketUser.get(peer);
+        if (!user || user.userId === holder.senderId) continue; // Don't echo to sender
+
+        const peerUdp = udpClients.get(user.userId);
+        if (peerUdp) {
+          udpServer.send(new Uint8Array(msg), peerUdp.port, peerUdp.address);
+        } else if (peer.readyState === 1) {
+          peer.send(msg.toString());
+        }
+      }
+    }
+  });
+
+  udpServer.on('listening', () => {
+    const address = udpServer.address();
+    console.log(`[hub] UDP server listening on ${address.address}:${address.port}`);
+  });
+
+  udpServer.bind(options.port);
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 
 // ── Floor Control (Walk-On Prevention) ────────────────────────────────────────
 // Server is the single source of truth for who holds the floor per talkgroup.
@@ -89,12 +142,20 @@ function broadcastPresence(talkgroup: string) {
 }
 
 // Send a message to everyone in a talkgroup except the sender
-function fanOut(sender: WebSocket, talkgroup: string, raw: string) {
+function fanOut(sender: WebSocket, talkgroup: string, raw: string, isAudio = false) {
   const room = rooms.get(talkgroup);
   if (!room) return;
   for (const peer of room) {
-    if (peer !== sender && peer.readyState === 1) {
-      peer.send(raw);
+    if (peer !== sender) {
+      const user = socketUser.get(peer);
+      const peerUdp = user ? udpClients.get(user.userId) : undefined;
+
+      // If it's an audio message and the peer has a registered UDP address, route via UDP
+      if (isAudio && peerUdp) {
+        udpServer.send(raw, peerUdp.port, peerUdp.address);
+      } else if (peer.readyState === 1) {
+        peer.send(raw);
+      }
     }
   }
 }
@@ -248,7 +309,7 @@ export async function registerHub(app: FastifyInstance) {
             break;
           }
 
-          fanOut(socket, tg, rawStr);
+          fanOut(socket, tg, rawStr, true); // true = isAudio, route over UDP if possible
           break;
         }
 
