@@ -2,6 +2,7 @@ import { router, usePathname } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAppStore } from '../store';
 import { theme } from '../theme';
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { mode, authRole, isAuthenticated } = useAppStore();
 
   return (
     <View style={styles.sidebar}>
@@ -39,7 +41,8 @@ export default function Sidebar() {
 
       <View style={styles.footer}>
         <Text style={styles.footerLabel}>Network Core</Text>
-        <Text style={styles.footerValue}>SYNCED</Text>
+        <Text style={styles.footerValue}>{mode === 'live' ? 'LIVE' : 'MOCK'}</Text>
+        <Text style={styles.footerMeta}>{isAuthenticated ? `role:${authRole ?? 'unknown'}` : 'role:guest'}</Text>
       </View>
     </View>
   );
@@ -113,9 +116,14 @@ const styles = StyleSheet.create({
   },
   footerValue: {
     marginTop: theme.spacing.xs,
-    color: theme.colors.success,
+    color: theme.colors.info,
     fontSize: theme.typography.body,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  footerMeta: {
+    marginTop: 2,
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.caption,
   },
 });

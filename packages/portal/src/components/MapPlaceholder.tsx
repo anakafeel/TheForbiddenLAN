@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Device, Router } from '../store';
@@ -11,68 +11,97 @@ interface MapPlaceholderProps {
   onSelectRouter: (id: string) => void;
 }
 
-const routerCoords: Record<string, { x: number; y: number }> = {
-  'rtr-nyc-01': { x: 190, y: 110 },
-  'rtr-nyc-02': { x: 340, y: 90 },
-  'rtr-nyc-03': { x: 280, y: 220 },
-  'rtr-nyc-04': { x: 160, y: 250 },
-};
+const CANVAS_WIDTH = 780;
+const CANVAS_HEIGHT = 520;
 
 export function MapPlaceholder({ routers, devices, selectedRouterId, onSelectRouter }: MapPlaceholderProps) {
+  const projection = useMemo(() => buildProjection(devices), [devices]);
+
   return (
     <View style={styles.mapFrame}>
       <View style={styles.mapCanvas}>
-        <Text style={styles.mapTitle}>Metro Coverage Grid</Text>
+        <Text style={styles.mapTitle}>Coverage Surface</Text>
 
-        {routers.map((router) => {
-          const point = routerCoords[router.id] ?? { x: 100, y: 100 };
+        {routers.map((router, index) => {
+          const point = projection.project(router.lat, router.lng, index);
           const selected = selectedRouterId === router.id;
+          const style = {
+            ...styles.routerMarker,
+            left: point.x,
+            top: point.y,
+            backgroundColor: selected ? theme.colors.accent : theme.colors.background.tertiary,
+            borderColor: selected ? theme.colors.borderStrong : theme.colors.border,
+          };
+
           return (
-            <Pressable
-              key={router.id}
-              onPress={() => onSelectRouter(router.id)}
-              style={[
-                styles.routerMarker,
-                {
-                  left: point.x,
-                  top: point.y,
-                  backgroundColor: selected ? '#2f8cff' : '#1f5e9f',
-                  borderColor: selected ? '#9bc6ff' : '#3d74a8',
-                },
-              ]}
-            >
-              <Text style={styles.routerMarkerText}>{router.name.replace('NYC-', '')}</Text>
+            <Pressable key={router.id} onPress={() => onSelectRouter(router.id)} style={style}>
+              <Text style={styles.routerMarkerText}>{router.name}</Text>
             </Pressable>
           );
         })}
 
         {devices.map((device, index) => {
-          const routerPoint = routerCoords[device.routerId] ?? { x: 80, y: 80 };
-          const jitterX = (index % 3) * 20 - 20;
-          const jitterY = (index % 4) * 12 - 12;
-          return (
-            <View
-              key={device.id}
-              style={[
-                styles.deviceMarker,
-                {
-                  left: routerPoint.x + jitterX,
-                  top: routerPoint.y + 22 + jitterY,
-                  backgroundColor:
-                    device.status === 'online' ? '#4abf7b' : device.status === 'degraded' ? '#f3b445' : '#eb5f73',
-                },
-              ]}
-            />
-          );
+          const basePoint = projection.project(device.lat, device.lng, index + 20);
+          const markerStyle = {
+            ...styles.deviceMarker,
+            left: basePoint.x + ((index % 3) - 1) * 14,
+            top: basePoint.y + 26 + (index % 4) * 8,
+            backgroundColor:
+              device.status === 'online'
+                ? theme.colors.success
+                : device.status === 'degraded'
+                  ? theme.colors.warning
+                  : theme.colors.danger,
+          };
+
+          return <View key={device.id} style={markerStyle} />;
         })}
       </View>
 
       <View style={styles.legend}>
-        <Text style={styles.legendText}>Router Marker: Blue</Text>
-        <Text style={styles.legendText}>Device Marker: Green/Amber/Red = online/degraded/offline</Text>
+        <Text style={styles.legendText}>Routers: blue-gray blocks</Text>
+        <Text style={styles.legendText}>Devices: green / amber / red markers</Text>
+        <Text style={styles.legendText}>Map projects last known GPS points</Text>
       </View>
     </View>
   );
+}
+
+function buildProjection(devices: Device[]) {
+  const withGps = devices.filter((device) => typeof device.lat === 'number' && typeof device.lng === 'number');
+
+  if (withGps.length === 0) {
+    return {
+      project: (_lat?: number, _lng?: number, index = 0) => {
+        const col = index % 4;
+        const row = Math.floor(index / 4) % 3;
+        return { x: 80 + col * 170, y: 90 + row * 120 };
+      },
+    };
+  }
+
+  const lats = withGps.map((device) => device.lat as number);
+  const lngs = withGps.map((device) => device.lng as number);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latRange = Math.max(maxLat - minLat, 0.005);
+  const lngRange = Math.max(maxLng - minLng, 0.005);
+
+  return {
+    project: (lat?: number, lng?: number, index = 0) => {
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        const col = index % 4;
+        const row = Math.floor(index / 4) % 3;
+        return { x: 80 + col * 170, y: 90 + row * 120 };
+      }
+
+      const x = ((lng - minLng) / lngRange) * (CANVAS_WIDTH - 120) + 50;
+      const y = ((maxLat - lat) / latRange) * (CANVAS_HEIGHT - 140) + 70;
+      return { x, y };
+    },
+  };
 }
 
 const styles = StyleSheet.create({
@@ -87,7 +116,7 @@ const styles = StyleSheet.create({
   mapCanvas: {
     flex: 1,
     minHeight: 520,
-    backgroundColor: '#0e1824',
+    backgroundColor: theme.colors.background.secondary,
     position: 'relative',
   },
   mapTitle: {
@@ -107,6 +136,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
+    maxWidth: 160,
   },
   routerMarkerText: {
     color: theme.colors.textPrimary,

@@ -1,5 +1,6 @@
 export type OnlineState = 'online' | 'offline' | 'degraded';
 export type UserRole = 'dispatcher' | 'operator' | 'field' | 'admin';
+export type DataMode = 'mock' | 'live';
 
 export interface Router {
   id: string;
@@ -10,6 +11,8 @@ export interface Router {
   assignedChannels: string[];
   connectedDeviceIds: string[];
   lastHeartbeat: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface Device {
@@ -22,6 +25,13 @@ export interface Device {
   assignedTalkgroup: string;
   lastGps: string;
   firmware: string;
+  serial?: string;
+  site?: string;
+  active?: boolean;
+  lat?: number;
+  lng?: number;
+  alt?: number;
+  updatedAt?: string;
 }
 
 export interface Channel {
@@ -33,6 +43,7 @@ export interface Channel {
   encrypted: boolean;
   locked: boolean;
   muted: boolean;
+  rotationCounter?: number;
 }
 
 export interface User {
@@ -44,6 +55,7 @@ export interface User {
   keyGroupId: string;
   status: OnlineState;
   suspended: boolean;
+  createdAt?: string;
 }
 
 export interface Transmission {

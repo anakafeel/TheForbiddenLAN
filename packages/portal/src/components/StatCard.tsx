@@ -11,8 +11,17 @@ interface StatCardProps {
 }
 
 export function StatCard({ label, value, hint, tone = 'default' }: StatCardProps) {
+  const toneStyle =
+    tone === 'good'
+      ? styles.goodCard
+      : tone === 'warn'
+        ? styles.warnCard
+        : tone === 'danger'
+          ? styles.dangerCard
+          : styles.card;
+
   return (
-    <View style={[styles.card, tone !== 'default' && styles[`${tone}Card`]]}>
+    <View style={toneStyle}>
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -23,6 +32,7 @@ export function StatCard({ label, value, hint, tone = 'default' }: StatCardProps
 const styles = StyleSheet.create({
   card: {
     minHeight: 112,
+    minWidth: 190,
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderWidth: 1,
@@ -31,13 +41,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   goodCard: {
-    borderColor: '#22553c',
+    minHeight: 112,
+    minWidth: 190,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.success,
+    borderWidth: 1,
+    borderRadius: theme.layout.cardRadius,
+    padding: theme.spacing.md,
+    justifyContent: 'space-between',
   },
   warnCard: {
-    borderColor: '#644c24',
+    minHeight: 112,
+    minWidth: 190,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.warning,
+    borderWidth: 1,
+    borderRadius: theme.layout.cardRadius,
+    padding: theme.spacing.md,
+    justifyContent: 'space-between',
   },
   dangerCard: {
-    borderColor: '#61303a',
+    minHeight: 112,
+    minWidth: 190,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.danger,
+    borderWidth: 1,
+    borderRadius: theme.layout.cardRadius,
+    padding: theme.spacing.md,
+    justifyContent: 'space-between',
   },
   label: {
     color: theme.colors.textSecondary,

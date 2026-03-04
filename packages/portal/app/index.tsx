@@ -6,25 +6,43 @@ import { useAppStore } from '../src/store';
 import { sharedStyles, theme } from '../src/theme';
 
 export default function DashboardPage() {
-  const { routers, devices, channels, users, transmissions, activities } = useAppStore();
+  const {
+    routers,
+    devices,
+    channels,
+    users,
+    transmissions,
+    activities,
+    mode,
+    authUsername,
+    isAuthenticated,
+    lastSyncedAt,
+    error,
+  } = useAppStore();
 
   const onlineUsers = users.filter((user) => user.status === 'online' && !user.suspended).length;
+  const activeDevices = devices.filter((device) => device.status === 'online').length;
 
   return (
     <View style={sharedStyles.screen}>
       <Text style={sharedStyles.pageTitle}>Dashboard</Text>
 
+      <View style={styles.ribbon}>
+        <Text style={styles.ribbonText}>Mode: {mode.toUpperCase()}</Text>
+        <Text style={styles.ribbonText}>Operator: {isAuthenticated ? authUsername : 'Guest'}</Text>
+        <Text style={styles.ribbonText}>
+          Last Sync: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : 'Never'}
+        </Text>
+        {error ? <Text style={styles.errorText}>Error: {error}</Text> : null}
+      </View>
+
       <View style={styles.statsGrid}>
-        <StatCard label="Total Routers" value={routers.length} hint="Network backbone nodes" />
-        <StatCard label="Total Devices" value={devices.length} hint="Provisioned endpoint radios" />
-        <StatCard label="Active Channels" value={channels.length} hint="Talkgroups in current profile" />
+        <StatCard label="Total Routers" value={routers.length} hint="Site core nodes" />
+        <StatCard label="Total Devices" value={devices.length} hint="Provisioned endpoints" />
+        <StatCard label="Active Devices" value={activeDevices} hint="Current active radios" tone="good" />
+        <StatCard label="Talkgroups" value={channels.length} hint="Available network channels" />
         <StatCard label="Online Users" value={onlineUsers} hint="Authenticated active operators" tone="good" />
-        <StatCard
-          label="Live Transmissions"
-          value={transmissions.length}
-          hint="Current push-to-talk sessions"
-          tone="warn"
-        />
+        <StatCard label="Live Transmissions" value={transmissions.length} hint="Current PTT sessions" tone="warn" />
       </View>
 
       <View style={styles.activityPanel}>
@@ -33,16 +51,7 @@ export default function DashboardPage() {
           {activities.map((event) => (
             <View key={event.id} style={styles.activityRow}>
               <Text style={styles.activityTime}>{event.timestamp}</Text>
-              <Text
-                style={[
-                  styles.activitySeverity,
-                  event.severity === 'critical'
-                    ? styles.critical
-                    : event.severity === 'warning'
-                      ? styles.warning
-                      : styles.info,
-                ]}
-              >
+              <Text style={{ ...styles.activitySeverity, color: severityColor(event.severity) }}>
                 {event.severity.toUpperCase()}
               </Text>
               <Text style={styles.activityMsg}>{event.message}</Text>
@@ -54,7 +63,41 @@ export default function DashboardPage() {
   );
 }
 
+function severityColor(severity: 'info' | 'warning' | 'critical') {
+  if (severity === 'critical') {
+    return theme.colors.danger;
+  }
+  if (severity === 'warning') {
+    return theme.colors.warning;
+  }
+  return theme.colors.info;
+}
+
 const styles = StyleSheet.create({
+  ribbon: {
+    minHeight: 36,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    backgroundColor: theme.colors.background.secondary,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  ribbonText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -72,7 +115,7 @@ const styles = StyleSheet.create({
   activityRow: {
     minHeight: 34,
     borderRadius: 6,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.background.secondary,
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingHorizontal: theme.spacing.sm,
@@ -88,17 +131,8 @@ const styles = StyleSheet.create({
   },
   activitySeverity: {
     width: 74,
-    fontSize: 11,
+    fontSize: theme.typography.small,
     fontWeight: '700',
-  },
-  info: {
-    color: '#8db9f1',
-  },
-  warning: {
-    color: '#f2c066',
-  },
-  critical: {
-    color: '#ef8392',
   },
   activityMsg: {
     flex: 1,

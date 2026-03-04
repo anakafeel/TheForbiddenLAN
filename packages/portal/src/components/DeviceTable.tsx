@@ -7,25 +7,49 @@ import { DataColumn, DataTable } from './DataTable';
 
 interface DeviceTableProps {
   rows: Device[];
-  onDisable: (deviceId: string) => void;
+  onToggleActive: (deviceId: string) => void;
   onReboot: (deviceId: string) => void;
   onReassign: (deviceId: string) => void;
   onLogs: (deviceId: string) => void;
 }
 
 function StatusPill({ status }: { status: Device['status'] }) {
-  const bg = status === 'online' ? '#1f4d34' : status === 'degraded' ? '#5a4a22' : '#5a2631';
+  const backgroundColor =
+    status === 'online'
+      ? theme.colors.status.activeGlow
+      : status === 'degraded'
+        ? theme.colors.status.warningGlow
+        : theme.colors.status.dangerGlow;
+
+  const textColor =
+    status === 'online' ? theme.colors.success : status === 'degraded' ? theme.colors.warning : theme.colors.danger;
+
   return (
-    <View style={[styles.pill, { backgroundColor: bg }]}>
-      <Text style={styles.pillText}>{status.toUpperCase()}</Text>
+    <View style={{ ...styles.pill, backgroundColor }}>
+      <Text style={{ ...styles.pillText, color: textColor }}>{status.toUpperCase()}</Text>
     </View>
   );
 }
 
-export function DeviceTable({ rows, onDisable, onReboot, onReassign, onLogs }: DeviceTableProps) {
+export function DeviceTable({ rows, onToggleActive, onReboot, onReassign, onLogs }: DeviceTableProps) {
   const columns: DataColumn<Device>[] = [
-    { key: 'id', title: 'Device ID', width: 130, render: (row) => <Text style={styles.cellText}>{row.id}</Text> },
-    { key: 'router', title: 'Router', width: 130, render: (row) => <Text style={styles.cellText}>{row.routerId}</Text> },
+    {
+      key: 'id',
+      title: 'Device ID',
+      width: 220,
+      render: (row) => (
+        <View>
+          <Text style={styles.cellText}>{row.id}</Text>
+          <Text style={styles.muted}>{row.serial ?? 'no-serial'}</Text>
+        </View>
+      ),
+    },
+    {
+      key: 'router',
+      title: 'Router/Site',
+      width: 160,
+      render: (row) => <Text style={styles.cellText}>{row.site || row.routerId}</Text>,
+    },
     { key: 'status', title: 'Online Status', width: 140, render: (row) => <StatusPill status={row.status} /> },
     {
       key: 'signal',
@@ -45,17 +69,31 @@ export function DeviceTable({ rows, onDisable, onReboot, onReassign, onLogs }: D
       width: 170,
       render: (row) => <Text style={styles.cellText}>{row.assignedTalkgroup}</Text>,
     },
-    { key: 'gps', title: 'Last GPS', width: 150, render: (row) => <Text style={styles.cellText}>{row.lastGps}</Text> },
+    {
+      key: 'gps',
+      title: 'Last GPS',
+      width: 190,
+      render: (row) => (
+        <View>
+          <Text style={styles.cellText}>{row.lastGps}</Text>
+          <Text style={styles.muted}>{row.updatedAt ? new Date(row.updatedAt).toLocaleTimeString() : 'no timestamp'}</Text>
+        </View>
+      ),
+    },
     {
       key: 'actions',
       title: 'Actions',
-      width: 330,
+      width: 340,
       render: (row) => (
         <View style={styles.actionsRow}>
-          <ActionButton label="Disable" tone="danger" onPress={() => onDisable(row.id)} />
+          <ActionButton
+            label={row.active === false || row.status === 'offline' ? 'Enable' : 'Disable'}
+            tone={row.active === false || row.status === 'offline' ? 'primary' : 'danger'}
+            onPress={() => onToggleActive(row.id)}
+          />
           <ActionButton label="Reboot" tone="neutral" onPress={() => onReboot(row.id)} />
           <ActionButton label="Reassign" tone="warn" onPress={() => onReassign(row.id)} />
-          <ActionButton label="Logs" tone="primary" onPress={() => onLogs(row.id)} />
+          <ActionButton label="Logs" tone="neutral" onPress={() => onLogs(row.id)} />
         </View>
       ),
     },
@@ -73,7 +111,7 @@ function ActionButton({
   tone: 'primary' | 'neutral' | 'warn' | 'danger';
   onPress: () => void;
 }) {
-  const toneStyle =
+  const style =
     tone === 'primary'
       ? styles.primary
       : tone === 'warn'
@@ -83,7 +121,7 @@ function ActionButton({
           : styles.neutral;
 
   return (
-    <Pressable style={[styles.actionBtn, toneStyle]} onPress={onPress}>
+    <Pressable style={style} onPress={onPress}>
       <Text style={styles.actionText}>{label}</Text>
     </Pressable>
   );
@@ -94,6 +132,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.typography.body,
   },
+  muted: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+  },
   pill: {
     minWidth: 86,
     minHeight: 24,
@@ -103,7 +145,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   pillText: {
-    color: theme.colors.textPrimary,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.4,
@@ -113,33 +154,49 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
   },
-  actionBtn: {
-    minHeight: 28,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
   actionText: {
     color: theme.colors.textPrimary,
     fontSize: 11,
     fontWeight: '700',
   },
   primary: {
-    backgroundColor: '#17467f',
-    borderColor: '#2f8cff',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.borderStrong,
   },
   neutral: {
-    backgroundColor: '#1b2a3b',
-    borderColor: '#2e425a',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: theme.colors.background.tertiary,
+    borderColor: theme.colors.borderStrong,
   },
   warn: {
-    backgroundColor: '#5a4a22',
-    borderColor: '#8f6a29',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: 'rgba(245, 158, 11, 0.55)',
   },
   danger: {
-    backgroundColor: '#5a2631',
-    borderColor: '#944659',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderColor: 'rgba(239, 68, 68, 0.55)',
   },
 });

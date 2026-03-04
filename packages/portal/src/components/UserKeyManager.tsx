@@ -18,30 +18,45 @@ export function UserKeyManager({ rows, keyGroups, onProvision, onRevoke, onAssig
   const groupName = (id: string) => keyGroups.find((group) => group.id === id)?.name ?? id;
 
   const columns: DataColumn<User>[] = [
-    { key: 'id', title: 'User ID', width: 110, render: (row) => <Text style={styles.cellText}>{row.id}</Text> },
+    {
+      key: 'identity',
+      title: 'User Identity',
+      width: 220,
+      render: (row) => (
+        <View>
+          <Text style={styles.cellText}>{row.displayName}</Text>
+          <Text style={styles.muted}>{row.id}</Text>
+        </View>
+      ),
+    },
     {
       key: 'device',
       title: 'Assigned Device',
-      width: 130,
+      width: 150,
       render: (row) => <Text style={styles.cellText}>{row.assignedDeviceId ?? 'Unassigned'}</Text>,
     },
     {
       key: 'channel',
       title: 'Active Channel',
-      width: 130,
+      width: 160,
       render: (row) => <Text style={styles.cellText}>{row.activeChannelId ?? 'None'}</Text>,
     },
-    { key: 'role', title: 'Role', width: 110, render: (row) => <Text style={styles.cellText}>{row.role}</Text> },
+    {
+      key: 'role',
+      title: 'Role',
+      width: 110,
+      render: (row) => <Text style={styles.cellText}>{row.role}</Text>,
+    },
     {
       key: 'keys',
       title: 'Key Group',
-      width: 160,
+      width: 180,
       render: (row) => <Text style={styles.cellText}>{groupName(row.keyGroupId)}</Text>,
     },
     {
       key: 'status',
       title: 'Status',
-      width: 130,
+      width: 120,
       render: (row) => <Text style={styles.cellText}>{row.suspended ? 'Suspended' : row.status}</Text>,
     },
     {
@@ -75,7 +90,7 @@ function ActionButton({
   tone: 'primary' | 'neutral' | 'warn' | 'danger';
   onPress: () => void;
 }) {
-  const toneStyle =
+  const style =
     tone === 'primary'
       ? styles.primary
       : tone === 'warn'
@@ -85,7 +100,7 @@ function ActionButton({
           : styles.neutral;
 
   return (
-    <Pressable style={[styles.actionBtn, toneStyle]} onPress={onPress}>
+    <Pressable style={style} onPress={onPress}>
       <Text style={styles.actionText}>{label}</Text>
     </Pressable>
   );
@@ -96,18 +111,14 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.typography.body,
   },
+  muted: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.small,
+  },
   actionsRow: {
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
-  },
-  actionBtn: {
-    minHeight: 28,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
   actionText: {
     color: theme.colors.textPrimary,
@@ -115,19 +126,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   primary: {
-    backgroundColor: '#17467f',
-    borderColor: '#2f8cff',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.borderStrong,
   },
   neutral: {
-    backgroundColor: '#1b2a3b',
-    borderColor: '#2e425a',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: theme.colors.background.tertiary,
+    borderColor: theme.colors.borderStrong,
   },
   warn: {
-    backgroundColor: '#5a4a22',
-    borderColor: '#8f6a29',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: 'rgba(245, 158, 11, 0.55)',
   },
   danger: {
-    backgroundColor: '#5a2631',
-    borderColor: '#944659',
+    minHeight: 28,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderColor: 'rgba(239, 68, 68, 0.55)',
   },
 });

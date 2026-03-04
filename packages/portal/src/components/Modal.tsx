@@ -11,10 +11,12 @@ interface ModalProps extends PropsWithChildren {
 }
 
 export function Modal({ visible, title, onClose, width = 520, children }: ModalProps) {
+  const containerStyle = { ...styles.container, width };
+
   return (
     <RNModal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={[styles.container, { width }]}>
+        <View style={containerStyle}>
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
             <Pressable onPress={onClose} style={styles.closeBtn}>

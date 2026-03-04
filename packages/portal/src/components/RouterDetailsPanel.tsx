@@ -29,18 +29,30 @@ export function RouterDetailsPanel({ router, devices }: RouterDetailsPanelProps)
         <LabelValue label="Region" value={router.region} />
         <LabelValue label="Status" value={router.status.toUpperCase()} />
         <LabelValue label="Signal Strength" value={`${router.signalStrength}%`} />
-        <LabelValue label="Channels" value={router.assignedChannels.join(', ')} />
+        <LabelValue label="Channels" value={router.assignedChannels.length.toString()} />
+        <LabelValue
+          label="Position"
+          value={
+            typeof router.lat === 'number' && typeof router.lng === 'number'
+              ? `${router.lat.toFixed(4)}, ${router.lng.toFixed(4)}`
+              : 'No fix'
+          }
+        />
       </View>
 
       <Text style={styles.sectionTitle}>Connected Devices</Text>
       <View style={styles.deviceList}>
-        {devices.map((device) => (
-          <View key={device.id} style={styles.deviceRow}>
-            <Text style={styles.deviceId}>{device.id}</Text>
-            <Text style={styles.deviceMeta}>{device.label}</Text>
-            <Text style={styles.deviceMeta}>SIG {device.signalStrength}%</Text>
-          </View>
-        ))}
+        {devices.length > 0 ? (
+          devices.map((device) => (
+            <View key={device.id} style={styles.deviceRow}>
+              <Text style={styles.deviceId}>{device.id}</Text>
+              <Text style={styles.deviceMeta}>{device.label}</Text>
+              <Text style={styles.deviceMeta}>SIG {device.signalStrength}%</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyText}>No devices attached.</Text>
+        )}
       </View>
     </View>
   );
@@ -102,7 +114,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 6,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.background.secondary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -115,6 +127,10 @@ const styles = StyleSheet.create({
   },
   deviceMeta: {
     color: theme.colors.textSecondary,
+    fontSize: theme.typography.caption,
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
     fontSize: theme.typography.caption,
   },
 });

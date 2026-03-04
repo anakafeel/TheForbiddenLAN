@@ -23,28 +23,36 @@ export function DataTable<T>({ columns, rows, rowKey, compact = true }: DataTabl
       <ScrollView horizontal showsHorizontalScrollIndicator>
         <View style={styles.inner}>
           <View style={styles.headerRow}>
-            {columns.map((column) => (
-              <View key={column.key} style={[styles.cell, styles.headerCell, { width: column.width ?? 160 }]}>
-                <Text style={styles.headerText}>{column.title}</Text>
-              </View>
-            ))}
+            {columns.map((column) => {
+              const headerCellStyle = { ...styles.cell, ...styles.headerCell, width: column.width ?? 160 };
+              return (
+                <View key={column.key} style={headerCellStyle}>
+                  <Text style={styles.headerText}>{column.title}</Text>
+                </View>
+              );
+            })}
           </View>
 
-          {rows.map((row, index) => (
-            <View key={rowKey(row)} style={[styles.dataRow, index % 2 === 1 && styles.altRow]}>
-              {columns.map((column) => (
-                <View
-                  key={column.key}
-                  style={[
-                    styles.cell,
-                    { width: column.width ?? 160, minHeight: compact ? theme.layout.rowHeight : 48 },
-                  ]}
-                >
-                  {column.render(row)}
-                </View>
-              ))}
-            </View>
-          ))}
+          {rows.map((row, index) => {
+            const rowStyle = index % 2 === 1 ? { ...styles.dataRow, ...styles.altRow } : styles.dataRow;
+            return (
+              <View key={rowKey(row)} style={rowStyle}>
+                {columns.map((column) => {
+                  const cellStyle = {
+                    ...styles.cell,
+                    width: column.width ?? 160,
+                    minHeight: compact ? theme.layout.rowHeight : 48,
+                  };
+
+                  return (
+                    <View key={column.key} style={cellStyle}>
+                      {column.render(row)}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -74,7 +82,7 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.border,
   },
   altRow: {
-    backgroundColor: '#111a26',
+    backgroundColor: theme.colors.background.secondary,
   },
   cell: {
     justifyContent: 'center',

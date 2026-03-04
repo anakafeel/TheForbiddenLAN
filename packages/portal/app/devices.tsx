@@ -7,10 +7,27 @@ import { useAppStore } from '../src/store';
 import { sharedStyles, theme } from '../src/theme';
 
 export default function DevicesPage() {
-  const { devices, disableDevice, rebootDevice, reassignDeviceTalkgroup } = useAppStore();
+  const { devices, disableDevice, rebootDevice, reassignDeviceTalkgroup, refreshData, isSyncing } = useAppStore();
+  const [query, setQuery] = useState('');
   const [logsDeviceId, setLogsDeviceId] = useState<string | null>(null);
   const [reassignDeviceId, setReassignDeviceId] = useState<string | null>(null);
   const [newTalkgroup, setNewTalkgroup] = useState('Operations');
+
+  const visibleDevices = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return devices;
+    }
+
+    return devices.filter((device) => {
+      return (
+        device.id.toLowerCase().includes(normalized) ||
+        device.label.toLowerCase().includes(normalized) ||
+        (device.serial ?? '').toLowerCase().includes(normalized) ||
+        (device.site ?? '').toLowerCase().includes(normalized)
+      );
+    });
+  }, [devices, query]);
 
   const selectedDevice = useMemo(
     () => devices.find((device) => device.id === logsDeviceId || device.id === reassignDeviceId),
@@ -19,11 +36,28 @@ export default function DevicesPage() {
 
   return (
     <View style={sharedStyles.screen}>
-      <Text style={sharedStyles.pageTitle}>Devices</Text>
+      <View style={styles.headerRow}>
+        <Text style={sharedStyles.pageTitle}>Devices</Text>
+        <Pressable style={styles.refreshButton} onPress={() => void refreshData()}>
+          <Text style={styles.refreshText}>{isSyncing ? 'Syncing...' : 'Refresh'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.filters}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          style={styles.searchInput}
+          placeholder="Search by id, serial, label, site"
+          placeholderTextColor={theme.colors.textMuted}
+          autoCapitalize="none"
+        />
+        <Text style={styles.counterText}>{visibleDevices.length} devices</Text>
+      </View>
 
       <DeviceTable
-        rows={devices}
-        onDisable={disableDevice}
+        rows={visibleDevices}
+        onToggleActive={(deviceId) => void disableDevice(deviceId)}
         onReboot={rebootDevice}
         onReassign={setReassignDeviceId}
         onLogs={setLogsDeviceId}
@@ -65,6 +99,51 @@ export default function DevicesPage() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  refreshButton: {
+    minHeight: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.sm,
+  },
+  refreshText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.caption,
+    fontWeight: '700',
+  },
+  filters: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  searchInput: {
+    minWidth: 280,
+    maxWidth: 460,
+    flex: 1,
+    height: 36,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    backgroundColor: theme.colors.background.tertiary,
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.body,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  counterText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.caption,
+    fontWeight: '600',
+  },
   label: {
     color: theme.colors.textSecondary,
     fontSize: theme.typography.caption,
@@ -76,21 +155,21 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   input: {
-    height: 38,
+    height: 36,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 6,
-    backgroundColor: theme.colors.bgElevated,
+    borderRadius: 8,
+    backgroundColor: theme.colors.background.tertiary,
     color: theme.colors.textPrimary,
     paddingHorizontal: theme.spacing.sm,
     fontSize: theme.typography.body,
   },
   confirmBtn: {
     minHeight: 36,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2f8cff',
-    backgroundColor: '#17467f',
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: theme.spacing.sm,
