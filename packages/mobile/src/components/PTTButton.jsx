@@ -4,38 +4,46 @@ import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { emitStartTalking, emitStopTalking } from '../utils/socket';
 import theme from '../theme';
 
-const { colors, spacing, radius, shadows, typography } = theme;
+const { colors, spacing, typography } = theme;
 
 export default function PTTButton({ userId, onTransmitChange }) {
   const [transmitting, setTransmitting] = useState(false);
 
   const onPressIn = async () => {
+    if (transmitting) return;
+
     setTransmitting(true);
     onTransmitChange?.(true);
+
     emitStartTalking(userId);
+
     try {
       await startAudioStream();
     } catch (e) {
-      console.warn('audio start error', e);
+      console.warn('Audio start error:', e);
     }
   };
 
-  const onPressOut = () => {
+  const onPressOut = async () => {
+    if (!transmitting) return;
+
     setTransmitting(false);
     onTransmitChange?.(false);
+
+    try {
+      await stopAudioStream();
+    } catch (e) {
+      console.warn('Audio stop error:', e);
+    }
+
     emitStopTalking(userId);
-    stopAudioStream();
   };
 
   return (
     <View style={styles.container}>
-      {/* Outer glow ring */}
       <View style={[styles.outerRing, transmitting && styles.outerRingActive]} />
-      
-      {/* Middle ring */}
       <View style={[styles.middleRing, transmitting && styles.middleRingActive]} />
-      
-      {/* Main button */}
+
       <Pressable
         onPressIn={onPressIn}
         onPressOut={onPressOut}
@@ -47,6 +55,7 @@ export default function PTTButton({ userId, onTransmitChange }) {
       >
         <View style={styles.buttonInner}>
           <Text style={styles.icon}>🎙️</Text>
+
           <Text style={[styles.text, transmitting && styles.textActive]}>
             {transmitting ? 'TRANSMITTING' : 'PUSH TO TALK'}
           </Text>
@@ -63,6 +72,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   outerRing: {
     position: 'absolute',
     width: 200,
@@ -72,10 +82,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border.subtle,
     opacity: 0.3,
   },
+
   outerRingActive: {
     borderColor: colors.status.danger,
     opacity: 0.6,
   },
+
   middleRing: {
     position: 'absolute',
     width: 180,
@@ -85,10 +97,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border.medium,
     opacity: 0.5,
   },
+
   middleRingActive: {
     borderColor: colors.status.danger,
     opacity: 0.8,
   },
+
   button: {
     width: 160,
     height: 160,
@@ -99,27 +113,32 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: colors.accent.primaryLight,
   },
+
   transmitting: {
     backgroundColor: colors.status.danger,
     borderColor: '#FF6B6B',
   },
+
   pressed: {
     transform: [{ scale: 0.95 }],
   },
+
   buttonInner: {
     alignItems: 'center',
   },
+
   icon: {
     fontSize: 36,
     marginBottom: spacing.sm,
   },
+
   text: {
     color: colors.text.primary,
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
-    letterSpacing: typography.letterSpacing.wide,
     textAlign: 'center',
   },
+
   textActive: {
     color: colors.text.primary,
   },

@@ -1,76 +1,212 @@
-// PTT screen — main walkie-talkie UI
-import { useState } from 'react';
-import { useComms } from '../hooks/useComms';
-import { useStore } from '../store';
-import { PTTButton } from '../components/PTTButton';
-import { SignalBar } from '../components/SignalBar';
-import { TalkgroupSelector } from '../components/TalkgroupSelector';
-import { TextPanel } from '../components/TextPanel';
+import React, { useContext, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { ChannelContext } from '../context/ChannelContext';
+import PTTButton from '../components/PTTButton';
+import { CONFIG } from '../config';
+import theme from '../theme';
 
-export function PTTScreen() {
-  const { startPTT, stopPTT, deviceId } = useComms();
-  const { activeTalkgroup, signalStatus, floorStatus } = useStore();
-  const [transmitting, setTransmitting] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0); // 0-100
+const { colors, spacing, typography } = theme;
 
-  const handlePTTDown = () => {
-    setTransmitting(true);
-    startPTT(activeTalkgroup);
-    // Simulate a non-zero audio level while transmitting
-    setAudioLevel(Math.floor(Math.random() * 60) + 30);
-  };
+export default function PTTScreen({ navigation }) {
+  const { current } = useContext(ChannelContext);
+  const [isTransmitting, setIsTransmitting] = useState(false);
+  const [currentSpeaker, setCurrentSpeaker] = useState(null);
 
-  const handlePTTUp = () => {
-    setTransmitting(false);
-    setAudioLevel(0);
-    stopPTT();
-  };
+  useEffect(() => {
+    if (!current || isTransmitting) {
+      setCurrentSpeaker(null);
+      return;
+    }
+
+    const speakers = ['ECHO-1', 'BRAVO-2', 'CHARLIE-3', 'DELTA-4'];
+
+    const interval = setInterval(() => {
+      if (Math.random() > 0.6) {
+        const speaker = speakers[Math.floor(Math.random() * speakers.length)];
+
+        setCurrentSpeaker(speaker);
+
+        setTimeout(() => setCurrentSpeaker(null), 3000);
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [current, isTransmitting]);
+
+  if (!current) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.noChannelContainer}>
+
+          <Text style={styles.noChannelIcon}>📡</Text>
+
+          <Text style={styles.noChannelTitle}>
+            No Channel Selected
+          </Text>
+
+          <Text style={styles.noChannelSubtitle}>
+            Select a channel to start communicating
+          </Text>
+
+          <TouchableOpacity
+            style={styles.selectChannelBtn}
+            onPress={() => navigation.navigate('Channels')}
+          >
+            <Text style={styles.selectChannelText}>
+              GO TO CHANNELS
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 16, gap: 12, backgroundColor: '#0A1628' }}>
-      <SignalBar status={signalStatus} />
-      <TalkgroupSelector />
+    <View style={styles.container}>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+      {/* Channel Header */}
 
-        {/* Incoming transmission banner — shown when someone else holds the floor */}
-        {floorStatus.holder && floorStatus.holder !== deviceId && (
-          <div style={{
-            color: '#FFD700',
-            fontSize: 18,
-            textAlign: 'center',
-            padding: 12,
-            backgroundColor: '#1E3A5F',
-            borderRadius: 8,
-          }}>
-            📡 Incoming transmission...
-          </div>
-        )}
+      <View style={styles.channelHeader}>
 
-        <PTTButton transmitting={transmitting} onDown={handlePTTDown} onUp={handlePTTUp} />
-        <p style={{ color: '#aaa', fontSize: 14 }}>{transmitting ? 'TRANSMITTING' : 'Hold to Talk'}</p>
+        <Text style={styles.channelName}>
+          {current.name}
+        </Text>
 
-        {/* Audio level indicator — shown while transmitting */}
-        {transmitting && (
-          <div style={{
-            width: '100%',
-            height: 8,
-            backgroundColor: '#333',
-            borderRadius: 4,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${audioLevel}%`,
-              height: '100%',
-              backgroundColor: '#E74C3C',
-              transition: 'width 0.1s',
-            }} />
-          </div>
-        )}
+        <Text style={styles.channelUsers}>
+          👤 {current.users || 0} Online
+        </Text>
 
-      </div>
+      </View>
 
-      <TextPanel talkgroup={activeTalkgroup} />
-    </div>
+      {/* Speaking Status */}
+
+      <View
+        style={[
+          styles.speakingBar,
+          (currentSpeaker || isTransmitting) && styles.speakingBarActive
+        ]}
+      >
+
+        <Text style={styles.speakingText}>
+          {isTransmitting
+            ? '📡 YOU ARE TRANSMITTING'
+            : currentSpeaker
+            ? `🎙️ NOW SPEAKING: ${currentSpeaker}`
+            : '— Channel idle —'}
+        </Text>
+
+      </View>
+
+      {/* PTT Button */}
+
+      <View style={styles.pttArea}>
+
+        <PTTButton
+          userId={CONFIG.DEVICE_ID}
+          onTransmitChange={setIsTransmitting}
+        />
+
+      </View>
+
+      {/* Hint */}
+
+      <Text style={styles.hint}>
+        {isTransmitting
+          ? 'Release to stop transmitting'
+          : 'Hold the button to talk'}
+      </Text>
+
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+
+  container: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+  },
+
+  noChannelContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+
+  noChannelIcon: {
+    fontSize: 64,
+    marginBottom: spacing.lg,
+  },
+
+  noChannelTitle: {
+    color: colors.text.primary,
+    fontSize: typography.size.xl,
+    fontWeight: 'bold',
+    marginBottom: spacing.sm,
+  },
+
+  noChannelSubtitle: {
+    color: colors.text.muted,
+    fontSize: typography.size.md,
+    marginBottom: spacing.xl,
+    textAlign: 'center',
+  },
+
+  selectChannelBtn: {
+    backgroundColor: colors.accent.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    borderRadius: 10,
+  },
+
+  selectChannelText: {
+    color: colors.text.inverse,
+    fontWeight: 'bold',
+  },
+
+  channelHeader: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    backgroundColor: colors.background.secondary,
+  },
+
+  channelName: {
+    color: colors.text.primary,
+    fontSize: typography.size.xxl,
+    fontWeight: 'bold',
+  },
+
+  channelUsers: {
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
+  },
+
+  speakingBar: {
+    backgroundColor: colors.background.tertiary,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+
+  speakingBarActive: {
+    backgroundColor: colors.status.activeGlow,
+  },
+
+  speakingText: {
+    color: colors.text.secondary,
+  },
+
+  pttArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  hint: {
+    textAlign: 'center',
+    color: colors.text.muted,
+    paddingBottom: spacing.xl,
+  },
+
+});

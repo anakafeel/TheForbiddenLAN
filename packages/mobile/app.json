@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "platforms": [
       "ios",
-      "android"
+      "android","web"
     ],
     "ios": {
       "bundleIdentifier": "com.forbiddenlan.skytalk"
