@@ -12,6 +12,7 @@ export class AudioPipeline {
   constructor(
     private relay: RelaySocket,
     private sessionId: number,
+    private talkgroup: string,
     private encryption?: Encryption
   ) {}
 
@@ -30,6 +31,7 @@ export class AudioPipeline {
 
     this.relay.send({
       type: 'PTT_AUDIO',
+      talkgroup: this.talkgroup,
       sessionId: this.sessionId,
       chunk: this.chunk++,
       data: payload,
