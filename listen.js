@@ -16,7 +16,7 @@
 // Typical test flow:
 //   Terminal 1: node local-relay.js
 //   Terminal 2: node listen.js
-//   Terminal 3: adb -s R58T41T27TR reverse tcp:3000 tcp:3000
+//   Terminal 3: adb -s <YOUR_DEVICE_SERIAL> reverse tcp:3000 tcp:3000
 //   Phone: press PTT → hear audio on laptop ~1s after PTT_END
 
 const { WebSocket } = require('ws');

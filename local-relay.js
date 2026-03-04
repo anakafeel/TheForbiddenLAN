@@ -12,7 +12,7 @@
 //   node local-relay.js
 //
 // Then in a second terminal:
-//   adb -s R58T41T27TR reverse tcp:3000 tcp:3000
+//   adb -s <YOUR_DEVICE_SERIAL> reverse tcp:3000 tcp:3000
 //
 // Then change packages/mobile/.env.local:
 //   EXPO_PUBLIC_WS_URL=ws://localhost:3000/ws
@@ -252,7 +252,7 @@ ${C.cyan}WebSocket:${C.reset} ws://localhost:${PORT}/ws  (no auth required)
 ${C.cyan}Auth stub:${C.reset} POST http://localhost:${PORT}/auth/login
 
 ${C.yellow}Setup (run in separate terminals):${C.reset}
-  1. adb -s R58T41T27TR reverse tcp:${PORT} tcp:${PORT}
+  1. adb -s <YOUR_DEVICE_SERIAL> reverse tcp:${PORT} tcp:${PORT}
   2. Edit packages/mobile/.env.local:
        EXPO_PUBLIC_WS_URL=ws://localhost:${PORT}/ws
        EXPO_PUBLIC_API_URL=http://localhost:${PORT}
