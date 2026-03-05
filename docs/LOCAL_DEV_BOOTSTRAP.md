@@ -10,28 +10,28 @@ pnpm setup:local        # or: pnpm setup:doctor
 
 ## Prerequisites
 
-| Tool | Version | Why |
-|------|---------|-----|
-| Node.js | 20+ | Runtime for server, Metro bundler, Nx |
-| npm | (bundled) | Bootstraps Corepack |
-| JDK | 17+ | Gradle builds for Android native modules |
-| Android SDK | API 34+ | Expo bare workflow + native Opus codecs |
+| Tool        | Version   | Why                                      |
+| ----------- | --------- | ---------------------------------------- |
+| Node.js     | 20+       | Runtime for server, Metro bundler, Nx    |
+| npm         | (bundled) | Bootstraps Corepack                      |
+| JDK         | 17+       | Gradle builds for Android native modules |
+| Android SDK | API 34+   | Expo bare workflow + native Opus codecs  |
 
 The script validates all of these and exits early (or warns) if something is missing.
 
 ## What it does (9 steps)
 
-| # | Step | Blocking? |
-|---|------|-----------|
-| 1 | Validate Node 20+, npm | Yes |
-| 2 | Enable Corepack, activate `pnpm@10.23.0` | Yes |
-| 3 | `pnpm install --frozen-lockfile` + verify Nx | Yes |
-| 4 | Build `@forbiddenlan/comms` SDK (`packages/comms/dist/`) | Yes |
-| 5 | `prisma generate` for server's `@prisma/client` | Yes |
-| 6 | Seed `.env` from `.env.example` if missing | No |
-| 7 | Install Playwright chromium browsers | No |
-| 8 | Raise inotify limits on Linux (for Metro/Turbopack) | No |
-| 9 | Validate Android toolchain + `expo prebuild` | No |
+| #   | Step                                                     | Blocking? |
+| --- | -------------------------------------------------------- | --------- |
+| 1   | Validate Node 20+, npm                                   | Yes       |
+| 2   | Enable Corepack, activate `pnpm@10.23.0`                 | Yes       |
+| 3   | `pnpm install --frozen-lockfile` + verify Nx             | Yes       |
+| 4   | Build `@forbiddenlan/comms` SDK (`packages/comms/dist/`) | Yes       |
+| 5   | `prisma generate` for server's `@prisma/client`          | Yes       |
+| 6   | Seed `.env` from `.env.example` if missing               | No        |
+| 7   | Install Playwright chromium browsers                     | No        |
+| 8   | Raise inotify limits on Linux (for Metro/Turbopack)      | No        |
+| 9   | Validate Android toolchain + `expo prebuild`             | No        |
 
 Steps 1–5 are blocking — the workspace won't function without them.  
 Steps 6–9 are best-effort warnings.
@@ -70,22 +70,22 @@ pnpm test:e2e           # Playwright E2E (24 tests, portal)
 
 ### Mobile (`packages/mobile/.env`)
 
-| Variable | Example | Purpose |
-|----------|---------|---------|
-| `EXPO_PUBLIC_WS_URL` | `ws://134.122.32.45:3000/ws` | WebSocket relay URL |
-| `EXPO_PUBLIC_API_URL` | `http://134.122.32.45:3000` | REST API (login, talkgroups) |
-| `EXPO_PUBLIC_DLS140_URL` | `http://192.168.111.1:3000` | DLS-140 SATCOM terminal URL |
-| `EXPO_PUBLIC_TALKGROUP` | `alpha` | Default talkgroup to join |
-| `EXPO_PUBLIC_LOOPBACK` | `false` | Echo TX audio locally (single-device testing) |
+| Variable                 | Example                      | Purpose                                       |
+| ------------------------ | ---------------------------- | --------------------------------------------- |
+| `EXPO_PUBLIC_WS_URL`     | `ws://134.122.32.45:3000/ws` | WebSocket relay URL                           |
+| `EXPO_PUBLIC_API_URL`    | `http://134.122.32.45:3000`  | REST API (login, talkgroups)                  |
+| `EXPO_PUBLIC_DLS140_URL` | `http://192.168.111.1:3000`  | DLS-140 SATCOM terminal URL                   |
+| `EXPO_PUBLIC_TALKGROUP`  | `alpha`                      | Default talkgroup to join                     |
+| `EXPO_PUBLIC_LOOPBACK`   | `false`                      | Echo TX audio locally (single-device testing) |
 
 ### Server (`packages/server/.env`)
 
-| Variable | Example | Purpose |
-|----------|---------|---------|
-| `POSTGRES_USER` | `skytalk` | Postgres username |
-| `POSTGRES_PASSWORD` | `(secret)` | Postgres password |
-| `POSTGRES_DB` | `skytalk` | Database name |
-| `JWT_SECRET` | `(secret)` | HMAC secret for JWT signing |
+| Variable            | Example    | Purpose                     |
+| ------------------- | ---------- | --------------------------- |
+| `POSTGRES_USER`     | `skytalk`  | Postgres username           |
+| `POSTGRES_PASSWORD` | `(secret)` | Postgres password           |
+| `POSTGRES_DB`       | `skytalk`  | Database name               |
+| `JWT_SECRET`        | `(secret)` | HMAC secret for JWT signing |
 
 ## Documentation Site
 
@@ -96,12 +96,12 @@ pnpm dev:docs           # http://localhost:3000
 ```
 
 Add new docs as `.mdx` files in `packages/docs/content/docs/`:
+
 ```yaml
 ---
 title: Page Title
 description: Short description
 ---
-
 ## Content here
 ```
 
@@ -114,14 +114,14 @@ description: Short description
 
 ## Troubleshooting
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `Cannot find module '@forbiddenlan/comms'` | comms SDK not built | `pnpm --filter @forbiddenlan/comms build` |
-| `Cannot find module '.prisma/client'` | Prisma client not generated | `cd packages/server && npx prisma generate` |
-| `ENOSPC: no space left on device` | inotify limit too low | `sudo sysctl -w fs.inotify.max_user_watches=2097152` |
-| `browserType.launch: Executable doesn't exist` | Playwright browsers missing | `npx playwright install --with-deps` |
-| `Metro bundler symlink error` | PNPM symlinks not resolved | Check `metro.config.js` has `unstable_enableSymlinks: true` |
-| `OpusEncoder native module not found` | Native rebuild needed | `cd packages/mobile && npx expo prebuild --clean && npx expo run:android` |
-| Port 3000/8081 in use | Previous process lingering | `lsof -ti:3000 \| xargs kill -9` |
+| Problem                                        | Cause                       | Fix                                                                       |
+| ---------------------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
+| `Cannot find module '@forbiddenlan/comms'`     | comms SDK not built         | `pnpm --filter @forbiddenlan/comms build`                                 |
+| `Cannot find module '.prisma/client'`          | Prisma client not generated | `cd packages/server && npx prisma generate`                               |
+| `ENOSPC: no space left on device`              | inotify limit too low       | `sudo sysctl -w fs.inotify.max_user_watches=2097152`                      |
+| `browserType.launch: Executable doesn't exist` | Playwright browsers missing | `npx playwright install --with-deps`                                      |
+| `Metro bundler symlink error`                  | PNPM symlinks not resolved  | Check `metro.config.js` has `unstable_enableSymlinks: true`               |
+| `OpusEncoder native module not found`          | Native rebuild needed       | `cd packages/mobile && npx expo prebuild --clean && npx expo run:android` |
+| Port 3000/8081 in use                          | Previous process lingering  | `lsof -ti:3000 \| xargs kill -9`                                          |
 
 For more, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

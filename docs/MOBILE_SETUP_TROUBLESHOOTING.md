@@ -466,39 +466,69 @@ The null check prevents the app from crashing when socket initialization fails. 
 
 ---
 
-### Issue 4: Metro Bundler `EMFILE: too many open files`
+### Issue 4: Metro Bundler `EMFILE` / `ENOSPC` — too many open files or file watchers
 
-**Error:**
+**Errors (any of these):**
 ```
-Error: EMFILE: too many open files, watch '/home/.../node_modules/...'
+Error: EMFILE: too many open files, watch '/home/.../packages/mobile'
+Error: ENOSPC: System limit for number of file watchers reached, watch '...'
 ```
 
 **Cause:**  
-Metro's file watcher (FallbackWatcher on Linux) opens one file descriptor per directory. A pnpm monorepo has ~600k directories in `node_modules/`. Linux default `fs.inotify.max_user_watches` is 8192.
+Metro's file watcher (FallbackWatcher, since Watchman is disabled) uses Node.js `fs.watch()` which consumes inotify watches. Linux has THREE independent limits:
 
-**Fix 1 — Increase inotify limits (Temporary):**
+| Limit | Sysctl | Default | Needed |
+|-------|--------|---------|--------|
+| Watches per user | `fs.inotify.max_user_watches` | 8,192 | **4,194,304** |
+| Instances per user | `fs.inotify.max_user_instances` | 128–512 | **8,192** |
+| Open files per process | `ulimit -n` | 1,024 | **65,536** |
+
+**Why 524,288 watches is NOT enough:**  
+This monorepo runs on **btrfs**. VS Code + Java Language Server + Gradle extension consume **2,000,000+ inotify watches** on btrfs. The commonly-recommended 524,288 leaves nothing for Metro. We confirmed this by counting:
 ```bash
-sudo sysctl -w fs.inotify.max_user_watches=524288
+# This showed 2,093,154 watches in use with a 524,288 limit:
+find /proc/*/fdinfo -type f 2>/dev/null -exec grep -l inotify {} \; 2>/dev/null | \
+  while read f; do grep -c inotify "$f" 2>/dev/null; done | \
+  awk '{s+=$1} END {print s}'
 ```
 
-**Fix 2 — Make it permanent:**
+**Fix — Raise all three limits:**
+
 ```bash
-echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+# 1. Raise immediately (current session)
+sudo sysctl -w fs.inotify.max_user_watches=4194304
+sudo sysctl -w fs.inotify.max_user_instances=8192
+
+# 2. Make permanent (survives reboot)
+cat <<EOF | sudo tee /etc/sysctl.d/99-inotify.conf
+fs.inotify.max_user_watches=4194304
+fs.inotify.max_user_instances=8192
+EOF
+sudo sysctl --system
+
+# 3. Raise open file limit
+ulimit -n 65536
+# Or permanently in /etc/security/limits.d/99-dev.conf:
+# * soft nofile 65536
+# * hard nofile 65536
+
+# 4. Kill stale watchers and retry
+pkill -9 -f "node\|expo\|metro"
+sleep 1
+cd packages/mobile && npx expo run:android --device
 ```
 
-**Fix 3 — Metro config (Already Applied):**  
-The `metro.config.js` ignore function prevents Metro from watching unnecessary directories:
+**Metro config (already applied):**  
+`metro.config.js` disables Watchman (`useWatchman = false`) and uses an ignore function to skip unnecessary directories:
 ```javascript
 config.watcher = {
   watcherOptions: {
     ignore: (filename) => {
-      // Ignore build/cache dirs
       if (/(\.gradle|\.expo|build|dist|\.cache)/.test(filename)) return true;
-      
-      // Only watch expo source files in node_modules
       if (filename.includes("node_modules")) {
-        return !(/\.pnpm.*\/expo[^/]*\//.test(filename));
+        const inPnpmExpo = filename.includes(".pnpm") && 
+          /\/expo[^/]*\/node_modules\/expo[^/]*\//.test(filename);
+        return !inPnpmExpo;
       }
       return false;
     },
@@ -506,19 +536,20 @@ config.watcher = {
 };
 ```
 
+**Do NOT re-enable Watchman** — it triggers inotify-poison on this btrfs monorepo.
+
 **Verification:**
 ```bash
-# Check current limit
-cat /proc/sys/fs/inotify/max_user_watches
+# Check both limits
+sysctl fs.inotify.max_user_watches fs.inotify.max_user_instances
 
-# Count active watches (should be < limit)
-find /proc/*/fd -lname anon_inode:inotify 2>/dev/null | wc -l
+# Count actual watches in use
+find /proc/*/fdinfo -type f 2>/dev/null -exec grep -l inotify {} \; 2>/dev/null | \
+  while read f; do grep -c inotify "$f" 2>/dev/null; done | \
+  awk '{s+=$1} END {print "Total watches:", s}'
 
-# Detailed view
-for pid in $(pgrep node); do
-  echo "PID $pid:"
-  lsof -p $pid 2>/dev/null | grep inotify | wc -l
-done
+# Count inotify instances in use
+find /proc/*/fd -lname 'anon_inode:inotify' 2>/dev/null | wc -l
 ```
 
 ---
