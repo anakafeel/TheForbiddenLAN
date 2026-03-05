@@ -1,12 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Image } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import BottomMenu from "../components/BottomMenu";
-import theme from "../theme";
-
-const { colors, spacing, radius, typography } = theme;
+import { useAppTheme } from "../theme";
 
 export default function ProfileScreen({ navigation }: { navigation: any }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
   const { signOut } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
@@ -53,7 +57,8 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -113,7 +118,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.status.danger,
   },
   buttonText: {
-    color: "#fff",
+    color: colors.text.primary,
     fontWeight: "700",
   },
-});
+  });
+}

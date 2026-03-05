@@ -1,10 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { CONFIG } from '../config';
-import theme from '../theme';
-
-const { colors, spacing, radius, shadows, typography } = theme;
+import { useAppTheme } from '../theme';
 
 let Icon;
 if (Platform.OS !== 'web') {
@@ -12,6 +10,11 @@ if (Platform.OS !== 'web') {
 }
 
 export default function NetworkInfo() {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const [state, setState] = useState({ type: 'unknown', isConnected: false });
 
   useEffect(() => {
@@ -80,84 +83,86 @@ export default function NetworkInfo() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.background.card,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.status.danger,
-    marginRight: spacing.sm,
-  },
-  statusDotActive: {
-    backgroundColor: colors.status.active,
-  },
-  statusLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.wider,
-    marginRight: spacing.sm,
-  },
-  statusBadge: {
-    backgroundColor: colors.status.active,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-  },
-  statusBadgeText: {
-    color: colors.text.inverse,
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  infoItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  infoLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.wide,
-    marginBottom: spacing.xs,
-  },
-  infoValue: {
-    color: colors.text.primary,
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
-  },
-  infoDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: colors.border.subtle,
-  },
-  signalBars: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  signalBar: {
-    width: 4,
-    backgroundColor: colors.text.muted,
-    borderRadius: 1,
-    opacity: 0.3,
-    marginRight: 2,
-  },
-  signalBarActive: {
-    backgroundColor: colors.accent.primary,
-    opacity: 1,
-  },
-});
+function createStyles(colors, spacing, radius, typography) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: colors.background.card,
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+    },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.status.danger,
+      marginRight: spacing.sm,
+    },
+    statusDotActive: {
+      backgroundColor: colors.status.active,
+    },
+    statusLabel: {
+      color: colors.text.muted,
+      fontSize: typography.size.xs,
+      letterSpacing: typography.letterSpacing.wider,
+      marginRight: spacing.sm,
+    },
+    statusBadge: {
+      backgroundColor: colors.status.active,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+      borderRadius: radius.sm,
+    },
+    statusBadgeText: {
+      color: colors.text.inverse,
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.bold,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    infoItem: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    infoLabel: {
+      color: colors.text.muted,
+      fontSize: typography.size.xs,
+      letterSpacing: typography.letterSpacing.wide,
+      marginBottom: spacing.xs,
+    },
+    infoValue: {
+      color: colors.text.primary,
+      fontSize: typography.size.md,
+      fontWeight: typography.weight.bold,
+    },
+    infoDivider: {
+      width: 1,
+      height: 30,
+      backgroundColor: colors.border.subtle,
+    },
+    signalBars: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    signalBar: {
+      width: 4,
+      backgroundColor: colors.text.muted,
+      borderRadius: 1,
+      opacity: 0.3,
+      marginRight: 2,
+    },
+    signalBarActive: {
+      backgroundColor: colors.accent.primary,
+      opacity: 1,
+    },
+  });
+}

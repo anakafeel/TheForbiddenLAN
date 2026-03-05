@@ -1,12 +1,16 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, FlatList } from "react-native";
 import BottomMenu from "../components/BottomMenu";
-import theme from "../theme";
+import { useAppTheme } from "../theme";
 import { MOCK_NOTIFICATIONS } from "../data/notifications";
 
-const { colors, spacing, radius, typography } = theme;
-
 export default function NotificationsScreen({ navigation }: { navigation: any }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Notifications</Text>
@@ -29,7 +33,8 @@ export default function NotificationsScreen({ navigation }: { navigation: any })
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -74,4 +79,5 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: typography.size.md,
   },
-});
+  });
+}

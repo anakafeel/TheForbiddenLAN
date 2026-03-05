@@ -1,19 +1,21 @@
 // Signal status bar — shows satellite bars, cellular signal, active link
 import type { SignalStatus } from '@forbiddenlan/comms';
+import { useAppTheme } from '../theme';
 interface Props { status: SignalStatus; }
 
 export function SignalBar({ status }: Props) {
-  const linkColor = status.activeLink === 'cellular' ? '#2ECC71'
-    : status.activeLink === 'satellite' ? '#F39C12' : '#E74C3C';
+  const { colors } = useAppTheme();
+  const linkColor = status.activeLink === 'cellular' ? colors.status.active
+    : status.activeLink === 'satellite' ? colors.status.warning : colors.status.danger;
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-      backgroundColor:'#1E3A5F', padding:'8px 16px', borderRadius:8, color:'white', fontSize:13 }}>
+      backgroundColor:colors.background.tertiary, padding:'8px 16px', borderRadius:8, color:colors.text.primary, fontSize:13 }}>
       <span>🛰 {status.certusDataBars}/5</span>
       <span style={{ color: linkColor, fontWeight:'bold' }}>
         {status.activeLink.toUpperCase()}
       </span>
       <span>📶 {status.cellularSignal}%</span>
-      <span style={{ color:'#aaa' }}>{status.certusDataUsedKB.toFixed(1)} KB sat</span>
+      <span style={{ color:colors.text.muted }}>{status.certusDataUsedKB.toFixed(1)} KB sat</span>
     </div>
   );
 }

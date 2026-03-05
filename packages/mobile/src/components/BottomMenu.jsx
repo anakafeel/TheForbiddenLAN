@@ -1,8 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import theme from "../theme";
-
-const { colors, spacing, radius, typography } = theme;
+import { useAppTheme } from "../theme";
 
 const ITEMS = [
   { key: "Dashboard", icon: "⌂" },
@@ -12,6 +10,12 @@ const ITEMS = [
 ];
 
 export default function BottomMenu({ navigation, active }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
   return (
     <View style={styles.wrap}>
       {ITEMS.map((item) => {
@@ -32,7 +36,8 @@ export default function BottomMenu({ navigation, active }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors, spacing, radius, typography) {
+  return StyleSheet.create({
   wrap: {
     position: "absolute",
     left: spacing.lg,
@@ -75,4 +80,5 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontWeight: typography.weight.bold,
   },
-});
+  });
+}

@@ -1,11 +1,11 @@
 // Login screen — username/password → POST /auth/login → decode JWT → set user in store.
 // Navigation is handled by App.jsx via conditional rendering (no navigate() call).
 // Admin users skip comms connection; regular users connect to the relay.
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useStore } from '../store';
 import { CONFIG } from '../config';
-import { colors, spacing, radius, typography } from '../theme';
+import { useAppTheme } from '../theme';
 
 /** Decode the payload section of a JWT (no verification — server already signed it).
  *  Uses a pure-JS base64 decode so it works on Hermes, JSC, and web. */
@@ -21,6 +21,12 @@ function decodeJwtPayload(jwt: string) {
 }
 
 export function LoginScreen() {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -99,7 +105,7 @@ export function LoginScreen() {
 
         <Pressable onPress={login} style={styles.button} disabled={loading}>
           {loading
-            ? <ActivityIndicator color="#fff" />
+            ? <ActivityIndicator color={colors.text.primary} />
             : <Text style={styles.buttonText}>Connect</Text>
           }
         </Pressable>
@@ -110,7 +116,8 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -174,4 +181,5 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     marginTop: spacing.lg,
   },
-});
+  });
+}

@@ -1,10 +1,15 @@
 // Admin Users — list users + register new user form.
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { api } from '../../lib/api';
-import { colors, spacing, radius, typography } from '../../theme';
+import { useAppTheme } from '../../theme';
 
 export function AdminUsers() {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const [users, setUsers] = useState([]);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -112,7 +117,7 @@ export function AdminUsers() {
               </View>
               <View style={[
                 styles.roleBadge,
-                { backgroundColor: item.role === 'admin' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
+                { backgroundColor: item.role === 'admin' ? colors.status.warningSubtle : colors.status.activeSubtle }
               ]}>
                 <Text style={[
                   styles.roleText,
@@ -129,100 +134,102 @@ export function AdminUsers() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary },
-  scrollContent: { padding: spacing.xl },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
-  error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background.primary },
+    scrollContent: { padding: spacing.xl },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
+    error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
 
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  countText: { color: colors.text.muted, fontSize: typography.size.sm },
-  refreshBtn: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: 'rgba(37, 55, 70, 0.6)',
-    borderRadius: radius.sm,
-  },
-  refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.lg,
+    },
+    countText: { color: colors.text.muted, fontSize: typography.size.sm },
+    refreshBtn: {
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.accent.glow,
+      borderRadius: radius.sm,
+    },
+    refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
 
-  sectionCard: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary },
-  sectionCount: { color: colors.text.muted, fontSize: typography.size.sm },
+    sectionCard: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginBottom: spacing.lg,
+      overflow: 'hidden',
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary },
+    sectionCount: { color: colors.text.muted, fontSize: typography.size.sm },
 
-  formBody: { padding: spacing.lg },
-  input: {
-    backgroundColor: colors.background.primary,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    padding: spacing.md,
-    color: colors.text.primary,
-    fontSize: typography.size.md,
-    marginBottom: spacing.sm,
-  },
-  registerBtn: {
-    backgroundColor: colors.status.active,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  registerText: { color: '#fff', fontWeight: typography.weight.bold, fontSize: typography.size.md },
+    formBody: { padding: spacing.lg },
+    input: {
+      backgroundColor: colors.background.primary,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: spacing.md,
+      color: colors.text.primary,
+      fontSize: typography.size.md,
+      marginBottom: spacing.sm,
+    },
+    registerBtn: {
+      backgroundColor: colors.status.active,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.md,
+      alignItems: 'center',
+      marginTop: spacing.xs,
+    },
+    registerText: { color: colors.text.primary, fontWeight: typography.weight.bold, fontSize: typography.size.md },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.accent.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.sm,
-  },
-  avatarText: {
-    color: colors.text.primary,
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
-  },
-  name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
-  sub: { color: colors.text.muted, fontSize: typography.size.sm, marginTop: 2 },
-  roleBadge: {
-    borderRadius: radius.full,
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
-  },
-  roleText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    letterSpacing: typography.letterSpacing.wide,
-  },
-  empty: { color: colors.text.muted, textAlign: 'center', paddingVertical: spacing.xl },
-});
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    avatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.accent.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: spacing.sm,
+    },
+    avatarText: {
+      color: colors.text.primary,
+      fontSize: typography.size.md,
+      fontWeight: typography.weight.bold,
+    },
+    name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+    sub: { color: colors.text.muted, fontSize: typography.size.sm, marginTop: 2 },
+    roleBadge: {
+      borderRadius: radius.full,
+      paddingVertical: 3,
+      paddingHorizontal: spacing.sm,
+    },
+    roleText: {
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.bold,
+      letterSpacing: typography.letterSpacing.wide,
+    },
+    empty: { color: colors.text.muted, textAlign: 'center', paddingVertical: spacing.xl },
+  });
+}

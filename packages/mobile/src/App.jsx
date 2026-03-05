@@ -10,7 +10,7 @@ import { Text, Platform } from 'react-native';
 import { ChannelProvider } from './context/ChannelContext';
 import { useStore } from './store';
 import { setJwtGetter } from './lib/api';
-import { colors } from './theme';
+import { useAppTheme } from './theme';
 
 // Screens
 import { LoginScreen } from './screens/LoginScreen';
@@ -32,6 +32,7 @@ function AdminNavigator() {
 
   // On native: keep bottom tabs
   const clearAuth = useStore(s => s.clearAuth);
+  const { colors } = useAppTheme();
 
   return (
     <AdminTabs.Navigator
@@ -59,6 +60,7 @@ function AdminNavigator() {
 
 export default function App() {
   const user = useStore(s => s.user);
+  const { themeMode } = useAppTheme();
 
   // Wire the API helper's JWT getter to the store — runs once on mount.
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer key={themeMode}>
         {user.role === 'admin' ? (
           <AdminNavigator />
         ) : (

@@ -1,12 +1,10 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import React, { useMemo } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
 import BottomMenu from "../components/BottomMenu";
-import theme from "../theme";
+import { useAppTheme } from "../theme";
 import { MOCK_NOTIFICATIONS, getUnreadCount } from "../data/notifications";
 import { useStore, type ConnectionMode } from "../store";
 import { comms } from "../utils/comms";
-
-const { colors, spacing, radius, typography } = theme;
 
 const ACTIVE_USERS = [
   { id: "u1", name: "ECHO-1", status: "ACTIVE", channel: "Tactical-Main" },
@@ -23,6 +21,7 @@ function StatusCard({
   bars,
   isActive,
   onPress,
+  styles,
 }: {
   label: string;
   value: string;
@@ -30,6 +29,7 @@ function StatusCard({
   bars: number;
   isActive?: boolean;
   onPress?: () => void;
+  styles: any;
 }) {
   return (
     <Pressable
@@ -63,6 +63,12 @@ function StatusCard({
 }
 
 export default function DashboardScreen({ navigation }: { navigation: any }) {
+  const { colors, spacing, radius, typography, themeMode, setThemeMode } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
   const unread = getUnreadCount();
   const notificationFeed = MOCK_NOTIFICATIONS;
   const preferredConnection = useStore((s) => s.preferredConnection);
@@ -78,8 +84,22 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.headerRow}>
-          <Text style={styles.sectionTitle}>Dashboard</Text>
-          <Text style={styles.helper}>Live Ops Overview</Text>
+          <View>
+            <Text style={styles.sectionTitle}>Dashboard</Text>
+            <Text style={styles.helper}>Live Ops Overview</Text>
+          </View>
+          <View style={styles.themeToggleWrap}>
+            <Text style={styles.themeToggleLabel}>
+              {themeMode === "dark" ? "Dark" : "Light"}
+            </Text>
+            <Switch
+              value={themeMode === "dark"}
+              onValueChange={(enabled) => setThemeMode(enabled ? "dark" : "light")}
+              trackColor={{ false: colors.border.medium, true: colors.accent.primaryLight }}
+              thumbColor={colors.text.primary}
+              style={styles.themeToggleSwitch}
+            />
+          </View>
         </View>
 
         <View style={styles.bentoGrid}>
@@ -119,6 +139,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               bars={4}
               isActive={preferredConnection === "satellite"}
               onPress={() => selectConnection("satellite")}
+              styles={styles}
             />
             <StatusCard
               label="Cellular"
@@ -127,6 +148,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               bars={3}
               isActive={preferredConnection === "cellular"}
               onPress={() => selectConnection("cellular")}
+              styles={styles}
             />
           </View>
         </View>
@@ -166,7 +188,8 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -182,6 +205,29 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: spacing.sm,
+  },
+  themeToggleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.full,
+    paddingLeft: spacing.sm,
+    paddingRight: 2,
+    paddingVertical: 2,
+    gap: spacing.xs,
+  },
+  themeToggleLabel: {
+    color: colors.text.secondary,
+    fontSize: typography.size.xs,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    minWidth: 34,
+    textAlign: "center",
+  },
+  themeToggleSwitch: {
+    transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }],
   },
   sectionTitle: {
     color: colors.text.muted,
@@ -433,4 +479,5 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: "700",
   },
-});
+  });
+}
