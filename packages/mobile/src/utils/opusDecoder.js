@@ -12,17 +12,36 @@ const SAMPLE_RATE = 16000;
 const CHANNEL_COUNT = 1;
 
 let _initialized = false;
+let _initPromise = null;
 
+/**
+ * Initialize the Opus decoder (idempotent, concurrent-safe).
+ */
 export async function initOpusDecoder() {
-  if (!OpusDecoder) {
-    throw new Error(
-      '[opus-dec] OpusDecoder native module not found. ' +
-      'Run npx expo run:android to rebuild with the native module linked.'
-    );
+  if (_initialized) return;
+  
+  // Prevent concurrent initialization
+  if (_initPromise) {
+    return _initPromise;
   }
-  await OpusDecoder.initialize(SAMPLE_RATE, CHANNEL_COUNT);
-  _initialized = true;
-  console.log('[opus-dec] native decoder initialized — 16kHz mono (MediaCodec)');
+  
+  _initPromise = (async () => {
+    if (!OpusDecoder) {
+      throw new Error(
+        '[opus-dec] OpusDecoder native module not found. ' +
+        'Run npx expo run:android to rebuild with the native module linked.'
+      );
+    }
+    await OpusDecoder.initialize(SAMPLE_RATE, CHANNEL_COUNT);
+    _initialized = true;
+    console.log('[opus-dec] native decoder initialized — 16kHz mono (MediaCodec)');
+  })();
+  
+  try {
+    await _initPromise;
+  } finally {
+    _initPromise = null;
+  }
 }
 
 /**
