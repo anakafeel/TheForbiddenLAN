@@ -69,8 +69,6 @@ export function LoginScreen() {
       } else {
         setError(`Cannot reach server: ${e.message}`);
       }
-      console.error('[LoginScreen] login error:', e);
-      setError(`Cannot reach server: ${e.message}`);
     } finally {
       setLoading(false);
     }
