@@ -6,6 +6,7 @@ import { useStore } from "../store";
 // For Expo, set this in packages/mobile/.env as:
 // EXPO_PUBLIC_API_URL=http://localhost:3001
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const DEV_BYPASS_TOKEN = "devtoken";
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
@@ -52,9 +53,13 @@ export default function LoginScreen() {
     }
   };
 
+  const bypassLoginForDev = () => {
+    signIn(DEV_BYPASS_TOKEN);
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>ForbiddenLAN</Text>
+      <Text style={styles.title}>SkyTalk</Text>
 
       <TextInput
         placeholder="Username"
@@ -79,6 +84,12 @@ export default function LoginScreen() {
       <Pressable onPress={login} style={styles.button}>
         <Text style={styles.buttonText}>Connect</Text>
       </Pressable>
+
+      {__DEV__ ? (
+        <Pressable onPress={bypassLoginForDev} style={[styles.button, styles.devButton]}>
+          <Text style={styles.buttonText}>Dev Bypass</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -109,6 +120,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     borderRadius: 10,
     backgroundColor: "#0D6EFD",
+  },
+  devButton: {
+    backgroundColor: "#4A5568",
   },
   buttonText: { color: "white", fontSize: 16, fontWeight: "700" },
   error: { color: "#ff6b6b", marginTop: 4 },

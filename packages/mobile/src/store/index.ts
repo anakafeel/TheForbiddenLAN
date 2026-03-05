@@ -9,19 +9,15 @@ export interface AppState {
   signalStatus: SignalStatus;
   floorStatus: FloorStatus;
   gps: GPS | null;
-  setJwt: (jwt: string) => void;
+  setJwt: (jwt: string | null) => void;
   setActiveTalkgroup: (id: string) => void;
   setSignalStatus: (s: SignalStatus) => void;
   setFloorStatus: (f: FloorStatus) => void;
   setGPS: (g: GPS) => void;
 }
 
-// =====================
-// WARNING: DEV MODE ONLY!
-// For development/testing, we set a dummy JWT so the app skips login.
-// REMOVE THIS BEFORE PRODUCTION!
-// =====================
-  jwt: "devtoken", // <--- REMOVE BEFORE PRODUCTION
+export const useStore = create<AppState>((set) => ({
+  jwt: null,
   activeTalkgroup: '',
   talkgroups: [],
   signalStatus: { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },

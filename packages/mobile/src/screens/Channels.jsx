@@ -4,6 +4,7 @@ import { ChannelContext } from '../context/ChannelContext';
 import socket from '../utils/socket';
 import { CONFIG } from '../config';
 import theme from '../theme';
+import BottomMenu from '../components/BottomMenu';
 
 const { colors, spacing, radius, shadows, typography } = theme;
 
@@ -18,7 +19,7 @@ const MOCK_CHANNELS = [
 
 // Filter Tabs Component
 function FilterTabs({ activeFilter, onFilterChange }) {
-  const filters = ['ALL', 'ACTIVE', 'STARRED'];
+  const filters = ['ALL', 'ACTIVE'];
   return (
     <View style={styles.filterContainer}>
       {filters.map((filter) => (
@@ -183,9 +184,13 @@ export default function ChannelsScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.menuIcon}>☰</Text>
+          <Pressable onPress={() => navigation.openDrawer()} hitSlop={10}>
+            <Text style={styles.menuIcon}>☰</Text>
+          </Pressable>
           <Text style={styles.title}>SKYTALK</Text>
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Pressable onPress={() => navigation.navigate('Profile')} hitSlop={10}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
         </View>
         
         {/* Search Bar */}
@@ -204,11 +209,6 @@ export default function ChannelsScreen({ navigation }) {
         <FilterTabs activeFilter={activeFilter} onFilterChange={setActiveFilter} />
       </View>
 
-      {/* Section Label */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>SYSTEM GROUPS: TACTICAL</Text>
-      </View>
-
       {/* Channel List */}
       <FlatList
         data={filteredChannels}
@@ -217,6 +217,21 @@ export default function ChannelsScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.micFab,
+          current && styles.micFabActive,
+          pressed && styles.micFabPressed,
+        ]}
+        onPress={() => navigation.navigate('PTT')}
+      >
+        <Text style={styles.micFabIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
+        <Text style={styles.micFabText}>
+          {current ? 'OPEN MIC' : 'SELECT CH + MIC'}
+        </Text>
+      </Pressable>
+      <BottomMenu navigation={navigation} active="Channels" />
     </View>
   );
 }
@@ -297,19 +312,47 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: colors.text.primary,
   },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  sectionLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.widest,
-    fontWeight: typography.weight.medium,
-  },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl + 144,
+  },
+  micFab: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: spacing.xxl + 68,
+    height: 64,
+    minWidth: 150,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 32,
+    backgroundColor: colors.accent.primary,
+    borderWidth: 2,
+    borderColor: colors.accent.primaryLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.accent.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 9,
+  },
+  micFabActive: {
+    backgroundColor: colors.status.danger,
+    borderColor: '#FF6B6B',
+    shadowColor: colors.status.danger,
+  },
+  micFabPressed: {
+    transform: [{ scale: 0.97 }],
+  },
+  micFabIcon: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  micFabText: {
+    color: colors.text.primary,
+    fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.wide,
+    fontSize: typography.size.xs,
   },
   channelCard: {
     backgroundColor: colors.background.card,

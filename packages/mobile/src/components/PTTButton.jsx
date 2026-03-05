@@ -9,33 +9,26 @@ const { colors, spacing, typography } = theme;
 export default function PTTButton({ userId, onTransmitChange }) {
   const [transmitting, setTransmitting] = useState(false);
 
-  const onPressIn = async () => {
-    if (transmitting) return;
-
-    setTransmitting(true);
-    onTransmitChange?.(true);
-
-    emitStartTalking(userId);
-
-    try {
-      await startAudioStream();
-    } catch (e) {
-      console.warn('Audio start error:', e);
+  const toggleTransmit = async () => {
+    if (!transmitting) {
+      setTransmitting(true);
+      onTransmitChange?.(true);
+      emitStartTalking(userId);
+      try {
+        await startAudioStream();
+      } catch (e) {
+        console.warn('Audio start error:', e);
+      }
+      return;
     }
-  };
-
-  const onPressOut = async () => {
-    if (!transmitting) return;
 
     setTransmitting(false);
     onTransmitChange?.(false);
-
     try {
       await stopAudioStream();
     } catch (e) {
       console.warn('Audio stop error:', e);
     }
-
     emitStopTalking(userId);
   };
 
@@ -45,8 +38,7 @@ export default function PTTButton({ userId, onTransmitChange }) {
       <View style={[styles.middleRing, transmitting && styles.middleRingActive]} />
 
       <Pressable
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
+        onPress={toggleTransmit}
         style={({ pressed }) => [
           styles.button,
           transmitting && styles.transmitting,
@@ -57,7 +49,7 @@ export default function PTTButton({ userId, onTransmitChange }) {
           <Text style={styles.icon}>🎙️</Text>
 
           <Text style={[styles.text, transmitting && styles.textActive]}>
-            {transmitting ? 'TRANSMITTING' : 'PUSH TO TALK'}
+            {transmitting ? 'STOP TRANSMIT' : 'START TRANSMIT'}
           </Text>
         </View>
       </Pressable>
