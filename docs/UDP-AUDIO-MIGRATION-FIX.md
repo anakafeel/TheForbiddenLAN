@@ -1,5 +1,7 @@
 # UDP Audio Migration — 2026-03-05
 
+> **Quick Reference:** See "Quick Reference: Local vs Production" section below for easy switching between local and production servers.
+
 **Date:** 2026-03-05  
 **Status:** Completed  
 **Issue:** Audio not working over UDP on local server  
@@ -121,6 +123,160 @@ async function _ensureDecoderReady() {
 [UdpSocket] ✅ Connected — target 192.168.2.133:3000
 [AudioPipeline] TX chunk #1 via UDP
 [comms] RX chunk decoded & playing (stream=true)
+```
+
+---
+
+## Quick Reference: Local vs Production
+
+### The 3 Files to Change
+
+| File | What to Change |
+|------|----------------|
+| `packages/mobile/.env` | `EXPO_PUBLIC_WS_URL` and `EXPO_PUBLIC_API_URL` |
+| `packages/mobile/.env.local` | Same as above |
+| `packages/mobile/src/config.js` | Fallback defaults in `WS_URL` and `API_URL` |
+
+### Local Server URLs
+```
+WS_URL: ws://192.168.2.133:3000/ws
+API_URL: http://192.168.2.133:3000
+```
+
+### Production Server URLs
+```
+WS_URL: ws://134.122.32.45:3000/ws
+API_URL: http://134.122.32.45:3000
+```
+
+> **Note:** Replace `192.168.2.133` with your machine's local IP address.
+
+---
+
+## Prerequisites (One-Time Setup)
+
+### 1. Install Missing Dependencies
+
+If you get `Cannot find module 'react-native-worklets'` error:
+
+```bash
+pnpm add react-native-worklets
+```
+
+### 2. Start Postgres (if not running)
+
+```bash
+# Check if running
+docker ps | grep skytalk-pg
+
+# Start if stopped
+docker start skytalk-pg
+
+# Or create if doesn't exist
+docker run -d --name skytalk-pg --network host \
+  -e POSTGRES_USER=skytalk -e POSTGRES_PASSWORD=skytalk123 -e POSTGRES_DB=skytalk \
+  postgres:16-alpine
+```
+
+---
+
+## Workflow A: Testing Locally
+
+### Step 1: Configure Mobile for Local
+
+Edit `.env`, `.env.local`, and `config.js` to use `192.168.2.133` (your local IP).
+
+### Step 2: Start Local Server
+
+```bash
+cd packages/server
+JWT_SECRET=local-dev-secret-change-in-prod \
+DATABASE_URL=postgresql://skytalk:skytalk123@127.0.0.1:5432/skytalk \
+PORT=3000 \
+npx tsx src/index.ts
+```
+
+Expected output:
+```
+[hub] UDP server listening on 0.0.0.0:3000
+```
+
+### Step 3: Build & Run Mobile
+
+```bash
+cd packages/mobile
+
+# If Metro is already running, just build:
+npx expo run:android --device
+
+# If Metro isn't running, start it first in one terminal:
+npx expo start --clear
+# Then build in another terminal:
+npx expo run:android --device
+```
+
+---
+
+## Workflow B: Testing Production
+
+### Step 1: Ensure Shri Has Deployed
+
+Tell Shri to deploy the code changes to production server first.
+
+### Step 2: Configure Mobile for Production
+
+Edit `.env`, `.env.local`, and `config.js` to use `134.122.32.45`.
+
+### Step 3: Build & Run Mobile
+
+```bash
+cd packages/mobile
+npx expo run:android --device
+```
+
+The app will connect to Shri's production server.
+
+---
+
+## Troubleshooting
+
+### "404 Red Screen" Error
+
+**Cause:** App can't reach the server.
+
+**Fix:** 
+- If testing locally, ensure local server is running
+- If testing production, ensure Shri has deployed the code
+- Check the URL is correct (includes `/ws` for WebSocket)
+
+### "Cannot read 'clipboard' of null"
+
+**Fix:** Run `pnpm add react-native-worklets`
+
+### White Screen / Stuck on Loading
+
+**Cause:** Metro bundler not running or app can't connect to it.
+
+**Fix:**
+```bash
+# Kill all processes
+pkill -9 -f "node|expo|metro"
+
+# Start fresh
+cd packages/mobile
+npx expo start --clear
+# Then in another terminal:
+npx expo run:android --device
+```
+
+### Metro Bundle Error
+
+**Fix:**
+```bash
+rm -rf packages/mobile/.expo
+cd packages/mobile
+npx expo prebuild --clean
+npx expo run:android --device
 ```
 
 ---

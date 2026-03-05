@@ -1,77 +1,69 @@
 # Production Deployment Guide for Shri
 
 **Date:** 2026-03-05  
-**Purpose:** Deploy UDP audio fixes to production server
+**Purpose:** Deploy UDP audio fixes to production server  
+**Status:** ⚠️ **ACTION REQUIRED**
 
 ---
 
-## What Changed
+## What Changed (Exactly What You Need to Deploy)
 
-The following files were modified to fix UDP audio:
+These are the **exact commits** Shri needs to pull:
 
-| File | Change |
-|------|--------|
-| `packages/server/src/ws/hub.ts` | Improved deviceId bridging, better logging |
-| `packages/comms/src/AudioPipeline.ts` | Added `sender` field to PTT_AUDIO |
-| `packages/comms/src/ForbiddenLANComms.ts` | Pass `deviceId` to AudioPipeline |
+### Commit 1: Core UDP Audio Fixes
+```
+git log --oneline | grep -i "sender\|bridg"  # Look for commits about sender field and bridging
+```
+
+**Files changed:**
+- `packages/server/src/ws/hub.ts` — Improved deviceId/userId bridging, better logging
+- `packages/comms/src/AudioPipeline.ts` — Added `sender` field to PTT_AUDIO messages
+- `packages/comms/src/ForbiddenLANComms.ts` — Pass `deviceId` to AudioPipeline constructor
+
+### Commit 2: Decoder Race Condition Fix
+**Files changed:**
+- `packages/mobile/src/utils/comms.js` — Added promise guard for decoder init
+- `packages/mobile/src/utils/opusDecoder.js` — Added promise guard for decoder init
 
 ---
 
-## Deployment Options
-
-### Option 1: Shri Deploys (Recommended)
-
-Shri has direct access to the production server. Here's what he needs to do:
+## Quick Deploy Commands for Shri
 
 ```bash
 # 1. SSH into production server
 ssh root@134.122.32.45
 
 # 2. Navigate to the project directory
-cd /path/to/TheForbiddenLAN  # or wherever the repo is cloned
+cd /path/to/TheForbiddenLAN
 
-# 3. Pull latest changes
-git pull origin main  # or whatever branch has the UDP fixes
+# 3. Pull latest code (get the commits above)
+git pull origin main
 
-# 4. Install dependencies (if needed)
-npm install  # or pnpm install
+# 4. Check what changed
+git log --oneline -5
 
-# 5. Restart the server
-# Option A: If running via Node directly:
-pkill -f "tsx src/index"  # kill existing process
-JWT_SECRET=your-secret \
-DATABASE_URL=postgresql://user:pass@localhost:5432/skytalk \
+# 5. Install dependencies (only if package.json changed)
+pnpm install
+
+# 6. Restart the server
+# Find and kill existing process
+pkill -f "tsx src/index"
+
+# Start fresh
+JWT_SECRET=your-production-secret \
+DATABASE_URL=postgresql://skytalk:skytalk123@localhost:5432/skytalk \
 PORT=3000 \
 npx tsx src/index.ts &
 
-# Option B: If running via Docker:
-docker compose down
-docker compose up -d --build
-
-# 6. Verify server is running
-curl http://134.122.32.45:3000/health  # if you have a health endpoint
-```
-
-### Option 2: You Deploy (If Shri Gives You Access)
-
-If Shri gives you SSH access:
-
-```bash
-# 1. SSH into production server
-ssh root@134.122.32.45
-
-# 2. Navigate to project directory
-cd /path/to/TheForbiddenLAN
-
-# 3. Pull and restart (same as above)
+# 7. Verify it's running
+curl http://134.122.32.45:3000/health
 ```
 
 ---
 
-## Server Logs to Verify
+## How to Verify It's Working
 
-After deployment, you should see these logs when clients connect:
-
+When clients connect, you should see:
 ```
 [hub] UDP server listening on 0.0.0.0:3000
 [hub] UDP_REGISTER: userId=dev-xxxx from 192.168.x.x:port
@@ -87,66 +79,57 @@ When PTT is pressed:
 
 ---
 
-## If Deployment Issues
+## If Something Goes Wrong
 
 ### Server won't start
-- Check Postgres is running: `docker ps` or `pg_isready`
-- Check environment variables are set correctly
-- Check port 3000 is not in use: `lsof -i :3000`
-
-### UDP still not working after deploy
-- Check server logs for `[hub] UDP server listening`
-- Check client logs for `[UdpSocket] ✅ Connected`
-- Verify production server has UDP port 3000 open in firewall
-
-### Firewall check (if needed)
 ```bash
-# On the server, open UDP port 3000
-sudo firewall-cmd --add-port=3000/udp --permanent
-sudo firewall-cmd --reload
+# Check Postgres
+docker ps | grep postgres
+
+# Check port 3000
+lsof -i :3000
+
+# Check logs
+tail -f /var/log/syslog
+```
+
+### UDP still not working
+1. Check server logs for `[hub] UDP server listening`
+2. Make sure firewall allows UDP port 3000:
+   ```bash
+   sudo firewall-cmd --add-port=3000/udp --permanent
+   sudo firewall-cmd --reload
+   ```
+
+### Rollback (if needed)
+```bash
+git revert HEAD
+git push origin main
+# Restart server
 ```
 
 ---
 
-## Client Build
+## After You Deploy
 
-After server is deployed, rebuild the mobile app to connect to production:
+Tell the team:
+1. "Production server updated with UDP audio fixes"
+2. They can now switch their mobile apps back to production
 
+Then they change their `.env` files to:
+```
+EXPO_PUBLIC_WS_URL=ws://134.122.32.45:3000/ws
+EXPO_PUBLIC_API_URL=http://134.122.32.45:3000
+```
+
+And rebuild:
 ```bash
 cd packages/mobile
-
-# Clear Metro cache
-npx expo start --clear
-
-# Build and install
 npx expo run:android --device
 ```
-
-The app is now configured to connect to:
-- WebSocket: `ws://134.122.32.45:3000/ws`
-- API: `http://134.122.32.45:3000`
-
----
-
-## Rollback (If Needed)
-
-If UDP audio breaks on production:
-
-1. **Quick fix:** Revert env to use local server while you investigate:
-   - Edit `.env` to point to `192.168.2.133:3000`
-
-2. **Full rollback:** Revert the code changes:
-   ```bash
-   git revert <commit-hash>
-   git push origin main
-   # Then restart server
-   ```
 
 ---
 
 ## Questions?
 
-If Shri has questions about the deployment, have him:
-1. Check server logs first
-2. Verify Postgres is running
-3. Check firewall rules for UDP port 3000
+Check `docs/UDP-AUDIO-MIGRATION-FIX.md` for full details on what was changed and why.
