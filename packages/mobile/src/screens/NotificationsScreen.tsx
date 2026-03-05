@@ -1,0 +1,77 @@
+import React from "react";
+import { View, Text, StyleSheet, FlatList } from "react-native";
+import BottomMenu from "../components/BottomMenu";
+import theme from "../theme";
+import { MOCK_NOTIFICATIONS } from "../data/notifications";
+
+const { colors, spacing, radius, typography } = theme;
+
+export default function NotificationsScreen({ navigation }: { navigation: any }) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Notifications</Text>
+      <FlatList
+        data={MOCK_NOTIFICATIONS}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.time}>{item.minutesAgo}m ago</Text>
+            </View>
+            <Text style={styles.message}>{item.message}</Text>
+          </View>
+        )}
+      />
+      <BottomMenu navigation={navigation} active="Notifications" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background.primary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl + 84,
+  },
+  title: {
+    color: colors.text.primary,
+    fontSize: typography.size.xl,
+    fontWeight: "700",
+    marginBottom: spacing.md,
+  },
+  list: {
+    paddingBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  card: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: spacing.lg,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.xs,
+  },
+  cardTitle: {
+    color: colors.text.primary,
+    fontSize: typography.size.lg,
+    fontWeight: "700",
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  time: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+  },
+  message: {
+    color: colors.text.secondary,
+    fontSize: typography.size.md,
+  },
+});

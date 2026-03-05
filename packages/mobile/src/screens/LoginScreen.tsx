@@ -26,9 +26,6 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const setJwt = useStore(s => s.setJwt);
-  const setUser = useStore(s => s.setUser);
-
   const login = async () => {
     if (!username || !password) { setError('Enter username and password'); return; }
     setError('');
@@ -73,7 +70,6 @@ export function LoginScreen() {
       setLoading(false);
     }
   };
-
 
   return (
     <View style={styles.container}>

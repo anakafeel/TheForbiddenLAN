@@ -1,10 +1,9 @@
 // Unified App — conditional rendering based on auth state:
 //   user === null   → LoginScreen
 //   role === admin  → Admin sidebar (web) or bottom tabs (native)
-//   role === user   → User stack (Channels → PTT) — existing flow
+//   role === user   → Annie's AppDrawer (Dashboard, Channels, PTT, Profile)
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text, Platform } from 'react-native';
@@ -15,8 +14,7 @@ import { colors } from './theme';
 
 // Screens
 import { LoginScreen } from './screens/LoginScreen';
-import ChannelsScreen from './screens/Channels.jsx';
-import PTTScreen from './screens/PTTScreen.jsx';
+import AppDrawer from './navigation/AppDrawer';
 import { AdminDashboard } from './screens/admin/AdminDashboard';
 import { AdminDevices } from './screens/admin/AdminDevices';
 import { AdminTalkgroups } from './screens/admin/AdminTalkgroups';
@@ -24,30 +22,7 @@ import { AdminUsers } from './screens/admin/AdminUsers';
 import { AdminMap } from './screens/admin/AdminMap';
 import { AdminSidebar } from './components/AdminSidebar';
 
-const UserStack = createStackNavigator();
 const AdminTabs = createBottomTabNavigator();
-
-function UserNavigator() {
-  return (
-    <ChannelProvider>
-      <UserStack.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.background.tertiary },
-          headerTintColor: colors.text.primary,
-          headerTitleStyle: { fontWeight: 'bold' },
-        }}
-      >
-        <UserStack.Screen name="Channels" component={ChannelsScreen} options={{ title: 'Voice Channels' }} />
-        <UserStack.Screen name="PTT" component={PTTScreen} options={{ title: 'SkyTalk PTT' }} />
-      </UserStack.Navigator>
-    </ChannelProvider>
-  );
-}
-
-/** Simple text-based tab icon (avoids vector-icons native linking issues). */
-function TabIcon({ label, color }) {
-  return <Text style={{ color, fontSize: 18 }}>{label}</Text>;
-}
 
 function AdminNavigator() {
   // On web: render custom sidebar layout (no react-navigation needed)
@@ -90,7 +65,7 @@ export default function App() {
     setJwtGetter(() => useStore.getState().jwt);
   }, []);
 
-  // No user → login. Admin → admin tabs. User → PTT stack.
+  // No user → login. Admin → admin tabs. User → Annie's drawer (Dashboard, Channels, PTT, Profile).
   if (!user) {
     return (
       <SafeAreaProvider>
@@ -102,7 +77,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        {user.role === 'admin' ? <AdminNavigator /> : <UserNavigator />}
+        {user.role === 'admin' ? (
+          <AdminNavigator />
+        ) : (
+          <ChannelProvider>
+            <AppDrawer />
+          </ChannelProvider>
+        )}
       </NavigationContainer>
     </SafeAreaProvider>
   );

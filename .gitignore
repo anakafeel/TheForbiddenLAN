@@ -13,6 +13,9 @@ CLAUDE.md
 # Expo
 .expo/
 
+# Next.js
+.next/
+
 # Playwright
 playwright-report/
 test-results/

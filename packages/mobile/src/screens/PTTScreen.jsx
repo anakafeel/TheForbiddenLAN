@@ -16,6 +16,7 @@ import {
 } from "../utils/socket";
 import { onFloorDenied, getFloorState, comms } from "../utils/comms";
 import { updateTLEs, getVisibleSatellites } from "../utils/satellitePredictor";
+import { useStore } from "../store";
 import { CONFIG } from "../config";
 import theme from "../theme";
 
@@ -27,6 +28,8 @@ export default function PTTScreen({ navigation }) {
   const [currentSpeaker, setCurrentSpeaker] = useState(null);
   const [channelBusy, setChannelBusy] = useState(false);
   const [busyHolder, setBusyHolder] = useState(null);
+  const preferredConnection = useStore((s) => s.preferredConnection);
+  const setPreferredConnection = useStore((s) => s.setPreferredConnection);
   const [isSatcom, setIsSatcom] = useState(false);
   const [satsVisible, setSatsVisible] = useState(0);
 
@@ -56,6 +59,8 @@ export default function PTTScreen({ navigation }) {
     const newValue = !isSatcom;
     setIsSatcom(newValue);
     comms.setTransportMode(newValue ? "satcom" : "cellular");
+    // Keep store in sync so Dashboard connection cards reflect current mode
+    setPreferredConnection(newValue ? "satellite" : "cellular");
   };
 
   // Register floor-deny callback — fires when server rejects PTT (walk-on prevention)
