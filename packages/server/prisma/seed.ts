@@ -27,6 +27,15 @@ async function main() {
   });
   console.log(`pilot1 user: ${pilot.id}`);
 
+  // Test pilot2 (pilot2 / test)
+  const pilot2Hash = await bcrypt.hash('test', 10);
+  const pilot2 = await prisma.user.upsert({
+    where:  { username: 'pilot2' },
+    update: {},
+    create: { username: 'pilot2', password_hash: pilot2Hash, role: 'user' },
+  });
+  console.log(`pilot2 user: ${pilot2.id}`);
+
   // Ground Ops talkgroup
   const talkgroup = await prisma.talkgroup.upsert({
     where:  { name: 'Ground Ops' },
@@ -46,7 +55,12 @@ async function main() {
     update: {},
     create: { user_id: pilot.id, talkgroup_id: talkgroup.id, site: 'default' },
   });
-  console.log('Both users added to Ground Ops');
+  await prisma.membership.upsert({
+    where:  { user_id_talkgroup_id: { user_id: pilot2.id, talkgroup_id: talkgroup.id } },
+    update: {},
+    create: { user_id: pilot2.id, talkgroup_id: talkgroup.id, site: 'default' },
+  });
+  console.log('All users added to Ground Ops');
 
   console.log('Done.');
 }
