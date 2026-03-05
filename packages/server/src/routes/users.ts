@@ -1,4 +1,5 @@
-// User routes — admin view of all users
+// User routes — REST shim. Users table still lives in Postgres, so this
+// is a direct Prisma query (identical to the old route).
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 

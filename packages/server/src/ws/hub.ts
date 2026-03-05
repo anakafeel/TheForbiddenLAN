@@ -1,15 +1,19 @@
-// WebSocket hub — fan-out relay. Receives messages, routes to talkgroup members.
+// WebSocket hub — fan-out relay + operation log + sync broker.
+// Receives messages, routes to talkgroup members.
 // Includes server-authoritative floor control to prevent walk-ons.
+// Handles admin operations (CRUD via messages) and sync protocol.
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import type { WebSocket } from 'ws';
 import dgram from 'dgram';
 
+const AUTO_APPROVE_JOIN = (process.env.AUTO_APPROVE_JOIN ?? 'true') === 'true';
+
 // talkgroup ID → set of connected raw WebSockets
 const rooms = new Map<string, Set<WebSocket>>();
-// raw WebSocket → { userId, deviceId, senderDeviceId }
+// raw WebSocket → { userId, deviceId, senderDeviceId, role }
 // userId = JWT sub (database ID), deviceId = DB device_id, senderDeviceId = CONFIG.DEVICE_ID from mobile
-const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null; senderDeviceId: string | null }>();
+const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null; senderDeviceId: string | null; role: string }>();
 // raw WebSocket → set of talkgroup IDs the socket has joined
 const socketRooms = new Map<WebSocket, Set<string>>();
 // sessionId (4-byte int from PTT_START) → talkgroup — used to route PTT_AUDIO
@@ -17,6 +21,8 @@ const socketRooms = new Map<WebSocket, Set<string>>();
 const sessionTalkgroup = new Map<number, string>();
 // Reverse lookup: senderDeviceId → WebSocket (for matching UDP registrations to WS connections)
 const deviceIdToSocket = new Map<string, WebSocket>();
+// userId → WebSocket (for sending targeted sync/admin messages)
+const userSockets = new Map<string, WebSocket>();
 
 // ── UDP Transport Layer ───────────────────────────────────────────────────────
 export const udpServer = dgram.createSocket('udp4');
@@ -56,7 +62,7 @@ export function startUdpServer(options: { port: number }) {
       if (parsed.chunk <= 2) {
         console.log(`[hub] UDP PTT_AUDIO received: session=0x${((parsed.sessionId as number) || 0).toString(16)} chunk=${parsed.chunk} sender=${parsed.sender || 'MISSING'} talkgroup=${parsed.talkgroup || 'MISSING'}`);
       }
-      
+
       let tg = sessionTalkgroup.get(parsed.sessionId as number);
 
       // ── Fallback: recover talkgroup from message if session lookup misses ──
@@ -87,7 +93,7 @@ export function startUdpServer(options: { port: number }) {
         const senderMatchByUdp = holderUdp && holderUdp.address === rinfo.address && holderUdp.port === rinfo.port;
         // Also check if sender field in message matches holder
         const senderMatchById = parsed.sender && (parsed.sender === holder.senderId);
-        
+
         if (!senderMatchByUdp && !senderMatchById) {
           if (parsed.chunk <= 2) console.warn(`[hub] UDP PTT_AUDIO: DROPPED chunk=${parsed.chunk} — session mismatch (holder=0x${(holder.sessionId || 0).toString(16)} vs pkt=0x${((parsed.sessionId as number) || 0).toString(16)}) and sender mismatch (holder=${holder.senderId} vs msg.sender=${parsed.sender || 'none'})`);
           return;
@@ -118,7 +124,7 @@ export function startUdpServer(options: { port: number }) {
         // Look up peer's UDP endpoint by senderDeviceId first, then JWT userId
         const peerUdp = (user.senderDeviceId ? udpClients.get(user.senderDeviceId) : undefined)
           || udpClients.get(user.userId);
-        
+
         if (peerUdp) {
           udpAudioRelayCount++;
           udpRelayed++;
@@ -256,6 +262,157 @@ function fanOut(sender: WebSocket, talkgroup: string, raw: string, isAudio = fal
   }
 }
 
+// ── Operation Log + Sync ─────────────────────────────────────────────────────
+
+// Broadcast an operation to ALL connected sockets (not room-scoped)
+function broadcastOp(op: { seq: number; type: string; payload: any; issued_by: string; signature: string; issued_at: Date }) {
+  const msg = JSON.stringify({
+    type: 'OP',
+    op: { seq: op.seq, type: op.type, payload: op.payload, issued_by: op.issued_by, signature: op.signature, issued_at: op.issued_at },
+  });
+  for (const [ws] of socketUser) {
+    if (ws.readyState === 1) ws.send(msg);
+  }
+}
+
+// Persist an operation to the log and fan it out
+async function appendOp(type: string, payload: any, issuedBy: string, signature: string): Promise<{ seq: number; type: string; payload: any; issued_by: string; signature: string; issued_at: Date }> {
+  const op = await prisma.operation.create({
+    data: { type, payload, issued_by: issuedBy, signature },
+  });
+  console.log(`[hub] op seq=${op.seq} type=${op.type} by=${issuedBy}`);
+  broadcastOp(op);
+  return op;
+}
+
+// Handle SYNC_REQUEST: send all ops since the client's cursor
+async function handleSyncRequest(socket: WebSocket, userId: string, lastSeq: number) {
+  const ops = await prisma.operation.findMany({
+    where: { seq: { gt: lastSeq } },
+    orderBy: { seq: 'asc' },
+  });
+
+  const upToSeq = ops.length > 0 ? ops[ops.length - 1].seq : lastSeq;
+
+  socket.send(JSON.stringify({
+    type: 'SYNC_BATCH',
+    ops: ops.map(o => ({ seq: o.seq, type: o.type, payload: o.payload, issued_by: o.issued_by, signature: o.signature, issued_at: o.issued_at })),
+    upToSeq,
+  }));
+
+  console.log(`[hub] SYNC_BATCH → ${userId}: ${ops.length} ops (lastSeq=${lastSeq} → upToSeq=${upToSeq})`);
+}
+
+// Handle SYNC_ACK: update the client's cursor
+async function handleSyncAck(userId: string, lastSeq: number) {
+  await prisma.syncCursor.upsert({
+    where: { user_id: userId },
+    update: { last_seq: lastSeq, synced_at: new Date() },
+    create: { user_id: userId, last_seq: lastSeq, synced_at: new Date() },
+  });
+}
+
+// ── Admin Operation Handlers ─────────────────────────────────────────────────
+
+async function handleAdminOp(socket: WebSocket, userId: string, role: string, msg: any) {
+  if (role !== 'admin') {
+    socket.send(JSON.stringify({ type: 'ERROR', error: 'forbidden', message: 'Admin role required' }));
+    return;
+  }
+
+  const signature = msg.signature ?? 'auto';
+
+  switch (msg.type) {
+    case 'ADMIN_CREATE_TALKGROUP': {
+      if (!msg.name) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_name' }));
+        return;
+      }
+      const talkgroupId = msg.talkgroupId ?? crypto.randomUUID();
+      const masterSecret = msg.masterSecret ?? Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
+      await appendOp('ADMIN_CREATE_TALKGROUP', { talkgroupId, name: msg.name, masterSecret }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_DELETE_TALKGROUP': {
+      if (!msg.talkgroupId) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_talkgroupId' }));
+        return;
+      }
+      await appendOp('ADMIN_DELETE_TALKGROUP', { talkgroupId: msg.talkgroupId }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_ADD_MEMBER': {
+      if (!msg.talkgroupId || !msg.userId) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_fields' }));
+        return;
+      }
+      await appendOp('ADMIN_ADD_MEMBER', {
+        talkgroupId: msg.talkgroupId,
+        userId: msg.userId,
+        site: msg.site ?? 'unknown',
+      }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_REMOVE_MEMBER': {
+      if (!msg.talkgroupId || !msg.userId) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_fields' }));
+        return;
+      }
+      await appendOp('ADMIN_REMOVE_MEMBER', {
+        talkgroupId: msg.talkgroupId,
+        userId: msg.userId,
+      }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_ROTATE_KEY': {
+      if (!msg.talkgroupId) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_talkgroupId' }));
+        return;
+      }
+      await appendOp('ADMIN_ROTATE_KEY', {
+        talkgroupId: msg.talkgroupId,
+        newCounter: msg.newCounter,
+      }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_DEACTIVATE_DEVICE': {
+      if (!msg.deviceId) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_deviceId' }));
+        return;
+      }
+      // Also update the server-side device record (needed for GPS FK integrity)
+      await prisma.device.update({
+        where: { id: msg.deviceId },
+        data: { active: false },
+      }).catch(() => {}); // device might not exist in DB yet
+      await appendOp('ADMIN_DEACTIVATE_DEVICE', { deviceId: msg.deviceId }, userId, signature);
+      break;
+    }
+
+    case 'ADMIN_SNAPSHOT': {
+      if (!msg.state || !msg.hash) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_fields' }));
+        return;
+      }
+      await appendOp('ADMIN_SNAPSHOT', {
+        state: msg.state,
+        hash: msg.hash,
+      }, userId, signature);
+      break;
+    }
+
+    default:
+      socket.send(JSON.stringify({ type: 'ERROR', error: 'unknown_admin_op', received: msg.type }));
+  }
+}
+
+// ── End Operation Log + Sync ─────────────────────────────────────────────────
+
 export async function registerHub(app: FastifyInstance) {
   app.get('/ws', { websocket: true }, async (connection, req) => {
     // @fastify/websocket passes a SocketStream; the raw ws.WebSocket is at .socket
@@ -265,10 +422,12 @@ export async function registerHub(app: FastifyInstance) {
     const token = (req.query as any).token;
     let userId = '';
     let deviceId: string | null = null;
+    let role = 'user';
 
     try {
       const payload = app.jwt.verify(token) as any;
       userId = payload.sub;
+      role = payload.role ?? 'user';
     } catch {
       socket.close(1008, 'unauthorized');
       return;
@@ -278,15 +437,17 @@ export async function registerHub(app: FastifyInstance) {
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { device_id: true },
+        select: { device_id: true, role: true },
       });
       deviceId = user?.device_id ?? null;
+      if (user?.role) role = user.role;
     } catch {
       // DB lookup failed — continue without deviceId
     }
 
-    socketUser.set(socket, { userId, deviceId, senderDeviceId: null });
+    socketUser.set(socket, { userId, deviceId, senderDeviceId: null, role });
     socketRooms.set(socket, new Set());
+    userSockets.set(userId, socket);
 
     // Start the floor watchdog on first connection
     startFloorWatchdog();
@@ -305,7 +466,7 @@ export async function registerHub(app: FastifyInstance) {
           const isNewSenderId = existingUser.senderDeviceId !== msg.sender;
           existingUser.senderDeviceId = msg.sender;
           deviceIdToSocket.set(msg.sender, socket);
-          
+
           // Bridge any existing UDP registration for this deviceId to the JWT userId
           const existingUdp = udpClients.get(msg.sender);
           if (existingUdp && existingUser.userId !== msg.sender) {
@@ -318,6 +479,74 @@ export async function registerHub(app: FastifyInstance) {
       }
 
       switch (msg.type) {
+        // ── Sync Protocol ──────────────────────────────────────────────
+        case 'SYNC_REQUEST': {
+          const lastSeq = typeof msg.lastSeq === 'number' ? msg.lastSeq : 0;
+          await handleSyncRequest(socket, userId, lastSeq);
+          break;
+        }
+
+        case 'SYNC_ACK': {
+          const lastSeq = typeof msg.lastSeq === 'number' ? msg.lastSeq : 0;
+          await handleSyncAck(userId, lastSeq);
+          break;
+        }
+
+        // ── Admin Operations ───────────────────────────────────────────
+        case 'ADMIN_CREATE_TALKGROUP':
+        case 'ADMIN_DELETE_TALKGROUP':
+        case 'ADMIN_ADD_MEMBER':
+        case 'ADMIN_REMOVE_MEMBER':
+        case 'ADMIN_ROTATE_KEY':
+        case 'ADMIN_DEACTIVATE_DEVICE':
+        case 'ADMIN_SNAPSHOT': {
+          await handleAdminOp(socket, userId, role, msg);
+          break;
+        }
+
+        // ── User Operations ────────────────────────────────────────────
+        case 'REQUEST_JOIN_TALKGROUP': {
+          if (!msg.talkgroupId || !msg.targetUser) {
+            socket.send(JSON.stringify({ type: 'ERROR', error: 'missing_fields' }));
+            break;
+          }
+
+          if (AUTO_APPROVE_JOIN) {
+            // Hackathon mode: auto-generate ADMIN_ADD_MEMBER op
+            await appendOp('ADMIN_ADD_MEMBER', {
+              talkgroupId: msg.talkgroupId,
+              userId: msg.targetUser,
+              site: msg.site ?? 'unknown',
+            }, userId, 'auto');
+            console.log(`[hub] AUTO_APPROVE: ${msg.targetUser} → talkgroup ${msg.talkgroupId}`);
+          } else {
+            // Production mode: relay request to connected admins for manual approval
+            const request = JSON.stringify({
+              type: 'JOIN_REQUEST',
+              talkgroupId: msg.talkgroupId,
+              targetUser: msg.targetUser,
+              requestedBy: userId,
+            });
+            for (const [ws, info] of socketUser) {
+              if (info.role === 'admin' && ws.readyState === 1) {
+                ws.send(request);
+              }
+            }
+          }
+          break;
+        }
+
+        // ── SYNC_TIME (clock drift correction) ────────────────────────
+        case 'SYNC_TIME': {
+          socket.send(JSON.stringify({
+            type: 'SYNC_TIME',
+            clientTime: msg.clientTime,
+            serverTime: Date.now(),
+          }));
+          break;
+        }
+
+        // ── Real-Time Relay (existing, preserved) ─────────────────────
         case 'GPS_UPDATE': {
           if (deviceId) {
             await prisma.gpsUpdate.create({
@@ -481,6 +710,9 @@ export async function registerHub(app: FastifyInstance) {
       const closingUser = socketUser.get(socket);
       if (closingUser?.senderDeviceId) {
         deviceIdToSocket.delete(closingUser.senderDeviceId);
+      }
+      if (closingUser) {
+        userSockets.delete(closingUser.userId);
       }
       for (const tg of socketRooms.get(socket) ?? []) {
         rooms.get(tg)?.delete(socket);

@@ -13,6 +13,22 @@ enum Role {
   user
 }
 
+// ── Auth (stays on server — needed to issue JWTs before WS connects) ─────────
+
+model User {
+  id            String      @id @default(uuid())
+  username      String      @unique
+  password_hash String
+  role          Role        @default(user)
+  public_key    String?     // Ed25519 public key (for admins, used to verify signed ops)
+  device_id     String?     @unique
+  device        Device?     @relation(fields: [device_id], references: [id])
+  created_at    DateTime    @default(now())
+  sync_cursor   SyncCursor?
+}
+
+// ── Devices (stays on server — FK target for GPS updates) ────────────────────
+
 model Device {
   id          String      @id @default(uuid())
   name        String
@@ -24,44 +40,7 @@ model Device {
   gps_updates GpsUpdate[]
 }
 
-model User {
-  id            String       @id @default(uuid())
-  username      String       @unique
-  password_hash String
-  role          Role         @default(user)
-  device_id     String?      @unique
-  device        Device?      @relation(fields: [device_id], references: [id])
-  created_at    DateTime     @default(now())
-  memberships   Membership[]
-}
-
-model Talkgroup {
-  id               String        @id @default(uuid())
-  name             String        @unique
-  master_secret    Bytes
-  rotation_counter Int           @default(0)
-  created_at       DateTime      @default(now())
-  memberships      Membership[]
-  key_rotations    KeyRotation[]
-}
-
-model Membership {
-  user_id      String
-  talkgroup_id String
-  site         String
-  user         User      @relation(fields: [user_id], references: [id])
-  talkgroup    Talkgroup @relation(fields: [talkgroup_id], references: [id])
-
-  @@id([user_id, talkgroup_id])
-}
-
-model KeyRotation {
-  id           String    @id @default(uuid())
-  talkgroup_id String
-  counter      Int
-  rotated_at   DateTime  @default(now())
-  talkgroup    Talkgroup @relation(fields: [talkgroup_id], references: [id])
-}
+// ── GPS (stays server-side — devices report up, admin portal reads) ──────────
 
 model GpsUpdate {
   id         String   @id @default(uuid())
@@ -71,4 +50,26 @@ model GpsUpdate {
   alt        Float
   updated_at DateTime @default(now())
   device     Device   @relation(fields: [device_id], references: [id])
+}
+
+// ── Operation Log (NEW — replaces REST CRUD for talkgroups/members/keys) ─────
+// Append-only. Every admin action is a row. Monotonic seq for global ordering.
+
+model Operation {
+  seq       Int      @id @default(autoincrement())
+  type      String   // e.g. ADMIN_CREATE_TALKGROUP, ADMIN_ADD_MEMBER, etc.
+  payload   Json     // operation-specific JSON payload
+  issued_by String   // userId of the admin who issued the operation
+  signature String   // Ed25519 signature or "auto" for hackathon mode
+  issued_at DateTime @default(now())
+}
+
+// ── Sync Cursors (NEW — tracks what each user has seen) ──────────────────────
+// Keyed by user_id (not device_id) so portal users and multi-device users work.
+
+model SyncCursor {
+  user_id   String    @id
+  last_seq  Int       @default(0)
+  synced_at DateTime?
+  user      User      @relation(fields: [user_id], references: [id])
 }

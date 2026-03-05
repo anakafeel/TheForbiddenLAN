@@ -1,9 +1,18 @@
-// Device routes — list, activate/disable devices (admin), GPS read/write
+// Device routes — REST shim. Devices table still lives in Postgres, so most
+// of these are direct Prisma queries (unchanged). Deactivation also writes
+// an operation to the log for sync.
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 
+async function appendOp(type: string, payload: any, issuedBy: string, signature: string) {
+  const op = await prisma.operation.create({
+    data: { type, payload, issued_by: issuedBy, signature },
+  });
+  console.log(`[shim] op seq=${op.seq} type=${op.type} by=${issuedBy}`);
+  return op;
+}
+
 export async function deviceRoutes(app: FastifyInstance) {
-  // All routes require JWT
   app.addHook('onRequest', async (req, reply) => {
     try { await req.jwtVerify(); } catch { reply.code(401).send({ error: 'unauthorized' }); }
   });
@@ -22,6 +31,7 @@ export async function deviceRoutes(app: FastifyInstance) {
     const role = (req.user as any).role;
     if (role !== 'admin') return reply.code(403).send({ error: 'forbidden' });
 
+    const adminId = (req.user as any).sub;
     const { id } = req.params as any;
     const { active } = req.body as any;
     if (typeof active !== 'boolean') return reply.code(400).send({ error: 'active_must_be_boolean' });
@@ -30,6 +40,12 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (!device) return reply.code(404).send({ error: 'device_not_found' });
 
     const updated = await prisma.device.update({ where: { id }, data: { active } });
+
+    // Also log the deactivation as an operation for sync
+    if (!active) {
+      await appendOp('ADMIN_DEACTIVATE_DEVICE', { deviceId: id }, adminId, 'auto');
+    }
+
     return { device: updated };
   });
 

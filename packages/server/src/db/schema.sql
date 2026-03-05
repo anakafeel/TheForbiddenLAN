@@ -1,4 +1,6 @@
--- Run this in Supabase SQL editor to set up the database
+-- ForbiddenLAN server schema (distributed architecture)
+-- The server stores auth, devices, GPS, operation log, and sync cursors.
+-- App-level entities (talkgroups, memberships, keys) live on each device's local SQLite.
 
 CREATE TABLE devices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -13,46 +15,34 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'operator',
-  device_id UUID REFERENCES devices(id),
+  role TEXT NOT NULL DEFAULT 'user',
+  public_key TEXT,
+  device_id UUID UNIQUE REFERENCES devices(id),
   created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE talkgroups (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  master_secret BYTEA NOT NULL,
-  rotation_counter INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE memberships (
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  talkgroup_id UUID REFERENCES talkgroups(id) ON DELETE CASCADE,
-  site TEXT,
-  PRIMARY KEY (user_id, talkgroup_id)
-);
-
-CREATE TABLE key_rotations (
-  talkgroup_id UUID REFERENCES talkgroups(id) ON DELETE CASCADE,
-  counter INT NOT NULL,
-  rotated_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE gps_updates (
-  device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
-  lat FLOAT NOT NULL,
-  lng FLOAT NOT NULL,
-  alt FLOAT NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  PRIMARY KEY (device_id)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  device_id UUID NOT NULL REFERENCES devices(id),
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  alt DOUBLE PRECISION NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Function for atomic counter increment (used by key rotation)
-CREATE OR REPLACE FUNCTION increment_rotation_counter(tg_id UUID)
-RETURNS INT AS $$
-  UPDATE talkgroups
-  SET rotation_counter = rotation_counter + 1
-  WHERE id = tg_id
-  RETURNING rotation_counter;
-$$ LANGUAGE SQL;
+-- Append-only operation log. Every admin action is a row.
+CREATE TABLE operations (
+  seq SERIAL PRIMARY KEY,
+  type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  issued_by UUID NOT NULL,
+  signature TEXT NOT NULL,
+  issued_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Per-user sync cursor (what ops each client has acknowledged)
+CREATE TABLE sync_cursors (
+  user_id UUID PRIMARY KEY REFERENCES users(id),
+  last_seq INTEGER NOT NULL DEFAULT 0,
+  synced_at TIMESTAMPTZ
+);

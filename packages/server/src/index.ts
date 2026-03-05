@@ -5,11 +5,12 @@ import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
 import { authRoutes } from './routes/auth.js';
+import { gpsRoutes } from './routes/gps.js';
+import { tleRoutes } from './routes/tle.js';
 import { talkgroupRoutes } from './routes/talkgroups.js';
 import { deviceRoutes } from './routes/devices.js';
 import { keyRoutes } from './routes/keys.js';
 import { userRoutes } from './routes/users.js';
-import { tleRoutes } from './routes/tle.js';
 import { registerHub, startUdpServer } from './ws/hub.js';
 
 const app = Fastify({ logger: true });
@@ -22,13 +23,16 @@ app.get('/ping', async () => ({ pong: true }));
 
 // REST routes
 await app.register(authRoutes,       { prefix: '/auth' });
+await app.register(tleRoutes,        { prefix: '/tle' });
+// REST shim — same response shapes as the old CRUD routes, backed by the operation log.
+// These go away when mobile gets SQLite and reads from local DB instead of REST.
 await app.register(talkgroupRoutes,  { prefix: '/talkgroups' });
 await app.register(deviceRoutes,     { prefix: '/devices' });
 await app.register(keyRoutes,        { prefix: '/keys' });
 await app.register(userRoutes,       { prefix: '/users' });
-await app.register(tleRoutes,        { prefix: '/tle' });
+await app.register(gpsRoutes,        { prefix: '/gps' });
 
-// WebSocket hub
+// WebSocket hub (relay + floor control + operation log + sync broker)
 await registerHub(app);
 
 const port = Number(process.env.PORT ?? 3000);
