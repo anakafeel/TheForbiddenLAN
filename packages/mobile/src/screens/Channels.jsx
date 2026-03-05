@@ -38,7 +38,7 @@ function FilterTabs({ activeFilter, onFilterChange }) {
 }
 
 // Channel Card Component with inline PTT button
-function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTToggle, channelSpeaker }) {
+function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTStart, onPTTEnd, channelSpeaker }) {
   // Show LIVE only when someone is actively speaking or transmitting
   const isLive = channel.transmitting || channelSpeaker || (isActive && (currentSpeaker || isTransmitting));
   const speakerName = isActive && isTransmitting ? 'YOU' : (isActive ? currentSpeaker : channelSpeaker);
@@ -70,9 +70,13 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
       {/* Inline PTT Button */}
       {isActive && (
         <Pressable
-          onPress={(e) => {
+          onPressIn={(e) => {
             e.stopPropagation();
-            onPTTToggle();
+            onPTTStart();
+          }}
+          onPressOut={(e) => {
+            e.stopPropagation();
+            onPTTEnd();
           }}
           style={({ pressed }) => [
             styles.inlinePttButton,
@@ -153,10 +157,16 @@ export default function ChannelsScreen({ navigation }) {
     }
   };
 
-  const handlePTTToggle = useCallback(() => {
+  const handlePTTStart = useCallback(() => {
     if (!current) return;
-    setIsTransmitting(prev => !prev);
+    setIsTransmitting(true);
     // TODO: Start/stop audio capture and transmission
+  }, [current]);
+
+  const handlePTTEnd = useCallback(() => {
+    if (!current) return;
+    setIsTransmitting(false);
+    // TODO: Stop audio capture and transmission
   }, [current]);
 
   const filteredChannels = channels.filter(ch => {
@@ -175,7 +185,8 @@ export default function ChannelsScreen({ navigation }) {
       isTransmitting={current?.id === item.id && isTransmitting}
       currentSpeaker={current?.id === item.id ? currentSpeaker : null}
       channelSpeaker={channelSpeakers[item.id]}
-      onPTTToggle={handlePTTToggle}
+      onPTTStart={handlePTTStart}
+      onPTTEnd={handlePTTEnd}
     />
   );
 
@@ -217,20 +228,6 @@ export default function ChannelsScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.micFab,
-          current && styles.micFabActive,
-          pressed && styles.micFabPressed,
-        ]}
-        onPress={() => navigation.navigate('PTT')}
-      >
-        <Text style={styles.micFabIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
-        <Text style={styles.micFabText}>
-          {current ? 'OPEN MIC' : 'SELECT CH + MIC'}
-        </Text>
-      </Pressable>
       <BottomMenu navigation={navigation} active="Channels" />
     </View>
   );
@@ -314,45 +311,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 144,
-  },
-  micFab: {
-    position: 'absolute',
-    right: spacing.lg,
-    bottom: spacing.xxl + 68,
-    height: 64,
-    minWidth: 150,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 32,
-    backgroundColor: colors.accent.primary,
-    borderWidth: 2,
-    borderColor: colors.accent.primaryLight,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.accent.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 9,
-  },
-  micFabActive: {
-    backgroundColor: colors.status.danger,
-    borderColor: '#FF6B6B',
-    shadowColor: colors.status.danger,
-  },
-  micFabPressed: {
-    transform: [{ scale: 0.97 }],
-  },
-  micFabIcon: {
-    fontSize: 24,
-    marginRight: spacing.sm,
-  },
-  micFabText: {
-    color: colors.text.primary,
-    fontWeight: typography.weight.bold,
-    letterSpacing: typography.letterSpacing.wide,
-    fontSize: typography.size.xs,
+    paddingBottom: spacing.xxl + 88,
   },
   channelCard: {
     backgroundColor: colors.background.card,

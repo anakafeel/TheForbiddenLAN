@@ -5,6 +5,7 @@ import PTTButton from '../components/PTTButton';
 import BottomMenu from '../components/BottomMenu';
 import { CONFIG } from '../config';
 import theme from '../theme';
+import { useStore } from '../store';
 
 const { colors, spacing, radius, typography } = theme;
 
@@ -33,6 +34,8 @@ export default function PTTScreen({ navigation }: PTTScreenProps) {
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState<string | null>(null);
   const [showChannelDropdown, setShowChannelDropdown] = useState(false);
+  const preferredConnection = useStore((s) => s.preferredConnection);
+  const setPreferredConnection = useStore((s) => s.setPreferredConnection);
 
   useEffect(() => {
     if (!current) {
@@ -133,8 +136,46 @@ export default function PTTScreen({ navigation }: PTTScreenProps) {
         <PTTButton userId={CONFIG.DEVICE_ID} onTransmitChange={setIsTransmitting} />
       </View>
 
+      <View style={styles.connectionSwitchWrap}>
+        <Text style={styles.connectionLabel}>Connection</Text>
+        <View style={styles.connectionSwitch}>
+          <TouchableOpacity
+            style={[
+              styles.connectionOption,
+              preferredConnection === 'satellite' && styles.connectionOptionActive,
+            ]}
+            onPress={() => setPreferredConnection('satellite')}
+          >
+            <Text
+              style={[
+                styles.connectionOptionText,
+                preferredConnection === 'satellite' && styles.connectionOptionTextActive,
+              ]}
+            >
+              Satellite
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.connectionOption,
+              preferredConnection === 'cellular' && styles.connectionOptionActive,
+            ]}
+            onPress={() => setPreferredConnection('cellular')}
+          >
+            <Text
+              style={[
+                styles.connectionOptionText,
+                preferredConnection === 'cellular' && styles.connectionOptionTextActive,
+              ]}
+            >
+              Cellular
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <Text style={styles.hint}>
-        {isTransmitting ? 'Tap once to stop transmitting' : 'Tap once to start transmitting'}
+        {isTransmitting ? 'Release to stop transmitting' : 'Hold to talk'}
       </Text>
       <BottomMenu navigation={navigation} active="PTT" />
     </View>
@@ -283,6 +324,45 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  connectionSwitchWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  connectionLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  connectionSwitch: {
+    flexDirection: 'row',
+    backgroundColor: colors.background.secondary,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    padding: 4,
+    gap: 4,
+  },
+  connectionOption: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.full,
+  },
+  connectionOptionActive: {
+    backgroundColor: colors.status.activeGlow,
+    borderWidth: 1,
+    borderColor: colors.status.active,
+  },
+  connectionOptionText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+  },
+  connectionOptionTextActive: {
+    color: colors.status.active,
+    fontWeight: '700',
   },
   hint: {
     textAlign: 'center',

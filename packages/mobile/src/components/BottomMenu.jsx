@@ -1,36 +1,29 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import theme from "../theme";
-import { getUnreadCount } from "../data/notifications";
 
 const { colors, spacing, radius, typography } = theme;
 
 const ITEMS = [
   { key: "Dashboard", icon: "⌂" },
   { key: "Channels", icon: "📡" },
-  { key: "Notifications", icon: "🔔" },
   { key: "PTT", icon: "🎙️" },
   { key: "Profile", icon: "👤" },
 ];
 
 export default function BottomMenu({ navigation, active }) {
-  const unreadCount = getUnreadCount();
   return (
     <View style={styles.wrap}>
       {ITEMS.map((item) => {
         const isActive = active === item.key;
+        const forceWhiteIcon = item.key === "Dashboard" || item.key === "Profile";
         return (
           <Pressable
             key={item.key}
             style={({ pressed }) => [styles.item, isActive && styles.itemActive, pressed && styles.itemPressed]}
             onPress={() => navigation.navigate(item.key)}
           >
-            <Text style={styles.icon}>{item.icon}</Text>
-            {item.key === "Notifications" && unreadCount > 0 && (
-              <View style={styles.flagBadge}>
-                <Text style={styles.flagText}>🚩{unreadCount}</Text>
-              </View>
-            )}
+            <Text style={[styles.icon, forceWhiteIcon && styles.iconWhite]}>{item.icon}</Text>
             <Text style={[styles.label, isActive && styles.labelActive]}>{item.key}</Text>
           </Pressable>
         );
@@ -70,19 +63,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 2,
   },
-  flagBadge: {
-    position: "absolute",
-    top: 2,
-    right: 8,
-    backgroundColor: colors.status.danger,
-    borderRadius: radius.full,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  flagText: {
+  iconWhite: {
     color: colors.text.primary,
-    fontSize: 9,
-    fontWeight: "700",
   },
   label: {
     color: colors.text.muted,

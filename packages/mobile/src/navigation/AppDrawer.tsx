@@ -15,7 +15,11 @@ export default function AppDrawer() {
       <Drawer.Screen name="Dashboard" component={DashboardScreen} options={{ drawerLabel: "Dashboard" }} />
       <Drawer.Screen name="PTT" component={PTTScreen} options={{ drawerLabel: "PTT" }} />
       <Drawer.Screen name="Channels" component={Channels} options={{ drawerLabel: "Channels" }} />
-      <Drawer.Screen name="Notifications" component={NotificationsScreen} options={{ drawerLabel: "Notifications" }} />
+      <Drawer.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ drawerLabel: "Notifications", drawerItemStyle: { display: "none" } }}
+      />
       <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerLabel: "Profile" }} />
     </Drawer.Navigator>
   );

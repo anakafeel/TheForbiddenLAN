@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import BottomMenu from "../components/BottomMenu";
 import theme from "../theme";
 import { MOCK_NOTIFICATIONS, getUnreadCount } from "../data/notifications";
+import { useStore, type ConnectionMode } from "../store";
 
 const { colors, spacing, radius, typography } = theme;
 
@@ -20,15 +21,25 @@ function StatusCard({
   metric,
   bars,
   isActive,
+  onPress,
 }: {
   label: string;
   value: string;
   metric: string;
   bars: number;
   isActive?: boolean;
+  onPress?: () => void;
 }) {
   return (
-    <View style={[styles.signalCard, isActive && styles.signalCardActive]}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.bentoCard,
+        styles.signalCard,
+        isActive && styles.signalCardActive,
+        pressed && styles.signalCardPressed,
+      ]}
+      onPress={onPress}
+    >
       <View style={styles.signalTopRow}>
         <Text style={styles.signalLabel}>{label}</Text>
         <View style={styles.barsWrap}>
@@ -46,13 +57,19 @@ function StatusCard({
       </View>
       <Text style={styles.signalValue}>{value}</Text>
       <Text style={styles.signalMetric}>{metric}</Text>
-    </View>
+    </Pressable>
   );
 }
 
 export default function DashboardScreen({ navigation }: { navigation: any }) {
   const unread = getUnreadCount();
-  const activeNotifications = MOCK_NOTIFICATIONS.filter((n) => n.unread).slice(0, 2);
+  const notificationFeed = MOCK_NOTIFICATIONS;
+  const preferredConnection = useStore((s) => s.preferredConnection);
+  const setPreferredConnection = useStore((s) => s.setPreferredConnection);
+
+  const selectConnection = (mode: ConnectionMode) => {
+    setPreferredConnection(mode);
+  };
 
   return (
     <View style={styles.container}>
@@ -62,10 +79,20 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           <Text style={styles.helper}>Live Ops Overview</Text>
         </View>
 
-        <View style={styles.topGrid}>
-          <Pressable style={styles.usersPanel} onPress={() => navigation.navigate("Channels")}>
-            <Text style={styles.usersPanelTitle}>Active Users</Text>
-            <View style={styles.usersList}>
+        <View style={styles.bentoGrid}>
+          <View style={[styles.bentoCard, styles.usersBento]}>
+            <View style={styles.usersHeaderRow}>
+              <Text style={styles.usersPanelTitle}>Active Users</Text>
+              <Pressable style={styles.usersLink} onPress={() => navigation.navigate("Channels")}>
+                <Text style={styles.usersLinkText}>Open</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.usersScroll}
+              contentContainerStyle={styles.usersList}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
               {ACTIVE_USERS.map((user) => (
                 <View key={user.id} style={styles.userRow}>
                   <View style={styles.userRowLeft}>
@@ -78,12 +105,26 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
                   <Text style={styles.userStatus}>{user.status}</Text>
                 </View>
               ))}
-            </View>
-          </Pressable>
+            </ScrollView>
+          </View>
 
-          <View style={styles.signalColumn}>
-            <StatusCard label="Satellite" value="Strong" metric="+99% Latency Opt." bars={4} isActive />
-            <StatusCard label="Cellular" value="Optimal" metric="+95% Signal" bars={3} />
+          <View style={styles.signalStack}>
+            <StatusCard
+              label="Satellite"
+              value="Strong"
+              metric="+99% Latency Opt."
+              bars={4}
+              isActive={preferredConnection === "satellite"}
+              onPress={() => selectConnection("satellite")}
+            />
+            <StatusCard
+              label="Cellular"
+              value="Optimal"
+              metric="+95% Signal"
+              bars={3}
+              isActive={preferredConnection === "cellular"}
+              onPress={() => selectConnection("cellular")}
+            />
           </View>
         </View>
 
@@ -95,18 +136,25 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
         </View>
 
         <View style={styles.notificationsPanel}>
-          {activeNotifications.map((n) => (
-            <Pressable key={n.id} style={styles.notificationCard} onPress={() => navigation.navigate("Notifications")}>
-              <View style={[styles.notificationIcon, n.severity === "warning" ? styles.notificationWarn : styles.notificationInfo]}>
-                <Text style={styles.notificationIconText}>{n.severity === "warning" ? "⚠" : "i"}</Text>
-              </View>
-              <View style={styles.notificationCopy}>
-                <Text style={styles.notificationTitle}>{n.title}</Text>
-                <Text style={styles.notificationMessage}>{n.message}</Text>
-              </View>
-              <Text style={styles.notificationTime}>{n.minutesAgo}m ago</Text>
-            </Pressable>
-          ))}
+          <ScrollView
+            style={styles.notificationsScroll}
+            contentContainerStyle={styles.notificationsList}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
+            {notificationFeed.map((n) => (
+              <Pressable key={n.id} style={styles.notificationCard} onPress={() => navigation.navigate("Notifications")}>
+                <View style={[styles.notificationIcon, n.severity === "warning" ? styles.notificationWarn : styles.notificationInfo]}>
+                  <Text style={styles.notificationIconText}>{n.severity === "warning" ? "⚠" : "i"}</Text>
+                </View>
+                <View style={styles.notificationCopy}>
+                  <Text style={styles.notificationTitle}>{n.title}</Text>
+                  <Text style={styles.notificationMessage}>{n.message}</Text>
+                </View>
+                <Text style={styles.notificationTime}>{n.minutesAgo}m ago</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       </ScrollView>
 
@@ -143,18 +191,28 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: 10,
   },
-  topGrid: {
+  bentoGrid: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: spacing.md,
   },
-  usersPanel: {
-    flex: 1.2,
+  bentoCard: {
     backgroundColor: colors.background.secondary,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border.subtle,
-    padding: spacing.lg,
+  },
+  usersBento: {
+    flex: 1.2,
+    height: 320,
+    paddingTop: spacing.lg,
+  },
+  usersHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
   usersPanelTitle: {
     color: colors.text.muted,
@@ -162,10 +220,27 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.2,
     fontWeight: "700",
-    marginBottom: spacing.sm,
+  },
+  usersLink: {
+    backgroundColor: colors.background.tertiary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  usersLinkText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.xs,
+    fontWeight: "700",
+  },
+  usersScroll: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
   },
   usersList: {
     gap: spacing.sm,
+    paddingBottom: spacing.md,
   },
   userRow: {
     flexDirection: "row",
@@ -207,17 +282,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
-  signalColumn: {
+  signalStack: {
     flex: 0.95,
     gap: spacing.md,
     alignSelf: "stretch",
+    height: 320,
   },
   signalCard: {
     flex: 1,
-    backgroundColor: colors.background.secondary,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
     padding: spacing.lg,
     justifyContent: "space-between",
   },
@@ -228,6 +300,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 10,
     elevation: 6,
+  },
+  signalCardPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   signalTopRow: {
     flexDirection: "row",
@@ -252,7 +328,10 @@ const styles = StyleSheet.create({
   },
   signalLabel: {
     color: colors.text.muted,
-    fontSize: typography.size.md,
+    fontSize: typography.size.sm,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    fontWeight: "700",
     marginBottom: spacing.xs,
   },
   signalValue: {
@@ -274,9 +353,9 @@ const styles = StyleSheet.create({
   },
   notificationsTitle: {
     color: colors.text.muted,
-    fontSize: typography.size.xl,
+    fontSize: typography.size.sm,
     textTransform: "uppercase",
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     fontWeight: "700",
   },
   activeBadge: {
@@ -296,7 +375,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.subtle,
     padding: spacing.md,
+    minHeight: 220,
+    maxHeight: 260,
+  },
+  notificationsScroll: {
+    flex: 1,
+  },
+  notificationsList: {
     gap: spacing.md,
+    paddingBottom: spacing.xs,
   },
   notificationCard: {
     backgroundColor: colors.background.tertiary,
