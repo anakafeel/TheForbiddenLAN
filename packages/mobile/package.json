@@ -11,7 +11,8 @@
     "@expo/metro-runtime": "^6.1.2",
     "@forbiddenlan/comms": "workspace:*",
     "@react-native-community/netinfo": "11.4.1",
-    "@react-navigation/native": "7.1.31",
+    "@react-navigation/bottom-tabs": "^7.15.5",
+    "@react-navigation/native": "7.1.33",
     "@react-navigation/stack": "7.8.2",
     "buffer": "^6.0.3",
     "expo": "~54.0.33",
@@ -28,9 +29,12 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
+    "leaflet": "^1.9.4",
     "metro-runtime": "^0.84.2",
+    "nativewind": "^4.2.2",
     "opusscript": "^0.1.1",
     "react": "19.1.0",
+    "react-leaflet": "^5.0.0",
     "react-native": "0.81.5",
     "react-native-get-random-values": "^1.11.0",
     "react-native-live-audio-stream": "^1.1.1",
@@ -39,12 +43,15 @@
     "react-native-screens": "~4.16.0",
     "react-native-udp": "^4.1.7",
     "react-native-vector-icons": "10.0.0",
+    "react-native-web": "^0.21.2",
     "satellite.js": "^6.0.2",
     "socket.io-client": "4.6.1",
+    "tailwindcss": "^3.4.19",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@types/leaflet": "^1.9.21",
     "babel-preset-expo": "~54.0.10"
   }
 }

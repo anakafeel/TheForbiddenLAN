@@ -84,6 +84,47 @@ export async function talkgroupRoutes(app: FastifyInstance) {
     return { members: memberships.map(m => m.user) };
   });
 
+  // POST /talkgroups/:id/members — admin adds a user to a talkgroup
+  app.post('/:id/members', async (req, reply) => {
+    const role = (req.user as any).role;
+    if (role !== 'admin') return reply.code(403).send({ error: 'forbidden' });
+
+    const { id } = req.params as any;
+    const { userId } = req.body as any;
+    if (!userId) return reply.code(400).send({ error: 'missing_userId' });
+
+    const talkgroup = await prisma.talkgroup.findUnique({ where: { id } });
+    if (!talkgroup) return reply.code(404).send({ error: 'talkgroup_not_found' });
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { device: true },
+    });
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+
+    const site = user.device?.site ?? 'unknown';
+
+    const membership = await prisma.membership.upsert({
+      where: { user_id_talkgroup_id: { user_id: userId, talkgroup_id: id } },
+      update: {},
+      create: { user_id: userId, talkgroup_id: id, site },
+    });
+    return { membership };
+  });
+
+  // DELETE /talkgroups/:id/members/:userId — admin removes a user from a talkgroup
+  app.delete('/:id/members/:userId', async (req, reply) => {
+    const role = (req.user as any).role;
+    if (role !== 'admin') return reply.code(403).send({ error: 'forbidden' });
+
+    const { id, userId } = req.params as any;
+
+    await prisma.membership.deleteMany({
+      where: { user_id: userId, talkgroup_id: id },
+    });
+    return { ok: true };
+  });
+
   // DELETE /talkgroups/:id — delete a talkgroup (admin only)
   app.delete('/:id', async (req, reply) => {
     const role = (req.user as any).role;
