@@ -7,18 +7,23 @@ import dgram from 'dgram';
 
 // talkgroup ID → set of connected raw WebSockets
 const rooms = new Map<string, Set<WebSocket>>();
-// raw WebSocket → { userId, deviceId }
-const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null }>();
+// raw WebSocket → { userId, deviceId, senderDeviceId }
+// userId = JWT sub (database ID), deviceId = DB device_id, senderDeviceId = CONFIG.DEVICE_ID from mobile
+const socketUser = new Map<WebSocket, { userId: string; deviceId: string | null; senderDeviceId: string | null }>();
 // raw WebSocket → set of talkgroup IDs the socket has joined
 const socketRooms = new Map<WebSocket, Set<string>>();
 // sessionId (4-byte int from PTT_START) → talkgroup — used to route PTT_AUDIO
 // without requiring talkgroup on every audio chunk (bandwidth optimisation)
 const sessionTalkgroup = new Map<number, string>();
+// Reverse lookup: senderDeviceId → WebSocket (for matching UDP registrations to WS connections)
+const deviceIdToSocket = new Map<string, WebSocket>();
 
 // ── UDP Transport Layer ───────────────────────────────────────────────────────
 export const udpServer = dgram.createSocket('udp4');
 // userId → remote UDP address/port
 export const udpClients = new Map<string, dgram.RemoteInfo>();
+
+let udpAudioRelayCount = 0;
 
 export function startUdpServer(options: { port: number }) {
   udpServer.on('message', (msg, rinfo) => {
@@ -26,7 +31,23 @@ export function startUdpServer(options: { port: number }) {
     try { parsed = JSON.parse(msg.toString()); } catch { return; }
 
     if (parsed.type === 'UDP_REGISTER') {
-      if (parsed.userId) udpClients.set(parsed.userId, rinfo);
+      if (parsed.userId) {
+        const isNew = !udpClients.has(parsed.userId);
+        udpClients.set(parsed.userId, rinfo);
+        if (isNew) {
+          console.log(`[hub] UDP_REGISTER: userId=${parsed.userId} from ${rinfo.address}:${rinfo.port} (total: ${udpClients.size})`);
+        }
+        // Also register by the WS userId if we can resolve it
+        // (senderDeviceId from PTT_START → WebSocket → JWT userId)
+        const ws = deviceIdToSocket.get(parsed.userId);
+        if (ws) {
+          const wsUser = socketUser.get(ws);
+          if (wsUser && wsUser.userId !== parsed.userId) {
+            udpClients.set(wsUser.userId, rinfo);
+            console.log(`[hub] UDP_REGISTER: also mapped JWT userId=${wsUser.userId} → ${rinfo.address}:${rinfo.port}`);
+          }
+        }
+      }
       return;
     }
 
@@ -45,12 +66,23 @@ export function startUdpServer(options: { port: number }) {
 
       for (const peer of room) {
         const user = socketUser.get(peer);
-        if (!user || user.userId === holder.senderId) continue; // Don't echo to sender
+        if (!user) continue;
+        // Skip the sender — compare by both JWT userId AND senderDeviceId
+        if (user.userId === holder.senderId || user.senderDeviceId === holder.senderId) continue;
 
-        const peerUdp = udpClients.get(user.userId);
+        // Look up peer's UDP endpoint by senderDeviceId first, then JWT userId
+        const peerUdp = (user.senderDeviceId ? udpClients.get(user.senderDeviceId) : undefined)
+          || udpClients.get(user.userId);
         if (peerUdp) {
+          udpAudioRelayCount++;
+          if (udpAudioRelayCount <= 5 || udpAudioRelayCount % 500 === 0) {
+            console.log(`[hub] UDP relay #${udpAudioRelayCount}: chunk=${parsed.chunk} → ${user.senderDeviceId || user.userId} (${peerUdp.address}:${peerUdp.port})`);
+          }
           udpServer.send(new Uint8Array(msg), peerUdp.port, peerUdp.address);
-        } else if (peer.readyState === 1) {
+        }
+        // Always deliver via WebSocket too — guarantees receipt if UDP is blocked by NAT.
+        // Client deduplicates by sessionId+chunk so double delivery is silent.
+        if (peer.readyState === 1) {
           peer.send(msg.toString());
         }
       }
@@ -148,12 +180,18 @@ function fanOut(sender: WebSocket, talkgroup: string, raw: string, isAudio = fal
   for (const peer of room) {
     if (peer !== sender) {
       const user = socketUser.get(peer);
-      const peerUdp = user ? udpClients.get(user.userId) : undefined;
+      // Look up peer's UDP endpoint by senderDeviceId first, then JWT userId
+      const peerUdp = user
+        ? ((user.senderDeviceId ? udpClients.get(user.senderDeviceId) : undefined) || udpClients.get(user.userId))
+        : undefined;
 
-      // If it's an audio message and the peer has a registered UDP address, route via UDP
+      // If it's an audio message and the peer has a registered UDP address, also send via UDP
       if (isAudio && peerUdp) {
         udpServer.send(raw, peerUdp.port, peerUdp.address);
-      } else if (peer.readyState === 1) {
+      }
+      // Always deliver via WebSocket — guarantees receipt if UDP is blocked by NAT.
+      // Client deduplicates by sessionId+chunk so double delivery is silent.
+      if (peer.readyState === 1) {
         peer.send(raw);
       }
     }
@@ -189,7 +227,7 @@ export async function registerHub(app: FastifyInstance) {
       // DB lookup failed — continue without deviceId
     }
 
-    socketUser.set(socket, { userId, deviceId });
+    socketUser.set(socket, { userId, deviceId, senderDeviceId: null });
     socketRooms.set(socket, new Set());
 
     // Start the floor watchdog on first connection
@@ -199,6 +237,23 @@ export async function registerHub(app: FastifyInstance) {
       let msg: any;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
       const rawStr = raw.toString();
+
+      // Track sender device ID from any message that includes a 'sender' field.
+      // This bridges the CONFIG.DEVICE_ID (used in UDP_REGISTER) with the JWT userId
+      // (used in socketUser) so the UDP relay can find the correct peer endpoint.
+      if (msg.sender && typeof msg.sender === 'string') {
+        const existingUser = socketUser.get(socket);
+        if (existingUser && !existingUser.senderDeviceId) {
+          existingUser.senderDeviceId = msg.sender;
+          deviceIdToSocket.set(msg.sender, socket);
+          // Bridge any existing UDP registration for this deviceId to the JWT userId
+          const existingUdp = udpClients.get(msg.sender);
+          if (existingUdp && existingUser.userId !== msg.sender) {
+            udpClients.set(existingUser.userId, existingUdp);
+            console.log(`[hub] Bridged UDP endpoint early: ${msg.sender} → JWT userId ${existingUser.userId}`);
+          }
+        }
+      }
 
       switch (msg.type) {
         case 'GPS_UPDATE': {
@@ -276,9 +331,26 @@ export async function registerHub(app: FastifyInstance) {
           if (typeof msg.sessionId === 'number') {
             sessionTalkgroup.set(msg.sessionId, tg);
           }
+
+          // Track the sender's device ID (CONFIG.DEVICE_ID from mobile app)
+          // so we can bridge it with the JWT userId for UDP relay lookups
+          const senderDeviceId = msg.sender || userId;
+          const existingUser = socketUser.get(socket);
+          if (existingUser && msg.sender) {
+            existingUser.senderDeviceId = msg.sender;
+            deviceIdToSocket.set(msg.sender, socket);
+            // If we already have a UDP registration for this device ID,
+            // also register it under the JWT userId for future lookups
+            const existingUdp = udpClients.get(msg.sender);
+            if (existingUdp && existingUser.userId !== msg.sender) {
+              udpClients.set(existingUser.userId, existingUdp);
+              console.log(`[hub] Bridged UDP endpoint: ${msg.sender} → JWT userId ${existingUser.userId}`);
+            }
+          }
+
           talkgroupFloor.set(tg, {
             socket,
-            senderId: msg.sender || userId,
+            senderId: senderDeviceId,
             sessionId: msg.sessionId,
             acquiredAt: Date.now(),
           });
@@ -343,6 +415,10 @@ export async function registerHub(app: FastifyInstance) {
     socket.on('close', () => {
       // Release any floors held by this socket before cleaning up
       releaseAllFloors(socket);
+      const closingUser = socketUser.get(socket);
+      if (closingUser?.senderDeviceId) {
+        deviceIdToSocket.delete(closingUser.senderDeviceId);
+      }
       for (const tg of socketRooms.get(socket) ?? []) {
         rooms.get(tg)?.delete(socket);
         broadcastPresence(tg);

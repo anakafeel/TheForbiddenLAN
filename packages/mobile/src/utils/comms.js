@@ -4,21 +4,29 @@
 // FAST REFRESH SAFETY: All singletons are stored on `global` so they survive
 // Metro Fast Refresh cycles. Without this, module re-evaluation creates new
 // uninitialized instances, orphaning the WebSocket connection → red screen.
-import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
-import { CONFIG } from '../config';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
-import { initOpusDecoder, decodeOpusFrame, destroyOpusDecoder } from './opusDecoder';
-import { startStreamPlayer, writeStreamPCM, stopStreamPlayer } from './audioStreamPlayer';
+import { ForbiddenLANComms, Encryption } from "@forbiddenlan/comms";
+import { CONFIG } from "../config";
+import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
+import {
+  initOpusDecoder,
+  decodeOpusFrame,
+  destroyOpusDecoder,
+} from "./opusDecoder";
+import {
+  startStreamPlayer,
+  writeStreamPCM,
+  stopStreamPlayer,
+} from "./audioStreamPlayer";
 
 // ── Fast Refresh–safe singletons ──────────────────────────────────────────────
 // On first load, create and stash on global. On subsequent re-evaluations (hot
 // reload), reuse the existing instances so the WebSocket/crypto state survives.
 if (!global.__COMMS_SINGLETON__) {
   global.__COMMS_SINGLETON__ = new ForbiddenLANComms({
-    relayUrl:  CONFIG.WS_URL,
+    relayUrl: CONFIG.WS_URL,
     dls140Url: CONFIG.DLS140_URL,
-    deviceId:  CONFIG.DEVICE_ID,
+    deviceId: CONFIG.DEVICE_ID,
   });
 }
 if (!global.__ENCRYPTION_SINGLETON__) {
@@ -44,7 +52,9 @@ export function onFloorDenied(cb) {
   comms.setOnFloorDeny((talkgroup, holder) => {
     _channelBusy = true;
     _floorHolder = holder;
-    console.warn(`[comms] FLOOR_DENY — channel ${talkgroup} busy (held by ${holder})`);
+    console.warn(
+      `[comms] FLOOR_DENY — channel ${talkgroup} busy (held by ${holder})`,
+    );
     if (_floorDenyCallback) _floorDenyCallback(talkgroup, holder);
   });
 }
@@ -72,6 +82,7 @@ export function getFloorState() {
 //   Enabled via EXPO_PUBLIC_LOOPBACK=true in .env.
 
 const _pcmAccumulator = []; // base64 PCM strings — used by legacy fallback + loopback
+const _seenChunks = new Set(); // "sessionId:chunk" — deduplicates WS+UDP dual delivery
 let _decoderReady = false;
 let _audioModeSet = false;
 let _rxInactivityTimer = null;
@@ -88,7 +99,9 @@ let _useStreamPlayer = true; // set to false if native module is missing
  * (inaudible) or fails silently. This was ROOT CAUSE #2 for "can't hear audio".
  */
 async function _ensurePlaybackMode() {
-  if (_audioModeSet) return;
+  // Always re-assert playback mode — Android audio subsystem
+  // silently reverts to recording mode after mic use (LiveAudioStream).
+  // Without this, playback routes to earpiece or fails silently.
   try {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: false,
@@ -98,9 +111,9 @@ async function _ensurePlaybackMode() {
       playThroughEarpieceAndroid: false,
     });
     _audioModeSet = true;
-    console.log('[comms] audio mode set for speaker playback');
+    console.log("[comms] audio mode set for speaker playback");
   } catch (e) {
-    console.warn('[comms] failed to set audio mode:', e.message);
+    console.warn("[comms] failed to set audio mode:", e.message);
   }
 }
 
@@ -112,7 +125,10 @@ function _resetRxTimer() {
   if (_rxInactivityTimer) clearTimeout(_rxInactivityTimer);
   _rxInactivityTimer = setTimeout(async () => {
     if (_streamPlayerActive || _pcmAccumulator.length > 0) {
-      console.warn(`[comms] RX inactivity timeout (${RX_INACTIVITY_TIMEOUT_MS}ms) — flushing (stream=${_streamPlayerActive}, legacy=${_pcmAccumulator.length} frames)`);
+      console.warn(
+        `[comms] RX inactivity timeout (${RX_INACTIVITY_TIMEOUT_MS}ms) — flushing (stream=${_streamPlayerActive}, legacy=${_pcmAccumulator.length} frames)`,
+      );
+      _seenChunks.clear();
       await _flushAudio();
     }
   }, RX_INACTIVITY_TIMEOUT_MS);
@@ -127,7 +143,7 @@ async function _ensureDecoderReady() {
       await initOpusDecoder();
       _decoderReady = true;
     } catch (e) {
-      console.warn('[comms] failed to init Opus decoder:', e.message);
+      console.warn("[comms] failed to init Opus decoder:", e.message);
       return false;
     }
   }
@@ -143,9 +159,12 @@ async function _startStreaming() {
   try {
     await startStreamPlayer();
     _streamPlayerActive = true;
-    console.log('[comms] AudioTrack streaming started');
+    console.log("[comms] AudioTrack streaming started");
   } catch (e) {
-    console.warn('[comms] AudioStreamPlayer unavailable, using legacy WAV fallback:', e.message);
+    console.warn(
+      "[comms] AudioStreamPlayer unavailable, using legacy WAV fallback:",
+      e.message,
+    );
     _useStreamPlayer = false;
   }
 }
@@ -158,10 +177,10 @@ async function _stopStreaming() {
   try {
     await stopStreamPlayer();
   } catch (e) {
-    console.warn('[comms] stopStreamPlayer error:', e.message);
+    console.warn("[comms] stopStreamPlayer error:", e.message);
   }
   _streamPlayerActive = false;
-  console.log('[comms] AudioTrack streaming stopped');
+  console.log("[comms] AudioTrack streaming stopped");
 }
 
 /**
@@ -172,7 +191,10 @@ async function _decodeAndPlay(base64Opus) {
   if (!(await _ensureDecoderReady())) return;
 
   const pcmBase64 = await decodeOpusFrame(base64Opus);
-  if (!pcmBase64 || pcmBase64.length === 0) return;
+  if (!pcmBase64 || pcmBase64.length === 0) {
+    console.warn('[comms] Opus decode returned empty — decoder failure or wrong input format');
+    return;
+  }
 
   if (_useStreamPlayer) {
     // Streaming path: start AudioTrack on first frame, write immediately
@@ -183,7 +205,10 @@ async function _decodeAndPlay(base64Opus) {
     try {
       await writeStreamPCM(pcmBase64);
     } catch (e) {
-      console.warn('[comms] writeStreamPCM error, falling back to legacy:', e.message);
+      console.warn(
+        "[comms] writeStreamPCM error, falling back to legacy:",
+        e.message,
+      );
       _useStreamPlayer = false;
       _streamPlayerActive = false;
       _pcmAccumulator.push(pcmBase64);
@@ -224,7 +249,9 @@ async function _flushAudio() {
 
   // Destroy decoder after transmission ends (will re-init on next PTT)
   if (_decoderReady) {
-    try { await destroyOpusDecoder(); } catch (_) {}
+    try {
+      await destroyOpusDecoder();
+    } catch (_) {}
     _decoderReady = false;
   }
 
@@ -276,20 +303,20 @@ async function _flushAudioLegacy() {
     const view = new DataView(wavFile.buffer);
 
     // RIFF header
-    view.setUint32(0, 0x52494646, false);            // "RIFF"
-    view.setUint32(4, 36 + totalPcmBytes, true);     // file size - 8
-    view.setUint32(8, 0x57415645, false);            // "WAVE"
+    view.setUint32(0, 0x52494646, false); // "RIFF"
+    view.setUint32(4, 36 + totalPcmBytes, true); // file size - 8
+    view.setUint32(8, 0x57415645, false); // "WAVE"
     // fmt sub-chunk
-    view.setUint32(12, 0x666D7420, false);           // "fmt "
-    view.setUint32(16, 16, true);                    // PCM format chunk size
-    view.setUint16(20, 1, true);                     // PCM format (1)
+    view.setUint32(12, 0x666d7420, false); // "fmt "
+    view.setUint32(16, 16, true); // PCM format chunk size
+    view.setUint16(20, 1, true); // PCM format (1)
     view.setUint16(22, channels, true);
     view.setUint32(24, sampleRate, true);
     view.setUint32(28, byteRate, true);
     view.setUint16(32, blockAlign, true);
     view.setUint16(34, bitsPerSample, true);
     // data sub-chunk
-    view.setUint32(36, 0x64617461, false);           // "data"
+    view.setUint32(36, 0x64617461, false); // "data"
     view.setUint32(40, totalPcmBytes, true);
 
     // Copy decoded PCM chunks into WAV body
@@ -301,7 +328,7 @@ async function _flushAudioLegacy() {
 
     // Encode entire WAV as ONE base64 string (chunked to avoid call-stack overflow)
     const CHUNK = 8192;
-    let binaryStr = '';
+    let binaryStr = "";
     for (let i = 0; i < wavFile.length; i += CHUNK) {
       const slice = wavFile.subarray(i, Math.min(i + CHUNK, wavFile.length));
       binaryStr += String.fromCharCode.apply(null, slice);
@@ -310,7 +337,7 @@ async function _flushAudioLegacy() {
 
     const tempUri = FileSystem.cacheDirectory + `ptt_rx_${Date.now()}.wav`;
     await FileSystem.writeAsStringAsync(tempUri, wavBase64, {
-      encoding: 'base64',
+      encoding: "base64",
     });
 
     // Switch audio subsystem to speaker playback mode BEFORE playing.
@@ -319,23 +346,23 @@ async function _flushAudioLegacy() {
 
     console.log(
       `[comms] playing ${frameCount} decoded Opus frames` +
-      ` | PCM ${totalPcmBytes}B | ~${durationMs.toFixed(0)}ms`
+        ` | PCM ${totalPcmBytes}B | ~${durationMs.toFixed(0)}ms`,
     );
 
     const { sound } = await Audio.Sound.createAsync(
       { uri: tempUri },
-      { shouldPlay: true, volume: 1.0 }
+      { shouldPlay: true, volume: 1.0 },
     );
 
     sound.setOnPlaybackStatusUpdate(async (status) => {
       if (status.isLoaded && status.didJustFinish) {
         await sound.unloadAsync();
         await FileSystem.deleteAsync(tempUri, { idempotent: true });
-        console.log('[comms] PTT playback complete');
+        console.log("[comms] PTT playback complete");
       }
     });
   } catch (e) {
-    console.warn('[comms] playback error:', e.message);
+    console.warn("[comms] playback error:", e.message);
   }
 }
 
@@ -344,11 +371,10 @@ async function _flushAudioLegacy() {
 // so you can verify the full encode→decode→playback chain on one device.
 // The server's hub.ts fanOut() correctly skips the sender, which means
 // single-device testing is impossible without this local loopback.
-const LOOPBACK_ENABLED = (
-  process.env.EXPO_PUBLIC_LOOPBACK === 'true' ||
-  process.env.EXPO_PUBLIC_LOOPBACK === '1'
-);
-const _loopbackBuffer = [];  // encrypted Opus chunks buffered during TX
+const LOOPBACK_ENABLED =
+  process.env.EXPO_PUBLIC_LOOPBACK === "true" ||
+  process.env.EXPO_PUBLIC_LOOPBACK === "1";
+const _loopbackBuffer = []; // encrypted Opus chunks buffered during TX
 let _isLocalTx = false;
 
 /**
@@ -387,61 +413,83 @@ export async function initComms(jwt) {
   // "another device's audio" when the server adds echo support later.
   comms.onRawMessage(async (msg) => {
     // ── Floor control state sync ──────────────────────────────────
-    if (msg.type === 'FLOOR_GRANT') {
+    if (msg.type === "FLOOR_GRANT") {
       _channelBusy = true;
       _floorHolder = msg.winner;
       return; // handled by SDK layer
     }
-    if (msg.type === 'FLOOR_RELEASED') {
+    if (msg.type === "FLOOR_RELEASED") {
       _channelBusy = false;
       _floorHolder = null;
       return; // handled by SDK layer
     }
-    if (msg.type === 'FLOOR_DENY') {
+    if (msg.type === "FLOOR_DENY") {
       // SDK handles the PTT stop — we just track state
       _channelBusy = true;
       _floorHolder = msg.holder;
       return;
     }
 
+    if (msg.type === "PRESENCE") {
+      const online = msg.online ?? [];
+      console.log(`[comms] PRESENCE — ${online.length} peer(s) online in talkgroup: [${online.join(', ')}]`);
+      return;
+    }
+
     // ── RX: Decode each incoming Opus frame to PCM and accumulate ──
-    if (msg.type === 'PTT_AUDIO' && msg.data) {
+    if (msg.type === "PTT_AUDIO" && msg.data) {
+      // Deduplicate: server sends via both UDP and WebSocket for reliability.
+      // Drop the second copy so the frame is only decoded once.
+      const chunkKey = `${msg.sessionId}:${msg.chunk}`;
+      if (_seenChunks.has(chunkKey)) return;
+      _seenChunks.add(chunkKey);
+
+      // Diagnostic: log every incoming audio chunk BEFORE any guard
+      console.log(
+        `[comms] RX PTT_AUDIO chunk arrived (isLocalTx=${_isLocalTx}, via=${msg._transport ?? 'ws'}, chunk=${msg.chunk ?? '?'})`,
+      );
+
       // Half-duplex: drop incoming audio while we are transmitting
-      // (unless loopback mode, which injects audio locally via PTT_END path)
-      if (_isLocalTx && !LOOPBACK_ENABLED) return;
-      // In loopback mode, stashed audio is processed on PTT_END, not here
-      if (_isLocalTx && LOOPBACK_ENABLED) return;
+      if (_isLocalTx) return;
 
       try {
         const decrypted = await encryption.decrypt(msg.data);
         await _decodeAndPlay(decrypted);
         _resetRxTimer();
-        console.log(`[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`);
+        console.log(
+          `[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`,
+        );
       } catch (e) {
-        console.warn('[comms] audio decrypt/decode error:', e.message);
+        console.warn("[comms] audio decrypt/decode error:", e.message);
       }
     }
 
     // ── RX: PTT_END signals the transmission is complete ──
-    if (msg.type === 'PTT_END') {
-      console.log('[comms] PTT_END received — flushing audio buffer');
+    if (msg.type === "PTT_END") {
+      console.log(`[comms] PTT_END received — flushing (stream=${_streamPlayerActive}, frames=${_pcmAccumulator.length})`);
+      _seenChunks.clear();
       await _flushAudio();
     }
   });
 
   // Signal polling — DLS-140 unreachable when not on SATCOM (silent fail)
   comms.startSignalPolling(10000, (status) => {
-    console.log('[comms] signal — link:', status.activeLink,
-      '| sat:', status.certusDataBars,
-      '| cell:', status.cellularSignal);
+    console.log(
+      "[comms] signal — link:",
+      status.activeLink,
+      "| sat:",
+      status.certusDataBars,
+      "| cell:",
+      status.cellularSignal,
+    );
   });
 
   console.log(
     `[comms] initialized` +
-    ` | device: ${CONFIG.DEVICE_ID}` +
-    ` | talkgroup: ${CONFIG.TALKGROUP}` +
-    ` | relay: ${CONFIG.WS_URL}` +
-    (LOOPBACK_ENABLED ? ' | LOOPBACK ON' : '')
+      ` | device: ${CONFIG.DEVICE_ID}` +
+      ` | talkgroup: ${CONFIG.TALKGROUP}` +
+      ` | relay: ${CONFIG.WS_URL}` +
+      (LOOPBACK_ENABLED ? " | LOOPBACK ON" : ""),
   );
 }
 
@@ -458,22 +506,26 @@ export function notifyTxStart() {
  * Called by socket.js when PTT ends — clears TX flag and triggers loopback playback.
  */
 export async function notifyTxEnd() {
-  _isLocalTx = false;
+  // Small delay before clearing TX flag — UDP packets from peers may be
+  // slightly behind PTT_END on the WebSocket control channel.
+  setTimeout(() => { _isLocalTx = false; }, 150);
   _audioModeSet = false; // force re-set on next playback
 
   // Loopback: decode stashed TX chunks and play them back locally
   if (LOOPBACK_ENABLED && _loopbackBuffer.length > 0) {
-    console.log(`[comms] loopback: decoding ${_loopbackBuffer.length} stashed TX chunks`);
+    console.log(
+      `[comms] loopback: decoding ${_loopbackBuffer.length} stashed TX chunks`,
+    );
     for (const enc of _loopbackBuffer) {
       try {
         const decrypted = await encryption.decrypt(enc);
         await _decodeAndAccumulate(decrypted);
       } catch (e) {
-        console.warn('[comms] loopback decode error:', e.message);
+        console.warn("[comms] loopback decode error:", e.message);
       }
     }
     _loopbackBuffer.length = 0;
-    console.log('[comms] loopback: flushing audio for local playback');
+    console.log("[comms] loopback: flushing audio for local playback");
     await _flushAudio();
   }
 }

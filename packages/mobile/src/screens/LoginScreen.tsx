@@ -13,11 +13,18 @@ export function LoginScreen({ navigation }: any) {
 
   const login = async () => {
     try {
+      // 30s timeout — required for SATCOM links with 800ms+ latency
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch(`${CONFIG.API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Login failed'); return; }
       
@@ -25,9 +32,14 @@ export function LoginScreen({ navigation }: any) {
       await connectComms(data.jwt);
       navigation.replace('Channels');
     } catch (e: any) {
-      setError(`Cannot reach server: ${e.message}`);
+      if (e.name === 'AbortError') {
+        setError('Server did not respond in 30s. If on SATCOM, wait for satellite lock and try again.');
+      } else {
+        setError(`Cannot reach server: ${e.message}`);
+      }
     }
   };
+
 
   return (
     <View style={styles.container}>

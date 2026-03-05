@@ -11,7 +11,7 @@ export class AudioPipeline {
   private isRecording = false;
 
   // Mode toggle (set by UI via comms.setTransportMode)
-  public static useUdp = false;
+  public static useUdp = true;
 
   constructor(
     private relay: RelaySocket,
@@ -43,8 +43,10 @@ export class AudioPipeline {
     };
 
     if (AudioPipeline.useUdp) {
+      if (this.chunk <= 3) console.log(`[AudioPipeline] TX chunk #${this.chunk} via UDP`);
       this.udp.send(msg);
     } else {
+      if (this.chunk <= 3) console.log(`[AudioPipeline] TX chunk #${this.chunk} via WebSocket`);
       this.relay.send(msg);
     }
   }
