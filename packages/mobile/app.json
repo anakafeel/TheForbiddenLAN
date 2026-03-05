@@ -5,9 +5,11 @@
     "version": "1.0.0",
     "entryPoint": "./index.js",
     "orientation": "portrait",
+    "userInterfaceStyle": "dark",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "ios": {
       "bundleIdentifier": "com.forbiddenlan.skytalk"
