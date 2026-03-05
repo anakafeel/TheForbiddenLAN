@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useCallback } from "react";
+import React, { useContext, useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -18,18 +18,34 @@ import { onFloorDenied, getFloorState, comms } from "../utils/comms";
 import { updateTLEs, getVisibleSatellites } from "../utils/satellitePredictor";
 import { useStore } from "../store";
 import { CONFIG } from "../config";
-import theme from "../theme";
+import { useAppTheme } from "../theme";
+import BottomMenu from "../components/BottomMenu";
 
-const { colors, spacing, radius, typography } = theme;
+const MOCK_CHANNELS = [
+  { id: "channel-1", name: "Channel 1", users: 10 },
+  { id: "channel-2", name: "Channel 2", users: 5 },
+  { id: "channel-3", name: "Channel 3", users: 8 },
+  { id: "channel-4", name: "Channel 4", users: 3 },
+  { id: "channel-5", name: "Channel 5", users: 12 },
+];
 
 export default function PTTScreen({ navigation }) {
-  const { current } = useContext(ChannelContext);
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
+
+  const { current, setCurrent } = useContext(ChannelContext);
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [currentSpeaker, setCurrentSpeaker] = useState(null);
   const [channelBusy, setChannelBusy] = useState(false);
   const [busyHolder, setBusyHolder] = useState(null);
+  const [availableChannels, setAvailableChannels] = useState([]);
+  const [channelMenuOpen, setChannelMenuOpen] = useState(false);
   const preferredConnection = useStore((s) => s.preferredConnection);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
+  const jwt = useStore((s) => s.jwt);
   const [isSatcom, setIsSatcom] = useState(false);
   const [satsVisible, setSatsVisible] = useState(0);
 
@@ -55,6 +71,62 @@ export default function PTTScreen({ navigation }) {
     return () => clearInterval(intervalId);
   }, [isSatcom]);
 
+  // Load channels for the channel dropdown on the PTT screen
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateChannels = async () => {
+      if (CONFIG.MOCK_MODE) {
+        if (!isMounted) return;
+        setAvailableChannels(MOCK_CHANNELS);
+        return;
+      }
+
+      if (!jwt) {
+        if (isMounted && current) setAvailableChannels([current]);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/talkgroups`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) throw new Error(`Failed to fetch channels: ${res.status}`);
+        const data = await res.json();
+        const talkgroups = Array.isArray(data?.talkgroups)
+          ? data.talkgroups
+          : Array.isArray(data)
+            ? data
+            : [];
+        const mapped = talkgroups
+          .filter((tg) => tg && tg.id && tg.name)
+          .map((tg) => ({
+            id: String(tg.id),
+            name: String(tg.name),
+            users: typeof tg.users === "number" ? tg.users : 0,
+          }));
+
+        if (!isMounted) return;
+
+        // Keep the currently selected channel visible even if the list doesn't include it.
+        if (current && !mapped.some((ch) => ch.id === current.id)) {
+          setAvailableChannels([current, ...mapped]);
+        } else {
+          setAvailableChannels(mapped);
+        }
+      } catch (err) {
+        console.warn("[PTTScreen] Failed to fetch channels for selector:", err);
+        if (!isMounted) return;
+        if (current) setAvailableChannels([current]);
+      }
+    };
+
+    hydrateChannels();
+    return () => {
+      isMounted = false;
+    };
+  }, [jwt, current]);
+
   const toggleSatcom = () => {
     const newValue = !isSatcom;
     setIsSatcom(newValue);
@@ -62,6 +134,51 @@ export default function PTTScreen({ navigation }) {
     // Keep store in sync so Dashboard connection cards reflect current mode
     setPreferredConnection(newValue ? "satellite" : "cellular");
   };
+
+  const channelUsers = useMemo(() => {
+    const totalUsers = Math.max(0, Number(current?.users || 0));
+    if (totalUsers === 0) return [];
+
+    const seedNames = [
+      "YOU",
+      currentSpeaker || "ECHO-1",
+      "BRAVO-2",
+      "CHARLIE-3",
+      "DELTA-4",
+      "FOXTROT-5",
+      "GOLF-6",
+      "HOTEL-7",
+      "INDIA-8",
+    ];
+
+    const normalized = seedNames.filter((name, idx) => name && seedNames.indexOf(name) === idx);
+    return normalized.slice(0, totalUsers);
+  }, [current?.users, currentSpeaker]);
+
+  const handleChannelChange = useCallback(
+    async (channel) => {
+      if (!channel?.id) return;
+      setChannelMenuOpen(false);
+      if (current?.id === channel.id) return;
+
+      if (isTransmitting && current?.id) {
+        setIsTransmitting(false);
+        try {
+          await stopAudioStream();
+        } catch (err) {
+          console.warn("[PTTScreen] Failed stopping audio while switching channel:", err);
+        }
+        emitStopTalking(CONFIG.DEVICE_ID, current.id);
+      }
+
+      setChannelBusy(false);
+      setBusyHolder(null);
+      setCurrentSpeaker(null);
+      setCurrent(channel);
+      joinChannel(channel.id);
+    },
+    [current, isTransmitting, setCurrent],
+  );
 
   // Register floor-deny callback — fires when server rejects PTT (walk-on prevention)
   useEffect(() => {
@@ -89,39 +206,39 @@ export default function PTTScreen({ navigation }) {
     }
   }, [current?.id]);
 
-  const handlePTTToggle = async () => {
-    if (!current) return;
+  const handlePTTStart = useCallback(async () => {
+    if (!current || isTransmitting || (isSatcom && satsVisible === 0)) return;
 
-    if (isTransmitting) {
-      // Stop transmitting: finish capture and send the chunk BEFORE clearing
-      // the PTT state. ForbiddenLANComms.sendAudioChunk() guards on isTransmitting —
-      // calling emitStopTalking first would set it to false and silently drop the audio.
-      setIsTransmitting(false);
-      await stopAudioStream(); // reads file → encrypts → sendAudioChunk() while still active
-      emitStopTalking(CONFIG.DEVICE_ID, current.id); // clears isTransmitting + sends PTT_END
-    } else {
-      // Walk-on check: emitStartTalking returns false if floor is taken
-      const accepted = emitStartTalking(CONFIG.DEVICE_ID, current.id);
-      if (accepted === false) {
-        // Floor is taken — show "Channel Busy" feedback
-        const floorState = getFloorState();
-        setChannelBusy(true);
-        setBusyHolder(floorState.holder);
-        setTimeout(() => {
-          setChannelBusy(false);
-          setBusyHolder(null);
-        }, 3000);
-        return;
-      }
-      // Start transmitting (optimistic — server may still deny via FLOOR_DENY)
-      setIsTransmitting(true);
-      try {
-        await startAudioStream();
-      } catch (e) {
-        console.warn("Audio start error:", e);
-      }
+    // Walk-on check: emitStartTalking returns false if floor is taken
+    const accepted = emitStartTalking(CONFIG.DEVICE_ID, current.id);
+    if (accepted === false) {
+      const floorState = getFloorState();
+      setChannelBusy(true);
+      setBusyHolder(floorState.holder);
+      setTimeout(() => {
+        setChannelBusy(false);
+        setBusyHolder(null);
+      }, 3000);
+      return;
     }
-  };
+
+    setIsTransmitting(true);
+    try {
+      await startAudioStream();
+    } catch (e) {
+      console.warn("Audio start error:", e);
+      setIsTransmitting(false);
+      emitStopTalking(CONFIG.DEVICE_ID, current.id);
+    }
+  }, [current, isSatcom, satsVisible, isTransmitting]);
+
+  const handlePTTEnd = useCallback(async () => {
+    if (!current || !isTransmitting) return;
+    // stopAudioStream MUST come before emitStopTalking — avoids dropping last audio chunk
+    setIsTransmitting(false);
+    await stopAudioStream();
+    emitStopTalking(CONFIG.DEVICE_ID, current.id);
+  }, [current, isTransmitting]);
 
   // No channel selected - show prompt to select
   if (!current) {
@@ -140,6 +257,7 @@ export default function PTTScreen({ navigation }) {
             <Text style={styles.selectChannelText}>GO TO CHANNELS</Text>
           </TouchableOpacity>
         </View>
+        <BottomMenu navigation={navigation} active="PTT" />
       </View>
     );
   }
@@ -159,6 +277,93 @@ export default function PTTScreen({ navigation }) {
         </View>
         <Text style={styles.channelName}>{current.name}</Text>
         <Text style={styles.channelUsers}>👤 {current.users || 0} Online</Text>
+
+        <View style={styles.channelSelectorWrap}>
+          <Text style={styles.channelSelectorLabel}>SELECT CHANNEL</Text>
+          <Pressable
+            style={styles.channelSelectorButton}
+            onPress={() => setChannelMenuOpen((open) => !open)}
+          >
+            <Text style={styles.channelSelectorText}>{current.name}</Text>
+            <Text style={styles.channelSelectorChevron}>
+              {channelMenuOpen ? "▲" : "▼"}
+            </Text>
+          </Pressable>
+          {channelMenuOpen && (
+            <View style={styles.channelSelectorList}>
+              {availableChannels.length === 0 ? (
+                <Text style={styles.channelSelectorEmpty}>No channels available</Text>
+              ) : (
+                availableChannels.map((channel) => (
+                  <Pressable
+                    key={channel.id}
+                    style={[
+                      styles.channelSelectorItem,
+                      channel.id === current.id && styles.channelSelectorItemActive,
+                    ]}
+                    onPress={() => handleChannelChange(channel)}
+                  >
+                    <Text
+                      style={[
+                        styles.channelSelectorItemText,
+                        channel.id === current.id && styles.channelSelectorItemTextActive,
+                      ]}
+                    >
+                      {channel.name}
+                    </Text>
+                    <Text style={styles.channelSelectorUsers}>
+                      👤 {channel.users || 0}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.userCirclesSection}>
+        <Text style={styles.userCirclesLabel}>USERS IN CHANNEL</Text>
+        {channelUsers.length === 0 ? (
+          <Text style={styles.userCirclesEmpty}>No active users</Text>
+        ) : (
+          <View style={styles.userCirclesRow}>
+            {channelUsers.slice(0, 6).map((user, idx) => {
+              const initials = user === "YOU"
+                ? "YOU"
+                : user
+                    .split("-")
+                    .map((part) => part.charAt(0))
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+              const highlighted = (user === "YOU" && isTransmitting) || user === currentSpeaker;
+              return (
+                <View
+                  key={`${user}-${idx}`}
+                  style={[
+                    styles.userCircle,
+                    highlighted && styles.userCircleActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.userCircleText,
+                      highlighted && styles.userCircleTextActive,
+                    ]}
+                  >
+                    {initials}
+                  </Text>
+                </View>
+              );
+            })}
+            {channelUsers.length > 6 && (
+              <View style={[styles.userCircle, styles.userCircleOverflow]}>
+                <Text style={styles.userCircleText}>+{channelUsers.length - 6}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Speaking Status */}
@@ -210,11 +415,12 @@ export default function PTTScreen({ navigation }) {
 
         {/* PTT Button */}
         <Pressable
-          onPress={handlePTTToggle}
+          onPressIn={handlePTTStart}
+          onPressOut={handlePTTEnd}
           disabled={isSatcom && satsVisible === 0}
           style={({ pressed }) => [
             styles.pttButton,
-            isTransmitting && styles.pttButtonActive,
+            (isTransmitting || pressed) && styles.pttButtonActive,
             pressed && styles.pttButtonPressed,
             isSatcom && satsVisible === 0 && styles.pttButtonDisabled,
           ]}
@@ -223,7 +429,7 @@ export default function PTTScreen({ navigation }) {
           <Text
             style={[styles.pttLabel, isTransmitting && styles.pttLabelActive]}
           >
-            {isTransmitting ? "TRANSMITTING" : "PUSH TO TALK"}
+            {isTransmitting ? "TRANSMITTING" : "HOLD TO TALK"}
           </Text>
         </Pressable>
       </View>
@@ -264,14 +470,16 @@ export default function PTTScreen({ navigation }) {
       {/* Hint */}
       <Text style={styles.hint}>
         {isTransmitting
-          ? "Tap to stop transmitting"
-          : "Tap to start transmitting"}
+          ? "Release to stop transmitting"
+          : "Hold button to talk"}
       </Text>
+      <BottomMenu navigation={navigation} active="PTT" />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors, spacing, radius, typography) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -351,6 +559,124 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: typography.size.sm,
   },
+  channelSelectorWrap: {
+    width: "100%",
+    marginTop: spacing.md,
+    zIndex: 10,
+  },
+  channelSelectorLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.xs,
+    textAlign: "left",
+  },
+  channelSelectorButton: {
+    backgroundColor: colors.background.tertiary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  channelSelectorText: {
+    color: colors.text.primary,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.semibold,
+  },
+  channelSelectorChevron: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+  },
+  channelSelectorList: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.background.secondary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  channelSelectorItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  channelSelectorItemActive: {
+    backgroundColor: colors.accent.glow,
+  },
+  channelSelectorItemText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.sm,
+  },
+  channelSelectorItemTextActive: {
+    color: colors.text.primary,
+    fontWeight: typography.weight.semibold,
+  },
+  channelSelectorUsers: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+  },
+  channelSelectorEmpty: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+    paddingVertical: spacing.md,
+    textAlign: "center",
+  },
+  userCirclesSection: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+    backgroundColor: colors.background.secondary,
+  },
+  userCirclesLabel: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: spacing.sm,
+  },
+  userCirclesEmpty: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+  },
+  userCirclesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  userCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.background.tertiary,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userCircleActive: {
+    backgroundColor: colors.accent.primary,
+    borderColor: colors.accent.primaryLight,
+  },
+  userCircleOverflow: {
+    backgroundColor: colors.background.card,
+  },
+  userCircleText: {
+    color: colors.text.secondary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    letterSpacing: typography.letterSpacing.tight,
+  },
+  userCircleTextActive: {
+    color: colors.text.primary,
+  },
   // Speaking bar
   speakingBar: {
     backgroundColor: colors.background.tertiary,
@@ -364,7 +690,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.status.activeGlow,
   },
   speakingBarBusy: {
-    backgroundColor: "#FF4444",
+    backgroundColor: colors.status.danger,
   },
   speakingBarNoSat: {
     backgroundColor: colors.background.secondary,
@@ -421,7 +747,7 @@ const styles = StyleSheet.create({
   },
   pttButtonActive: {
     backgroundColor: colors.status.danger,
-    borderColor: "#FF6B6B",
+    borderColor: colors.status.danger,
     shadowColor: colors.status.danger,
     shadowOpacity: 0.8,
     shadowRadius: 50,
@@ -484,7 +810,8 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     fontSize: typography.size.sm,
     textAlign: "center",
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl + 84,
     letterSpacing: typography.letterSpacing.wide,
   },
-});
+  });
+}

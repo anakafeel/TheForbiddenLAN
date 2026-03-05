@@ -1,10 +1,15 @@
 // Admin Devices — list all devices + enable/disable toggle per device.
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, Pressable, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { api } from '../../lib/api';
-import { colors, spacing, radius, typography } from '../../theme';
+import { useAppTheme } from '../../theme';
 
 export function AdminDevices() {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,67 +90,69 @@ export function AdminDevices() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary, padding: spacing.xl },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
-  error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  countText: { color: colors.text.muted, fontSize: typography.size.sm },
-  card: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: spacing.sm,
-  },
-  name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
-  cardBody: { padding: spacing.lg },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  detailLabel: { color: colors.text.muted, fontSize: typography.size.sm },
-  detailValue: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
-  toggleBtn: {
-    borderRadius: radius.sm,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.md,
-  },
-  toggleActive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-  },
-  toggleInactive: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-  },
-  toggleText: { color: colors.text.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  empty: { color: colors.text.muted, textAlign: 'center', marginTop: spacing.xl },
-  refreshBtn: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: 'rgba(37, 55, 70, 0.6)',
-    borderRadius: radius.sm,
-  },
-  refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
-});
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background.primary, padding: spacing.xl },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
+    error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.lg,
+    },
+    countText: { color: colors.text.muted, fontSize: typography.size.sm },
+    card: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginBottom: spacing.sm,
+      overflow: 'hidden',
+    },
+    cardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginRight: spacing.sm,
+    },
+    name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+    cardBody: { padding: spacing.lg },
+    detailRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.xs,
+    },
+    detailLabel: { color: colors.text.muted, fontSize: typography.size.sm },
+    detailValue: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+    toggleBtn: {
+      borderRadius: radius.sm,
+      paddingVertical: 4,
+      paddingHorizontal: spacing.md,
+    },
+    toggleActive: {
+      backgroundColor: colors.status.activeSubtle,
+    },
+    toggleInactive: {
+      backgroundColor: colors.status.dangerSubtle,
+    },
+    toggleText: { color: colors.text.primary, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+    empty: { color: colors.text.muted, textAlign: 'center', marginTop: spacing.xl },
+    refreshBtn: {
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.accent.glow,
+      borderRadius: radius.sm,
+    },
+    refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+  });
+}

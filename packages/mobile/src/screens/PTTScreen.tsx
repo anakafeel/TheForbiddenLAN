@@ -4,10 +4,8 @@ import { ChannelContext } from '../context/ChannelContext';
 import PTTButton from '../components/PTTButton';
 import BottomMenu from '../components/BottomMenu';
 import { CONFIG } from '../config';
-import theme from '../theme';
+import { useAppTheme } from '../theme';
 import { useStore } from '../store';
-
-const { colors, spacing, radius, typography } = theme;
 
 type Channel = { id: string; name: string; users: number };
 type PTTScreenProps = { navigation: any };
@@ -27,6 +25,11 @@ const ONLINE_USERS: Record<string, string[]> = {
 };
 
 export default function PTTScreen({ navigation }: PTTScreenProps) {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const { current, setCurrent } = useContext(ChannelContext as any) as {
     current: Channel | null;
     setCurrent: (channel: Channel) => void;
@@ -182,7 +185,8 @@ export default function PTTScreen({ navigation }: PTTScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -369,4 +373,5 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     paddingBottom: spacing.xl,
   },
-});
+  });
+}

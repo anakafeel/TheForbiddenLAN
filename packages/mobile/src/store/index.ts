@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
 
 export type ConnectionMode = 'satellite' | 'cellular';
+export type ThemeMode = 'dark' | 'light';
 
 interface User {
   sub: string;
@@ -16,6 +17,7 @@ export interface AppState {
   activeTalkgroup: string;
   talkgroups: string[];
   preferredConnection: ConnectionMode;
+  themeMode: ThemeMode;
   signalStatus: SignalStatus;
   floorStatus: FloorStatus;
   gps: GPS | null;
@@ -24,6 +26,8 @@ export interface AppState {
   clearAuth: () => void;
   setActiveTalkgroup: (id: string) => void;
   setPreferredConnection: (mode: ConnectionMode) => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggleThemeMode: () => void;
   setSignalStatus: (s: SignalStatus) => void;
   setFloorStatus: (f: FloorStatus) => void;
   setGPS: (g: GPS) => void;
@@ -35,6 +39,7 @@ export const useStore = create<AppState>((set) => ({
   activeTalkgroup: '',
   talkgroups: [],
   preferredConnection: 'satellite',
+  themeMode: 'dark',
   signalStatus: { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },
   floorStatus: { holder: null, talkgroup: '', timestamp: 0 },
   gps: null,
@@ -43,6 +48,8 @@ export const useStore = create<AppState>((set) => ({
   clearAuth: () => set({ jwt: null, user: null }),
   setActiveTalkgroup: (id) => set({ activeTalkgroup: id }),
   setPreferredConnection: (preferredConnection) => set({ preferredConnection }),
+  setThemeMode: (themeMode) => set({ themeMode }),
+  toggleThemeMode: () => set((state) => ({ themeMode: state.themeMode === 'dark' ? 'light' : 'dark' })),
   setSignalStatus: (signalStatus) => set({ signalStatus }),
   setFloorStatus: (floorStatus) => set({ floorStatus }),
   setGPS: (gps) => set({ gps }),

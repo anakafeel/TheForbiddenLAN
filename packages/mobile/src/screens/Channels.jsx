@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState, useCallback } from 'react';
+import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
 import { emitStartTalking, emitStopTalking, joinChannel, connectComms } from '../utils/socket';
@@ -6,10 +6,8 @@ import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { getFloorState } from '../utils/comms';
 import { CONFIG } from '../config';
 import { useStore } from '../store';
-import theme from '../theme';
+import { useAppTheme } from '../theme';
 import BottomMenu from '../components/BottomMenu';
-
-const { colors, spacing, radius, shadows, typography } = theme;
 
 // Mock channels for UI testing (no backend required)
 const MOCK_CHANNELS = [
@@ -21,7 +19,7 @@ const MOCK_CHANNELS = [
 ];
 
 // Filter Tabs Component
-function FilterTabs({ activeFilter, onFilterChange }) {
+function FilterTabs({ activeFilter, onFilterChange, styles }) {
   const filters = ['ALL', 'ACTIVE'];
   return (
     <View style={styles.filterContainer}>
@@ -41,66 +39,85 @@ function FilterTabs({ activeFilter, onFilterChange }) {
 }
 
 // Channel Card Component with inline PTT button
-function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTStart, onPTTEnd, channelSpeaker }) {
+function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTStart, onPTTEnd, channelSpeaker, styles }) {
   // Show LIVE only when someone is actively speaking or transmitting
   const isLive = channel.transmitting || channelSpeaker || (isActive && (currentSpeaker || isTransmitting));
   const speakerName = isActive && isTransmitting ? 'YOU' : (isActive ? currentSpeaker : channelSpeaker);
   
   return (
-    <TouchableOpacity 
-      style={[styles.channelCard, isActive && styles.channelCardActive]}
-      onPress={onPress}
-      activeOpacity={0.7}
+    <View
+      style={[
+        styles.channelCard,
+        isActive && styles.channelCardActive,
+        isTransmitting && styles.channelCardTransmitting,
+      ]}
     >
       {/* Channel Info */}
-      <View style={styles.channelHeader}>
-        <View style={styles.channelTitleRow}>
-          {isLive && (
-            <View style={[styles.transmitBadge, !(channel.transmitting || isTransmitting) && styles.liveBadge]}>
-              <Text style={styles.transmitText}>● LIVE</Text>
-            </View>
-          )}
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.channelHeaderPressable,
+          pressed && styles.channelHeaderPressablePressed,
+        ]}
+      >
+        <View style={styles.channelHeader}>
+          <View style={styles.channelTitleRow}>
+            {isLive && (
+              <View style={[styles.transmitBadge, !(channel.transmitting || isTransmitting) && styles.liveBadge]}>
+                <Text style={styles.transmitText}>● LIVE</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.channelName}>{channel.name}</Text>
+          <View style={styles.channelMeta}>
+            <Text style={styles.channelUsers}>👤 {channel.users} Online</Text>
+            {speakerName && (
+              <Text style={styles.channelSpeakerPreview}>🎙️ {speakerName}</Text>
+            )}
+          </View>
+          <Text style={styles.cardTapHint}>Tap card for full PTT view</Text>
         </View>
-        <Text style={styles.channelName}>{channel.name}</Text>
-        <View style={styles.channelMeta}>
-          <Text style={styles.channelUsers}>👤 {channel.users} Online</Text>
-          {speakerName && (
-            <Text style={styles.channelSpeakerPreview}>🎙️ {speakerName}</Text>
-          )}
-        </View>
-      </View>
+      </Pressable>
 
       {/* Inline PTT Button */}
-      {isActive && (
-        <Pressable
-          onPressIn={(e) => {
-            e.stopPropagation();
-            onPTTStart();
-          }}
-          onPressOut={(e) => {
-            e.stopPropagation();
-            onPTTEnd();
-          }}
-          style={({ pressed }) => [
-            styles.inlinePttButton,
-            isTransmitting && styles.inlinePttButtonActive,
-            pressed && styles.inlinePttButtonPressed,
-          ]}
-        >
-          <Text style={styles.inlinePttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
-        </Pressable>
-      )}
-    </TouchableOpacity>
+      <Pressable
+        onPressIn={(e) => {
+          e.stopPropagation();
+          onPTTStart(channel);
+        }}
+        onPressOut={(e) => {
+          e.stopPropagation();
+          onPTTEnd(channel);
+        }}
+        style={({ pressed }) => [
+          styles.inlinePttButton,
+          (isTransmitting || pressed) && styles.inlinePttButtonActive,
+          pressed && styles.inlinePttButtonPressed,
+        ]}
+      >
+        <Text style={styles.inlinePttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
+        <Text style={[styles.inlinePttLabel, isTransmitting && styles.inlinePttLabelActive]}>
+          {isTransmitting ? 'LIVE' : 'HOLD'}
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
 export default function ChannelsScreen({ navigation }) {
+  const { colors, spacing, radius, shadows, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, shadows, typography),
+    [colors, spacing, radius, shadows, typography],
+  );
+
   const { setCurrent, current } = useContext(ChannelContext);
   // const [channels, setChannels] = useState(CONFIG.MOCK_MODE ? MOCK_CHANNELS : []);
   const [channels, setChannels] = useState(MOCK_CHANNELS); // Initial state before fetch
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isTransmitting, setIsTransmitting] = useState(false);
+  const [transmittingChannelId, setTransmittingChannelId] = useState(null);
   const [currentSpeaker, setCurrentSpeaker] = useState(null);
   const [channelSpeakers, setChannelSpeakers] = useState({}); // Track speakers per channel
 
@@ -234,27 +251,53 @@ export default function ChannelsScreen({ navigation }) {
     }
   };
 
-  const handlePTTStart = useCallback(async () => {
-    if (!current) return;
+  const handlePTTStart = useCallback(async (targetChannel) => {
+    if (!targetChannel?.id) return;
+
+    // If already transmitting on another channel, stop first to avoid overlapping streams.
+    if (isTransmitting) {
+      if (transmittingChannelId === targetChannel.id) return;
+      try {
+        await stopAudioStream();
+      } catch (e) {
+        console.warn('[Channels] Audio stop error before channel switch:', e);
+      }
+      if (transmittingChannelId) {
+        emitStopTalking(CONFIG.DEVICE_ID, transmittingChannelId);
+      }
+      setIsTransmitting(false);
+      setTransmittingChannelId(null);
+    }
+
+    if (current?.id !== targetChannel.id) {
+      setCurrent(targetChannel);
+      joinChannel(targetChannel.id);
+    }
+
     // Walk-on check: returns false if floor is taken
-    const accepted = emitStartTalking(CONFIG.DEVICE_ID, current.id);
+    const accepted = emitStartTalking(CONFIG.DEVICE_ID, targetChannel.id);
     if (accepted === false) return;
     setIsTransmitting(true);
+    setTransmittingChannelId(targetChannel.id);
     try {
       await startAudioStream();
     } catch (e) {
       console.warn('[Channels] Audio start error:', e);
       setIsTransmitting(false);
+      setTransmittingChannelId(null);
     }
-  }, [current]);
+  }, [current, isTransmitting, transmittingChannelId, setCurrent]);
 
-  const handlePTTEnd = useCallback(async () => {
-    if (!current || !isTransmitting) return;
+  const handlePTTEnd = useCallback(async (targetChannel) => {
+    const channelId = transmittingChannelId ?? targetChannel?.id ?? current?.id;
+    if (!channelId || !isTransmitting) return;
+    if (targetChannel?.id && channelId !== targetChannel.id) return;
     setIsTransmitting(false);
     // stopAudioStream MUST come before emitStopTalking — avoids dropping last audio chunk
     await stopAudioStream();
-    emitStopTalking(CONFIG.DEVICE_ID, current.id);
-  }, [current, isTransmitting]);
+    emitStopTalking(CONFIG.DEVICE_ID, channelId);
+    setTransmittingChannelId(null);
+  }, [current, isTransmitting, transmittingChannelId]);
 
   const filteredChannels = channels.filter(ch => {
     if (searchQuery && !ch.name.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -269,11 +312,12 @@ export default function ChannelsScreen({ navigation }) {
       channel={item}
       onPress={() => selectChannel(item)}
       isActive={current?.id === item.id}
-      isTransmitting={current?.id === item.id && isTransmitting}
+      isTransmitting={isTransmitting && transmittingChannelId === item.id}
       currentSpeaker={current?.id === item.id ? currentSpeaker : null}
       channelSpeaker={channelSpeakers[item.id]}
       onPTTStart={handlePTTStart}
       onPTTEnd={handlePTTEnd}
+      styles={styles}
     />
   );
 
@@ -304,7 +348,7 @@ export default function ChannelsScreen({ navigation }) {
         </View>
 
         {/* Filter Tabs */}
-        <FilterTabs activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+        <FilterTabs activeFilter={activeFilter} onFilterChange={setActiveFilter} styles={styles} />
       </View>
 
       {/* Channel List */}
@@ -320,7 +364,8 @@ export default function ChannelsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors, spacing, radius, shadows, typography) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -410,13 +455,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: spacing.lg,
+    padding: spacing.sm,
   },
   channelCardExpanded: {
     borderColor: colors.accent.primary,
   },
   channelCardActive: {
     borderColor: colors.accent.primary,
+  },
+  channelCardTransmitting: {
+    borderColor: colors.status.danger,
+    shadowColor: colors.status.danger,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  channelHeaderPressable: {
+    flex: 1,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  channelHeaderPressablePressed: {
+    backgroundColor: colors.accent.glow,
   },
   channelHeader: {
     flex: 1,
@@ -436,9 +497,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.status.active,
   },
   inlinePttButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: colors.accent.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -453,7 +514,7 @@ const styles = StyleSheet.create({
   },
   inlinePttButtonActive: {
     backgroundColor: colors.status.danger,
-    borderColor: '#FF6B6B',
+    borderColor: colors.status.danger,
     shadowColor: colors.status.danger,
     shadowOpacity: 0.8,
     shadowRadius: 15,
@@ -463,6 +524,16 @@ const styles = StyleSheet.create({
   },
   inlinePttIcon: {
     fontSize: 24,
+  },
+  inlinePttLabel: {
+    color: colors.text.primary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    marginTop: 2,
+    letterSpacing: typography.letterSpacing.wide,
+  },
+  inlinePttLabelActive: {
+    color: colors.text.primary,
   },
   transmitText: {
     color: colors.text.primary,
@@ -502,6 +573,12 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     marginLeft: spacing.md,
+  },
+  cardTapHint: {
+    color: colors.text.muted,
+    fontSize: typography.size.xs,
+    marginTop: spacing.sm,
+    letterSpacing: typography.letterSpacing.wide,
   },
   channelActions: {
     alignItems: 'flex-end',
@@ -679,7 +756,7 @@ const styles = StyleSheet.create({
   },
   pttButtonActive: {
     backgroundColor: colors.status.danger,
-    borderColor: '#FF6B6B',
+    borderColor: colors.status.danger,
     shadowColor: colors.status.danger,
     shadowOpacity: 0.9,
     shadowRadius: 40,
@@ -787,7 +864,7 @@ const styles = StyleSheet.create({
   },
   channelPttButtonActive: {
     backgroundColor: colors.status.danger,
-    borderColor: '#FF6B6B',
+    borderColor: colors.status.danger,
     shadowColor: colors.status.danger,
     shadowOpacity: 0.9,
     shadowRadius: 30,
@@ -805,4 +882,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     letterSpacing: typography.letterSpacing.wide,
   },
-});
+  });
+}

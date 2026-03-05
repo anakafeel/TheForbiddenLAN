@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,10 @@ import {
   Pressable,
   Animated,
 } from 'react-native';
-import theme from '../theme';
-
-const { colors, spacing, radius, typography } = theme;
+import { useAppTheme } from '../theme';
 
 // Animated waveform bars for speaking indicator
-function AnimatedWaveform({ active }) {
+function AnimatedWaveform({ active, styles }) {
   const bars = Array(12).fill(0);
   const animations = useRef(bars.map(() => new Animated.Value(0.3))).current;
 
@@ -62,7 +60,7 @@ function AnimatedWaveform({ active }) {
 }
 
 // Header Component
-function Header({ channelName, onBack, isConnected, onSettings, participantCount }) {
+function Header({ channelName, onBack, isConnected, onSettings, participantCount, styles }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -93,7 +91,7 @@ function Header({ channelName, onBack, isConnected, onSettings, participantCount
 }
 
 // Info Bar showing active users
-function InfoBar({ activeUsers }) {
+function InfoBar({ activeUsers, styles }) {
   return (
     <View style={styles.infoBar}>
       <View style={styles.activeIndicator}>
@@ -109,7 +107,7 @@ function InfoBar({ activeUsers }) {
 }
 
 // Message Item Component
-function MessageItem({ message }) {
+function MessageItem({ message, styles }) {
   const isSystem = message.type === 'system';
   const isOwn = message.isOwn;
 
@@ -137,7 +135,7 @@ function MessageItem({ message }) {
 }
 
 // Voice Transmission Item
-function VoiceTransmission({ transmission }) {
+function VoiceTransmission({ transmission, styles }) {
   return (
     <View style={styles.voiceTransmission}>
       <View style={styles.voiceIcon}>
@@ -153,7 +151,7 @@ function VoiceTransmission({ transmission }) {
 }
 
 // Speaking Indicator Component
-function SpeakingIndicator({ speaker, isActive }) {
+function SpeakingIndicator({ speaker, isActive, styles }) {
   if (!isActive) return null;
 
   return (
@@ -162,14 +160,14 @@ function SpeakingIndicator({ speaker, isActive }) {
       <View style={styles.speakingContent}>
         <Text style={styles.nowSpeakingLabel}>NOW SPEAKING</Text>
         <Text style={styles.speakerName}>{speaker}</Text>
-        <AnimatedWaveform active={isActive} />
+        <AnimatedWaveform active={isActive} styles={styles} />
       </View>
     </View>
   );
 }
 
 // Bottom Control Panel - Large Circular PTT
-function ControlPanel({ onPTTStart, onPTTEnd, isTransmitting }) {
+function ControlPanel({ onPTTStart, onPTTEnd, isTransmitting, styles }) {
   return (
     <View style={styles.controlPanel}>
       <View style={styles.pttContainer}>
@@ -205,6 +203,11 @@ function ControlPanel({ onPTTStart, onPTTEnd, isTransmitting }) {
 
 // Main VoiceChannelChatPage Component
 export default function VoiceChannelChatPage({ navigation, route }) {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const channelName = route?.params?.channelName || 'TACTICAL-MAIN';
   const channelId = route?.params?.channelId || 'default';
 
@@ -281,10 +284,11 @@ export default function VoiceChannelChatPage({ navigation, route }) {
         isConnected={isConnected}
         participantCount={activeUsers.length}
         onSettings={() => {}}
+        styles={styles}
       />
 
       {/* Info Bar */}
-      <InfoBar activeUsers={activeUsers} />
+      <InfoBar activeUsers={activeUsers} styles={styles} />
 
       {/* Messages List */}
       <ScrollView
@@ -295,27 +299,29 @@ export default function VoiceChannelChatPage({ navigation, route }) {
       >
         {messages.map((msg) =>
           msg.type === 'voice' ? (
-            <VoiceTransmission key={msg.id} transmission={msg} />
+            <VoiceTransmission key={msg.id} transmission={msg} styles={styles} />
           ) : (
-            <MessageItem key={msg.id} message={msg} />
+            <MessageItem key={msg.id} message={msg} styles={styles} />
           )
         )}
       </ScrollView>
 
       {/* Speaking Indicator */}
-      <SpeakingIndicator speaker={currentSpeaker} isActive={!!currentSpeaker} />
+      <SpeakingIndicator speaker={currentSpeaker} isActive={!!currentSpeaker} styles={styles} />
 
       {/* Bottom Control Panel */}
       <ControlPanel
         onPTTStart={handlePTTStart}
         onPTTEnd={handlePTTEnd}
         isTransmitting={isTransmitting}
+        styles={styles}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors, spacing, radius, typography) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
@@ -694,7 +700,7 @@ const styles = StyleSheet.create({
   },
   pttButtonActive: {
     backgroundColor: colors.status.danger,
-    borderColor: '#FF6B6B',
+    borderColor: colors.status.danger,
     shadowColor: colors.status.danger,
     shadowOpacity: 0.9,
     shadowRadius: 40,
@@ -722,4 +728,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     letterSpacing: typography.letterSpacing.wide,
   },
-});
+  });
+}

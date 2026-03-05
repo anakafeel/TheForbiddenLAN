@@ -20,10 +20,13 @@ export interface Colors {
   };
   status: {
     active: string;
+    activeSubtle: string;
     activeGlow: string;
     warning: string;
+    warningSubtle: string;
     warningGlow: string;
     danger: string;
+    dangerSubtle: string;
     dangerGlow: string;
     info: string;
     infoGlow: string;
@@ -50,6 +53,8 @@ export interface Colors {
     danger: string[];
   };
 }
+
+export type ThemeMode = 'dark' | 'light';
 
 export interface Spacing {
   xs: number;
@@ -113,8 +118,37 @@ export interface Shadows {
   glowActive: Shadow;
 }
 
+export interface ThemeValues {
+  mode: ThemeMode;
+  colors: Colors;
+  spacing: Spacing;
+  radius: Radius;
+  typography: Typography;
+  shadows: Shadows;
+  componentStyles: Record<string, any>;
+  animation: {
+    fast: number;
+    normal: number;
+    slow: number;
+  };
+}
+
+export interface AppTheme extends ThemeValues {
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
+  toggleThemeMode: () => void;
+  isDark: boolean;
+  isLight: boolean;
+}
+
 export const colors: Colors;
 export const spacing: Spacing;
 export const radius: Radius;
 export const typography: Typography;
 export const shadows: Shadows;
+export const darkColors: Colors;
+export const lightColors: Colors;
+export const componentStyles: Record<string, any>;
+export const animation: { fast: number; normal: number; slow: number };
+export function getTheme(mode?: ThemeMode): ThemeValues;
+export function useAppTheme(): AppTheme;

@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLogin, useRegister } from '../hooks/useAuth';
-import { colors, spacing, radius, typography } from '../theme';
+import { useAppTheme } from '../theme';
 
 type AuthMode = 'login' | 'register';
 
 export function AuthScreen() {
+  const { colors, spacing, radius, typography } = useAppTheme();
   const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -81,7 +82,7 @@ export function AuthScreen() {
       padding: spacing.xxl,
       width: '100%',
       maxWidth: 380,
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+      boxShadow: `0 8px 32px ${colors.accent.glowStrong}`,
       border: `1px solid ${colors.border.subtle}`,
     },
     logo: {
@@ -134,7 +135,7 @@ export function AuthScreen() {
       boxShadow: `0 0 0 2px ${colors.accent.glow}`,
     },
     error: {
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      backgroundColor: colors.status.dangerSubtle,
       border: `1px solid ${colors.status.danger}`,
       borderRadius: radius.md,
       padding: spacing.md,

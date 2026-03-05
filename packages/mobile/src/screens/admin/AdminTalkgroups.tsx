@@ -1,10 +1,15 @@
 // Admin Talkgroups — CRUD for talkgroups + expand to see members.
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { api } from '../../lib/api';
-import { colors, spacing, radius, typography } from '../../theme';
+import { useAppTheme } from '../../theme';
 
 export function AdminTalkgroups() {
+  const { colors, spacing, radius, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, radius, typography),
+    [colors, spacing, radius, typography],
+  );
   const [talkgroups, setTalkgroups] = useState([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -210,7 +215,7 @@ export function AdminTalkgroups() {
                       </View>
                       <View style={[
                         styles.memberBadge,
-                        { backgroundColor: m.role === 'admin' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)' }
+                        { backgroundColor: m.role === 'admin' ? colors.status.warningSubtle : colors.status.activeSubtle }
                       ]}>
                         <Text style={[
                           styles.memberBadgeText,
@@ -259,184 +264,186 @@ export function AdminTalkgroups() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary },
-  scrollContent: { padding: spacing.xl },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
-  error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
+function createStyles(colors: any, spacing: any, radius: any, typography: any) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background.primary },
+    scrollContent: { padding: spacing.xl },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
+    error: { color: colors.status.danger, marginBottom: spacing.md, textAlign: 'center', fontSize: typography.size.sm },
 
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  countText: { color: colors.text.muted, fontSize: typography.size.sm },
-  refreshBtn: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    backgroundColor: 'rgba(37, 55, 70, 0.6)',
-    borderRadius: radius.sm,
-  },
-  refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.lg,
+    },
+    countText: { color: colors.text.muted, fontSize: typography.size.sm },
+    refreshBtn: {
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.accent.glow,
+      borderRadius: radius.sm,
+    },
+    refreshText: { color: colors.text.secondary, fontSize: typography.size.sm, fontWeight: typography.weight.medium },
 
-  sectionCard: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary },
+    sectionCard: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginBottom: spacing.lg,
+      overflow: 'hidden',
+    },
+    sectionHeader: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    sectionTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text.primary },
 
-  createBody: {
-    flexDirection: 'row',
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: colors.background.primary,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    padding: spacing.md,
-    color: colors.text.primary,
-    fontSize: typography.size.md,
-  },
-  createBtn: {
-    backgroundColor: colors.status.active,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
-  },
-  createBtnText: { color: '#fff', fontWeight: typography.weight.bold, fontSize: typography.size.md },
+    createBody: {
+      flexDirection: 'row',
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: colors.background.primary,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      padding: spacing.md,
+      color: colors.text.primary,
+      fontSize: typography.size.md,
+    },
+    createBtn: {
+      backgroundColor: colors.status.active,
+      borderRadius: radius.sm,
+      paddingHorizontal: spacing.lg,
+      justifyContent: 'center',
+    },
+    createBtnText: { color: colors.text.primary, fontWeight: typography.weight.bold, fontSize: typography.size.md },
 
-  card: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
-  sub: { color: colors.text.muted, fontSize: typography.size.sm, marginTop: 2 },
-  expandIcon: { color: colors.text.muted, fontSize: typography.size.sm },
+    card: {
+      backgroundColor: colors.background.secondary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      marginBottom: spacing.sm,
+      overflow: 'hidden',
+    },
+    cardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    name: { color: colors.text.primary, fontSize: typography.size.md, fontWeight: typography.weight.semibold },
+    sub: { color: colors.text.muted, fontSize: typography.size.sm, marginTop: 2 },
+    expandIcon: { color: colors.text.muted, fontSize: typography.size.sm },
 
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  rotateBtn: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: radius.sm,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  rotateText: { color: colors.status.warning, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
-  delBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: radius.sm,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  delText: { color: colors.status.danger, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+    cardActions: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.lg,
+      gap: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+    },
+    rotateBtn: {
+      backgroundColor: colors.status.warningSubtle,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+    },
+    rotateText: { color: colors.status.warning, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
+    delBtn: {
+      backgroundColor: colors.status.dangerSubtle,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+    },
+    delText: { color: colors.status.danger, fontSize: typography.size.sm, fontWeight: typography.weight.semibold },
 
-  cardBody: { padding: spacing.lg },
-  membersTitle: {
-    color: colors.text.secondary,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.semibold,
-    marginBottom: spacing.sm,
-    letterSpacing: typography.letterSpacing.wide,
-    textTransform: 'uppercase',
-  },
-  emptyMembers: { color: colors.text.muted, fontSize: typography.size.sm, paddingVertical: spacing.xs },
+    cardBody: { padding: spacing.lg },
+    membersTitle: {
+      color: colors.text.secondary,
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.semibold,
+      marginBottom: spacing.sm,
+      letterSpacing: typography.letterSpacing.wide,
+      textTransform: 'uppercase',
+    },
+    emptyMembers: { color: colors.text.muted, fontSize: typography.size.sm, paddingVertical: spacing.xs },
 
-  memberItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.xs + 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-    gap: spacing.sm,
-  },
-  memberAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.accent.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  memberAvatarText: {
-    color: colors.text.primary,
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-  },
-  memberName: { color: colors.text.primary, fontSize: typography.size.md },
-  memberBadge: {
-    borderRadius: radius.full,
-    paddingVertical: 2,
-    paddingHorizontal: spacing.xs,
-  },
-  memberBadgeText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.bold,
-    letterSpacing: typography.letterSpacing.wide,
-  },
-  removeMemberBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: radius.sm,
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
-  },
-  removeMemberText: { color: colors.status.danger, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+    memberItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.xs + 2,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+      gap: spacing.sm,
+    },
+    memberAvatar: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.accent.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    memberAvatarText: {
+      color: colors.text.primary,
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.bold,
+    },
+    memberName: { color: colors.text.primary, fontSize: typography.size.md },
+    memberBadge: {
+      borderRadius: radius.full,
+      paddingVertical: 2,
+      paddingHorizontal: spacing.xs,
+    },
+    memberBadgeText: {
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.bold,
+      letterSpacing: typography.letterSpacing.wide,
+    },
+    removeMemberBtn: {
+      backgroundColor: colors.status.dangerSubtle,
+      borderRadius: radius.sm,
+      paddingVertical: 3,
+      paddingHorizontal: spacing.sm,
+    },
+    removeMemberText: { color: colors.status.danger, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
 
-  addMemberSection: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.subtle,
-  },
-  addMemberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.xs + 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-    gap: spacing.sm,
-  },
-  addMemberName: { color: colors.text.secondary, fontSize: typography.size.md },
-  addMemberBtn: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderRadius: radius.sm,
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
-  },
-  addMemberBtnText: { color: colors.status.active, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
+    addMemberSection: {
+      marginTop: spacing.md,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.subtle,
+    },
+    addMemberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: spacing.xs + 2,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border.subtle,
+      gap: spacing.sm,
+    },
+    addMemberName: { color: colors.text.secondary, fontSize: typography.size.md },
+    addMemberBtn: {
+      backgroundColor: colors.status.activeSubtle,
+      borderRadius: radius.sm,
+      paddingVertical: 3,
+      paddingHorizontal: spacing.sm,
+    },
+    addMemberBtnText: { color: colors.status.active, fontSize: typography.size.xs, fontWeight: typography.weight.semibold },
 
-  empty: { color: colors.text.muted, textAlign: 'center', marginTop: spacing.xl },
-});
+    empty: { color: colors.text.muted, textAlign: 'center', marginTop: spacing.xl },
+  });
+}

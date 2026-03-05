@@ -1,8 +1,8 @@
 // Admin Map — GPS positions of all devices via Leaflet (web only).
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { api } from '../../lib/api';
-import { colors, spacing, typography } from '../../theme';
+import { useAppTheme } from '../../theme';
 
 // Conditionally import Leaflet only on web to prevent native crashes
 let MapContainer, TileLayer, Marker, Popup, L;
@@ -17,6 +17,11 @@ if (Platform.OS === 'web') {
 }
 
 export function AdminMap() {
+  const { colors, spacing, typography } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, spacing, typography),
+    [colors, spacing, typography],
+  );
   const [positions, setPositions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,8 +90,8 @@ export function AdminMap() {
       html: `<div style="
         width: 14px; height: 14px; border-radius: 50%;
         background: ${active ? colors.status.active : colors.status.danger};
-        border: 2px solid white;
-        box-shadow: 0 0 4px rgba(0,0,0,0.4);
+        border: 2px solid ${colors.text.primary};
+        box-shadow: 0 0 4px ${colors.background.overlay};
       "></div>`,
       iconSize: [14, 14],
       iconAnchor: [7, 7],
@@ -122,10 +127,12 @@ export function AdminMap() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
-  error: { color: colors.status.danger, padding: spacing.sm, textAlign: 'center' },
-  noData: { color: colors.text.muted, padding: spacing.lg, textAlign: 'center', fontSize: typography.size.sm },
-  fallbackText: { color: colors.text.muted, fontSize: typography.size.md },
-});
+function createStyles(colors: any, spacing: any, typography: any) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background.primary },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background.primary },
+    error: { color: colors.status.danger, padding: spacing.sm, textAlign: 'center' },
+    noData: { color: colors.text.muted, padding: spacing.lg, textAlign: 'center', fontSize: typography.size.sm },
+    fallbackText: { color: colors.text.muted, fontSize: typography.size.md },
+  });
+}
