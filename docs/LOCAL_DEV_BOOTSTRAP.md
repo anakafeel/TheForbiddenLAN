@@ -38,7 +38,7 @@ Steps 6–9 are best-effort warnings.
 
 ## Why each step matters
 
-- **Step 4 (build comms)**: Mobile and portal depend on `@forbiddenlan/comms` via `workspace:*`. Without prebuilding, Metro can't resolve the compiled JS and you get "module not found" errors on first run.
+- **Step 4 (build comms)**: Mobile depends on `@forbiddenlan/comms` via `workspace:*`. Without prebuilding, Metro can't resolve the compiled JS and you get "module not found" errors on first run.
 - **Step 5 (prisma generate)**: The server imports `@prisma/client` which needs a generated client matching the schema. Without this, the server crashes on startup with `Cannot find module '.prisma/client'`.
 - **Step 6 (seed .env)**: The mobile app reads `EXPO_PUBLIC_WS_URL` etc. from `.env`. If the file is missing (fresh clone), config.js falls back to `localhost` which won't work on a physical device.
 - **Step 7 (Playwright)**: E2E tests (`pnpm test:e2e`) need Chromium. Without it you get `browserType.launch: Executable doesn't exist`.
@@ -57,13 +57,15 @@ vim packages/mobile/.env
 #    EXPO_PUBLIC_API_URL=http://134.122.32.45:3000
 
 # 3) Start dev
-pnpm dev:mobile         # browser-based mobile UI
 ./run-android.sh        # native Android build on device/emulator
+pnpm dev:admin          # admin panel in browser at http://localhost:8081
 pnpm dev:docs           # documentation site at http://localhost:3000
-pnpm dev:web            # admin portal at http://localhost:5174
+
+# Login as admin/admin → admin tabs (Dashboard, Devices, Talkgroups, Users)
+# Login as pilot1/test  → PTT screen (existing user flow)
 
 # 4) Run tests
-pnpm test:e2e           # Playwright E2E (24 tests, portal)
+pnpm test:e2e           # Playwright E2E
 ```
 
 ## Environment Variables
@@ -86,6 +88,24 @@ pnpm test:e2e           # Playwright E2E (24 tests, portal)
 | `POSTGRES_PASSWORD` | `(secret)` | Postgres password           |
 | `POSTGRES_DB`       | `skytalk`  | Database name               |
 | `JWT_SECRET`        | `(secret)` | HMAC secret for JWT signing |
+
+## Admin Panel
+
+The admin panel is built into `packages/mobile/` using React Native + NativeWind. It runs in the browser via Expo Web.
+
+```bash
+pnpm dev:admin          # starts Metro + opens http://localhost:8081
+```
+
+Login with an admin account (`admin` / `admin` on the dev server) to see:
+- **Dashboard** — user/device/talkgroup stats
+- **Devices** — enable/disable devices
+- **Talkgroups** — create/delete talkgroups, view members
+- **Users** — register new users
+
+Regular users (`pilot1` / `test`) skip the admin tabs and go straight to the PTT screen.
+
+`packages/portal/` (old Vite web admin) is no longer used — the mobile app replaced it.
 
 ## Documentation Site
 
