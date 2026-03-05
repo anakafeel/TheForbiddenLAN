@@ -1,5 +1,5 @@
 FROM node:20-alpine
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl || true
 WORKDIR /app
 
 COPY package.json ./
@@ -13,4 +13,5 @@ COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 EXPOSE 3000
+EXPOSE 3000/udp
 ENTRYPOINT ["./entrypoint.sh"]

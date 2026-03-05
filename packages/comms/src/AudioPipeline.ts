@@ -11,13 +11,14 @@ export class AudioPipeline {
   private isRecording = false;
 
   // Mode toggle (set by UI via comms.setTransportMode)
-  public static useUdp = false;
+  public static useUdp = true;
 
   constructor(
     private relay: RelaySocket,
     private udp: UdpSocket,
     private sessionId: number,
     private talkgroup: string,
+    private deviceId: string,
     private encryption?: Encryption
   ) {}
 
@@ -38,13 +39,16 @@ export class AudioPipeline {
       type: 'PTT_AUDIO',
       talkgroup: this.talkgroup,
       sessionId: this.sessionId,
+      sender: this.deviceId,
       chunk: this.chunk++,
       data: payload,
     };
 
     if (AudioPipeline.useUdp) {
+      if (this.chunk <= 3) console.log(`[AudioPipeline] TX chunk #${this.chunk} via UDP`);
       this.udp.send(msg);
     } else {
+      if (this.chunk <= 3) console.log(`[AudioPipeline] TX chunk #${this.chunk} via WebSocket`);
       this.relay.send(msg);
     }
   }

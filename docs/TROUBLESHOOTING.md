@@ -388,53 +388,103 @@ rm -rf tsconfig.base.json.build.info
 
 ---
 
-## "Too many open files" or inotify Limits
+## "Too many open files" / ENOSPC / inotify Limits
 
 ### Problem
-Dev servers crash with:
+Metro or dev servers crash with one of:
 ```
-Error: EMFILE: too many open files
-or
+Error: EMFILE: too many open files, watch '...'
+Error: ENOSPC: System limit for number of file watchers reached, watch '...'
 inotify watch limit reached
 ```
 
-### Root Cause
-System limits on file descriptors or inotify watches exceeded.
+This happens even after raising `max_user_watches` to 524288.
 
-### Solution
+### Root Cause — THREE separate limits
 
-**Check current limits**
+Linux has three independent limits that all cause the same symptom:
+
+| Limit | Sysctl key | Default | What it controls |
+|-------|-----------|---------|------------------|
+| **Watches** | `fs.inotify.max_user_watches` | 8,192 | Max inotify watches per user (directories monitored) |
+| **Instances** | `fs.inotify.max_user_instances` | 128–512 | Max inotify file descriptors per user |
+| **Open files** | `ulimit -n` | 1,024 | Max open file descriptors per process |
+
+**The real culprit in this project**: VS Code + extensions (Java Language Server, Gradle extension, Antigravity) collectively consume **2,000,000+ inotify watches** on a btrfs filesystem. The commonly-recommended 524,288 limit is not enough.
+
+### Diagnosis
+
 ```bash
-ulimit -n  # File descriptors
-cat /proc/sys/fs/inotify/max_user_watches  # inotify watches
+# Check all three limits
+sysctl fs.inotify.max_user_watches     # Should be 4194304+
+sysctl fs.inotify.max_user_instances    # Should be 8192+
+ulimit -n                                # Should be 65535+
+
+# Count ACTUAL inotify watches in use (system-wide)
+find /proc/*/fdinfo -type f 2>/dev/null -exec grep -l inotify {} \; 2>/dev/null | \
+  while read f; do grep -c inotify "$f" 2>/dev/null; done | \
+  awk '{s+=$1} END {print "Total inotify watches:", s}'
+
+# Count inotify instances in use
+find /proc/*/fd -lname 'anon_inode:inotify' 2>/dev/null | wc -l
+
+# See which processes are using inotify
+for pid in $(ls /proc/ | grep -E '^[0-9]+$'); do
+  count=$(ls -la /proc/$pid/fd 2>/dev/null | grep inotify | wc -l)
+  if [ "$count" -gt "0" ]; then
+    name=$(cat /proc/$pid/comm 2>/dev/null)
+    echo "$name (PID $pid): $count inotify fds"
+  fi
+done 2>/dev/null | sort -t: -k2 -rn | head -20
 ```
 
-**Increase limits permanently (Linux)**
+### Solution — Raise ALL THREE limits
 
-Create `/etc/security/limits.d/99-dev.conf`:
-```
-* soft nofile 65535
-* hard nofile 65535
-* soft inotify 2097152
-* hard inotify 2097152
-```
-
-Then reboot or:
+**Step 1: Raise inotify limits (requires sudo)**
 ```bash
-ulimit -n 65535
+sudo sysctl -w fs.inotify.max_user_watches=4194304
+sudo sysctl -w fs.inotify.max_user_instances=8192
 ```
 
-**Increase limits persistently in shell profile**
-
-Add to `~/.bashrc` or `~/.zshrc`:
+**Step 2: Make permanent (survives reboot)**
 ```bash
-ulimit -n 65535
+cat <<EOF | sudo tee /etc/sysctl.d/99-inotify.conf
+fs.inotify.max_user_watches=4194304
+fs.inotify.max_user_instances=8192
+EOF
+sudo sysctl --system
 ```
+
+**Step 3: Raise file descriptor limit**
+```bash
+# Temporary (current shell)
+ulimit -n 65536
+
+# Permanent — create /etc/security/limits.d/99-dev.conf:
+* soft nofile 65536
+* hard nofile 65536
+```
+
+**Step 4: Kill stale processes and retry**
+```bash
+pkill -9 -f "node\|expo\|metro"
+sleep 1
+cd packages/mobile && npx expo run:android --device
+```
+
+### Why 524288 is NOT enough
+
+This monorepo runs on a **btrfs** filesystem. VS Code's file watcher + Red Hat Java extension + Gradle extension together consume **2M+ watches** on btrfs (which has more metadata nodes than ext4). The commonly recommended 524288 leaves zero headroom for Metro.
+
+**Tested values that work:**
+- `max_user_watches=4194304` (4M) — provides ~2M for VS Code + 2M for Metro
+- `max_user_instances=8192` — VS Code alone can use 2000+ instances
 
 ### Prevention
-- Monitor file descriptors: `lsof | wc -l`
-- Keep only necessary dev servers running
-- Close unused terminal tabs
+- Run `sysctl -w fs.inotify.max_user_watches=4194304` as part of machine setup (see `scripts/setup-local.sh`)
+- Do not run multiple IDEs on the same workspace simultaneously (VS Code + Antigravity = double the watches)
+- Watchman is disabled in `metro.config.js` (`useWatchman = false`) because it triggers inotify-poison on this monorepo — do NOT re-enable it
+- The `metro.config.js` ignore function aggressively filters node_modules to minimize FallbackWatcher's watch count
 
 ---
 
