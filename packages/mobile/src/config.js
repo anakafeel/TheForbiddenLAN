@@ -24,6 +24,8 @@ function _stableDeviceId() {
 
 export const CONFIG = {
   // ── Network ───────────────────────────────────────────────────────────────
+  // PRODUCTION: hardcoded to Shri's server for deployment.
+  // Change to 192.168.2.133 for local dev testing.
   WS_URL: process.env.EXPO_PUBLIC_WS_URL ?? "ws://134.122.32.45:3000/ws",
   API_URL: process.env.EXPO_PUBLIC_API_URL ?? "http://134.122.32.45:3000",
   DLS140_URL: process.env.EXPO_PUBLIC_DLS140_URL ?? "http://192.168.111.1:3000",

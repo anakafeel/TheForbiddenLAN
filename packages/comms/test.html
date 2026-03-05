@@ -40,7 +40,7 @@
     let audio = null;
 
     document.getElementById('btnStart').onclick = () => {
-      audio = new AudioPipeline(relay, 'TG-TEST', 'browser-device-123', sessionId, () => Date.now());
+      audio = new AudioPipeline(relay, null, sessionId, 'TG-TEST', 'browser-device-123', null);
       audio.startRecording(1);
       document.getElementById('btnStart').disabled = true;
       document.getElementById('btnStop').disabled = false;

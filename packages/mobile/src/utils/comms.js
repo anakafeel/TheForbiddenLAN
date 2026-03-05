@@ -84,6 +84,7 @@ export function getFloorState() {
 const _pcmAccumulator = []; // base64 PCM strings — used by legacy fallback + loopback
 const _seenChunks = new Set(); // "sessionId:chunk" — deduplicates WS+UDP dual delivery
 let _decoderReady = false;
+let _decoderInitPromise = null; // Guard against concurrent init
 let _audioModeSet = false;
 let _rxInactivityTimer = null;
 const RX_INACTIVITY_TIMEOUT_MS = 8000; // flush accumulated audio if no chunk arrives for 8s
@@ -136,18 +137,29 @@ function _resetRxTimer() {
 
 /**
  * Ensure the Opus decoder is ready (lazy init).
+ * Uses a promise guard to prevent concurrent initialization from multiple frames.
  */
 async function _ensureDecoderReady() {
-  if (!_decoderReady) {
+  if (_decoderReady) return true;
+  
+  // If init is already in progress, wait for it instead of starting another
+  if (_decoderInitPromise) {
+    return _decoderInitPromise;
+  }
+  
+  _decoderInitPromise = (async () => {
     try {
       await initOpusDecoder();
       _decoderReady = true;
     } catch (e) {
       console.warn("[comms] failed to init Opus decoder:", e.message);
-      return false;
+      throw e;
+    } finally {
+      _decoderInitPromise = null;
     }
-  }
-  return true;
+  })();
+  
+  return _decoderInitPromise;
 }
 
 /**
