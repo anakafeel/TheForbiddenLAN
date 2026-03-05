@@ -81,7 +81,7 @@ pnpm -w exec nx --version >/dev/null
 green "All workspace packages installed ✓"
 
 # ── 4. Build comms SDK ───────────────────────────────────────────────────────
-# The mobile and portal packages depend on @forbiddenlan/comms (workspace:*).
+# The mobile package depends on @forbiddenlan/comms (workspace:*).
 # Without building it first, TypeScript resolution fails and Metro can't find
 # the compiled JS.
 print_section "4/9  Building comms SDK"
@@ -215,10 +215,9 @@ echo ""
 echo "  Next steps:"
 echo ""
 echo "  Server (local):     cd packages/server && pnpm dev"
-echo "  Portal (web admin): pnpm dev:web"
-echo "  Docs site:          pnpm dev:docs"
-echo "  Mobile (browser):   pnpm dev:mobile"
 echo "  Mobile (Android):   ./run-android.sh"
+echo "  Admin panel (web):  pnpm dev:admin   (opens in browser at localhost:8081)"
+echo "  Docs site:          pnpm dev:docs"
 echo ""
 echo "  E2E tests:          pnpm test:e2e"
 echo ""

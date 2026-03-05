@@ -11,7 +11,7 @@
     "setup:doctor": "./scripts/setup-local.sh",
     "dev:server": "nx serve server",
     "dev:mobile": "nx serve mobile",
-    "dev:web": "nx serve portal",
+    "dev:admin": "pnpm --filter @forbiddenlan/mobile exec expo start --web",
     "dev:docs": "nx serve docs",
     "build:comms": "nx build comms",
     "build:all": "nx run-many --target=build --all",
