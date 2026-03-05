@@ -1,10 +1,13 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable } from 'react-native';
 import { ChannelContext } from '../context/ChannelContext';
-import socket, { emitStartTalking, emitStopTalking, joinChannel, connectComms } from '../utils/socket';
+import { emitStartTalking, emitStopTalking, joinChannel, connectComms } from '../utils/socket';
+import { startAudioStream, stopAudioStream } from '../utils/audio';
+import { getFloorState } from '../utils/comms';
 import { CONFIG } from '../config';
 import { useStore } from '../store';
 import theme from '../theme';
+import BottomMenu from '../components/BottomMenu';
 
 const { colors, spacing, radius, shadows, typography } = theme;
 
@@ -19,7 +22,7 @@ const MOCK_CHANNELS = [
 
 // Filter Tabs Component
 function FilterTabs({ activeFilter, onFilterChange }) {
-  const filters = ['ALL', 'ACTIVE', 'STARRED'];
+  const filters = ['ALL', 'ACTIVE'];
   return (
     <View style={styles.filterContainer}>
       {filters.map((filter) => (
@@ -38,7 +41,7 @@ function FilterTabs({ activeFilter, onFilterChange }) {
 }
 
 // Channel Card Component with inline PTT button
-function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTToggle, channelSpeaker }) {
+function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeaker, onPTTStart, onPTTEnd, channelSpeaker }) {
   // Show LIVE only when someone is actively speaking or transmitting
   const isLive = channel.transmitting || channelSpeaker || (isActive && (currentSpeaker || isTransmitting));
   const speakerName = isActive && isTransmitting ? 'YOU' : (isActive ? currentSpeaker : channelSpeaker);
@@ -70,9 +73,13 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
       {/* Inline PTT Button */}
       {isActive && (
         <Pressable
-          onPress={(e) => {
+          onPressIn={(e) => {
             e.stopPropagation();
-            onPTTToggle();
+            onPTTStart();
+          }}
+          onPressOut={(e) => {
+            e.stopPropagation();
+            onPTTEnd();
           }}
           style={({ pressed }) => [
             styles.inlinePttButton,
@@ -227,15 +234,26 @@ export default function ChannelsScreen({ navigation }) {
     }
   };
 
-  const handlePTTToggle = useCallback(() => {
+  const handlePTTStart = useCallback(async () => {
     if (!current) return;
-    if (isTransmitting) {
+    // Walk-on check: returns false if floor is taken
+    const accepted = emitStartTalking(CONFIG.DEVICE_ID, current.id);
+    if (accepted === false) return;
+    setIsTransmitting(true);
+    try {
+      await startAudioStream();
+    } catch (e) {
+      console.warn('[Channels] Audio start error:', e);
       setIsTransmitting(false);
-      emitStopTalking(CONFIG.DEVICE_ID, current.id);
-    } else {
-      setIsTransmitting(true);
-      emitStartTalking(CONFIG.DEVICE_ID, current.id);
     }
+  }, [current]);
+
+  const handlePTTEnd = useCallback(async () => {
+    if (!current || !isTransmitting) return;
+    setIsTransmitting(false);
+    // stopAudioStream MUST come before emitStopTalking — avoids dropping last audio chunk
+    await stopAudioStream();
+    emitStopTalking(CONFIG.DEVICE_ID, current.id);
   }, [current, isTransmitting]);
 
   const filteredChannels = channels.filter(ch => {
@@ -254,7 +272,8 @@ export default function ChannelsScreen({ navigation }) {
       isTransmitting={current?.id === item.id && isTransmitting}
       currentSpeaker={current?.id === item.id ? currentSpeaker : null}
       channelSpeaker={channelSpeakers[item.id]}
-      onPTTToggle={handlePTTToggle}
+      onPTTStart={handlePTTStart}
+      onPTTEnd={handlePTTEnd}
     />
   );
 
@@ -263,9 +282,13 @@ export default function ChannelsScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.menuIcon}>☰</Text>
+          <Pressable onPress={() => navigation.openDrawer()} hitSlop={10}>
+            <Text style={styles.menuIcon}>☰</Text>
+          </Pressable>
           <Text style={styles.title}>SKYTALK</Text>
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Pressable onPress={() => navigation.navigate('Profile')} hitSlop={10}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
         </View>
         
         {/* Search Bar */}
@@ -284,11 +307,6 @@ export default function ChannelsScreen({ navigation }) {
         <FilterTabs activeFilter={activeFilter} onFilterChange={setActiveFilter} />
       </View>
 
-      {/* Section Label */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionLabel}>SYSTEM GROUPS: TACTICAL</Text>
-      </View>
-
       {/* Channel List */}
       <FlatList
         data={filteredChannels}
@@ -297,6 +315,7 @@ export default function ChannelsScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+      <BottomMenu navigation={navigation} active="Channels" />
     </View>
   );
 }
@@ -377,19 +396,9 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: colors.text.primary,
   },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  sectionLabel: {
-    color: colors.text.muted,
-    fontSize: typography.size.xs,
-    letterSpacing: typography.letterSpacing.widest,
-    fontWeight: typography.weight.medium,
-  },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.xxl + 88,
   },
   channelCard: {
     backgroundColor: colors.background.card,

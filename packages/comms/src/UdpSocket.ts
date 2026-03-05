@@ -1,42 +1,57 @@
-import dgram from 'react-native-udp';
-import { Buffer } from 'buffer';
-import type { RelayMessage } from './types';
+import dgram from "react-native-udp";
+import { Buffer } from "buffer";
+import type { RelayMessage } from "./types";
 
 export class UdpSocket {
   private socket: any = null;
-  private host = '';
+  private host = "";
   private port = 3000;
   private handlers: Map<string, ((msg: RelayMessage) => void)[]> = new Map();
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+  private txCount = 0;
+  private rxCount = 0;
 
   connect(url: string, port: number, userId: string): Promise<void> {
     // Parse the host out of standard URLs (ws://192.168.1.1:3000/ws -> 192.168.1.1)
     // Strip scheme, then path, then port — order matters because :/port comes before /path
-    this.host = url.replace(/^wss?:\/\//, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+    this.host = url
+      .replace(/^wss?:\/\//, "")
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "")
+      .replace(/:\d+$/, "");
     this.port = port;
 
     return new Promise((resolve, reject) => {
       try {
-        this.socket = dgram.createSocket({ type: 'udp4' });
-        
-        this.socket.on('message', (msgData: any, rinfo: any) => {
+        this.socket = dgram.createSocket({ type: "udp4" });
+
+        this.socket.on("message", (msgData: any, rinfo: any) => {
           try {
             // msgData from react-native-udp is typically a string or Buffer
             const str = msgData.toString ? msgData.toString() : String(msgData);
             const msg = JSON.parse(str) as RelayMessage;
+            // Tag the message with transport source for diagnostics
+            (msg as any)._transport = 'udp';
+            this.rxCount++;
+            if (this.rxCount <= 3 || this.rxCount % 100 === 0) {
+              console.log(`[UdpSocket] RX #${this.rxCount} ← ${rinfo.address}:${rinfo.port} type=${msg.type}`);
+            }
             this.emit(msg.type, msg);
-            this.emit('*', msg);
-          } catch { /* ignore malformed messages */ }
+            this.emit("*", msg);
+          } catch {
+            /* ignore malformed messages */
+          }
         });
 
-        this.socket.on('error', (err: any) => {
-          console.warn('[UdpSocket] error:', err);
+        this.socket.on("error", (err: any) => {
+          console.warn("[UdpSocket] error:", err);
         });
 
         // Bind to a random ephemeral port
         this.socket.bind(0, (err: any) => {
           if (err) return reject(err);
-          
+
+          console.log(`[UdpSocket] ✅ Connected — target ${this.host}:${this.port}, userId=${userId}`);
           this.register(userId);
           resolve();
         });
@@ -47,9 +62,9 @@ export class UdpSocket {
   }
 
   private register(userId: string) {
-    const registerMsg = { type: 'UDP_REGISTER', userId };
+    const registerMsg = { type: "UDP_REGISTER", userId };
     this.send(registerMsg);
-    
+
     // Send keep-alive every 25s to keep NAT port mapping open on the SATCOM link
     if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
     this.keepAliveTimer = setInterval(() => {
@@ -59,13 +74,17 @@ export class UdpSocket {
 
   send(msg: object): void {
     if (!this.socket) return;
-    
+
     const str = JSON.stringify(msg);
     const buf = Buffer.from(str);
-    
+
+    this.txCount++;
+    if (this.txCount <= 3 || this.txCount % 100 === 0) {
+      console.log(`[UdpSocket] TX #${this.txCount} → ${this.host}:${this.port} (${buf.length}B) type=${JSON.parse(str).type}`);
+    }
     this.socket.send(buf, 0, buf.length, this.port, this.host, (err: any) => {
       if (err) {
-        console.warn('[UdpSocket] TX error:', err);
+        console.warn("[UdpSocket] TX error:", err);
       }
     });
   }
@@ -77,7 +96,7 @@ export class UdpSocket {
   }
 
   protected emit(event: string, msg: RelayMessage): void {
-    this.handlers.get(event)?.forEach(h => h(msg));
+    this.handlers.get(event)?.forEach((h) => h(msg));
   }
 
   disconnect(): void {

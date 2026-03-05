@@ -42,18 +42,23 @@ config.watcher = {
     // and packages/comms/src/. Ignore everything else to avoid inotify exhaustion.
     ignore: (filename) => {
       // Always ignore common build/cache directories
-      if (/(\.gradle|[/\\]android[/\\]app[/\\]build[/\\]|\.expo[/\\]|[/\\]dist[/\\]|[/\\]build[/\\]|[/\\]\.cache[/\\])/.test(filename)) {
+      if (
+        /(\.gradle|[/\\]android[/\\]app[/\\]build[/\\]|\.expo[/\\]|[/\\]dist[/\\]|[/\\]build[/\\]|[/\\]\.cache[/\\])/.test(
+          filename,
+        )
+      ) {
         return true;
       }
-      
+
       // In node_modules, only watch .pnpm/expo-*/node_modules/expo-*/
       // Ignore all other node_modules content
       if (filename.includes("node_modules")) {
-        const inPnpmExpo = filename.includes(".pnpm") && 
-                           /\/expo[^/]*\/node_modules\/expo[^/]*\//.test(filename);
+        const inPnpmExpo =
+          filename.includes(".pnpm") &&
+          /\/expo[^/]*\/node_modules\/expo[^/]*\//.test(filename);
         return !inPnpmExpo;
       }
-      
+
       // Watch everything else (packages/comms/src/, etc.)
       return false;
     },
@@ -115,7 +120,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   //   1. Intercept "expo/AppEntry" and serve our local index.js directly.
   //   2. When AppEntry.js tries to resolve "../../App", redirect it to App.jsx.
   // ─────────────────────────────────────────────────────────────────────────────
-  if (moduleName === "expo/AppEntry") {
+  // Catch both the bare "expo/AppEntry" and the full pnpm store path variant
+  // (e.g. "./node_modules/.pnpm/expo@54.0.33_.../node_modules/expo/AppEntry")
+  // that Expo bakes into the virtual-metro-entry when the pnpm hash changes.
+  if (moduleName === "expo/AppEntry" || moduleName.includes("/expo/AppEntry")) {
     return {
       type: "sourceFile",
       filePath: path.resolve(projectRoot, "index.js"),
@@ -162,7 +170,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 
   // Shim react-native-vector-icons (requires native linking, not in Expo Go)
   if (moduleName.startsWith("react-native-vector-icons/")) {
-    return { type: "sourceFile", filePath: path.resolve(shimDir, "icon-shim.js") };
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(shimDir, "icon-shim.js"),
+    };
   }
 
   // Let Metro handle everything else with symlink support enabled

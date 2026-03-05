@@ -1,4 +1,4 @@
-# Distributed Architecture — Server as Relay + Local Device State
+2# Distributed Architecture — Server as Relay + Local Device State
 
 **Status**: Proposed
 **Author**: Shri

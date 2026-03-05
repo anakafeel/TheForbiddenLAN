@@ -17,20 +17,22 @@ function _stableDeviceId() {
   // Persist on global so Metro Fast Refresh doesn't generate a new ID each cycle.
   // For production, use expo-secure-store.
   if (!global.__DEVICE_ID__) {
-    global.__DEVICE_ID__ = 'dev-' + Math.random().toString(36).slice(2, 10);
+    global.__DEVICE_ID__ = "dev-" + Math.random().toString(36).slice(2, 10);
   }
   return global.__DEVICE_ID__;
 }
 
 export const CONFIG = {
   // ── Network ───────────────────────────────────────────────────────────────
-  WS_URL:     process.env.EXPO_PUBLIC_WS_URL     ?? 'ws://134.122.32.45:3000/ws',
-  API_URL:    process.env.EXPO_PUBLIC_API_URL     ?? 'http://134.122.32.45:3000',
-  DLS140_URL: process.env.EXPO_PUBLIC_DLS140_URL  ?? 'http://192.168.111.1:3000',
+  // LOCAL DEV: hardcoded to local server for UDP testing.
+  // Production: ws://134.122.32.45:3000/ws, http://134.122.32.45:3000
+  WS_URL: process.env.EXPO_PUBLIC_WS_URL ?? "ws://192.168.2.133:3000/ws",
+  API_URL: process.env.EXPO_PUBLIC_API_URL ?? "http://192.168.2.133:3000",
+  DLS140_URL: process.env.EXPO_PUBLIC_DLS140_URL ?? "http://192.168.111.1:3000",
 
   // ── Identity ──────────────────────────────────────────────────────────────
-  DEVICE_ID:  process.env.EXPO_PUBLIC_DEVICE_ID   ?? _stableDeviceId(),
-  TALKGROUP:  process.env.EXPO_PUBLIC_TALKGROUP   ?? undefined,
+  DEVICE_ID: process.env.EXPO_PUBLIC_DEVICE_ID ?? _stableDeviceId(),
+  TALKGROUP: process.env.EXPO_PUBLIC_TALKGROUP ?? undefined,
 };
 
 export default CONFIG;

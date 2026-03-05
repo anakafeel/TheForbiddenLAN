@@ -12,15 +12,21 @@
 // Why native module?  opusscript uses WebAssembly — Hermes JS engine has no WASM support.
 // Why MediaCodec?     Android ships c2.android.opus.encoder since API 29. No extra deps.
 
-import LiveAudioStream from 'react-native-live-audio-stream';
-import { PermissionsAndroid, Platform } from 'react-native';
-import { comms, encryption, loopbackStash } from './comms';
-import { initOpusEncoder, encodeOpusFrame, destroyOpusEncoder } from './opusEncoder';
+import LiveAudioStream from "react-native-live-audio-stream";
+import { PermissionsAndroid, Platform } from "react-native";
+import { comms, encryption, loopbackStash } from "./comms";
+import {
+  initOpusEncoder,
+  encodeOpusFrame,
+  destroyOpusEncoder,
+} from "./opusEncoder";
 
 // Fast Refresh safety: if this module is re-evaluated while recording,
 // stop the old stream so we don't stack up duplicate event listeners.
 if (global.__AUDIO_IS_RECORDING__) {
-  try { LiveAudioStream.stop(); } catch (_) {}
+  try {
+    LiveAudioStream.stop();
+  } catch (_) {}
   global.__AUDIO_IS_RECORDING__ = false;
 }
 
@@ -43,13 +49,17 @@ export async function startAudioStream() {
     if (isRecording) return;
 
     // Android requires runtime RECORD_AUDIO permission
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       const result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        { title: 'Microphone', message: 'SkyTalk needs mic access for PTT', buttonPositive: 'OK' }
+        {
+          title: "Microphone",
+          message: "SkyTalk needs mic access for PTT",
+          buttonPositive: "OK",
+        },
       );
       if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-        throw new Error('Microphone permission denied');
+        throw new Error("Microphone permission denied");
       }
     }
 
@@ -64,7 +74,7 @@ export async function startAudioStream() {
       bufferSize: BUFFER_SIZE,
     });
 
-    LiveAudioStream.on('data', async (base64PCM) => {
+    LiveAudioStream.on("data", async (base64PCM) => {
       if (!isRecording) return;
       try {
         // Approximate raw PCM byte count from base64 length
@@ -77,22 +87,23 @@ export async function startAudioStream() {
         for (const frame of opusFrames) {
           const opusBytes = Math.floor((frame.length * 3) / 4);
           const encrypted = await encryption.encrypt(frame);
-          const encBytes = typeof encrypted === 'string'
-            ? Math.floor((encrypted.length * 3) / 4)
-            : encrypted?.byteLength ?? opusBytes;
+          const encBytes =
+            typeof encrypted === "string"
+              ? Math.floor((encrypted.length * 3) / 4)
+              : (encrypted?.byteLength ?? opusBytes);
           comms.sendAudioChunk(encrypted);
           // Stash for loopback (single-device testing) — no-op when loopback is off
           loopbackStash(encrypted);
           // Budget check: expect ~120–200 bytes per 60ms → ≤ 16 kbps payload
           console.log(
             `[audio] TX #${chunkIndex++}` +
-            ` | PCM ${rawBytes}B → Opus ${opusBytes}B → enc ${encBytes}B` +
-            ` | ${((opusBytes * 8) / (FRAME_DURATION_MS / 1000) / 1000).toFixed(1)}kbps` +
-            ` | ${(rawBytes / opusBytes).toFixed(0)}x compression`
+              ` | PCM ${rawBytes}B → Opus ${opusBytes}B → enc ${encBytes}B` +
+              ` | ${((opusBytes * 8) / (FRAME_DURATION_MS / 1000) / 1000).toFixed(1)}kbps` +
+              ` | ${(rawBytes / opusBytes).toFixed(0)}x compression`,
           );
         }
       } catch (err) {
-        console.warn('[audio] encode/send error:', err.message ?? err);
+        console.warn("[audio] encode/send error:", err.message ?? err);
       }
     });
 
@@ -102,10 +113,10 @@ export async function startAudioStream() {
     chunkIndex = 0;
     console.log(
       `[audio] started — Opus 16kHz mono 16kbps CBR, ${FRAME_DURATION_MS}ms frames ` +
-      `(${BUFFER_SIZE}B PCM/frame) via Android MediaCodec`
+        `(${BUFFER_SIZE}B PCM/frame) via Android MediaCodec`,
     );
   } catch (err) {
-    console.warn('[audio] startAudioStream failed:', err.message);
+    console.warn("[audio] startAudioStream failed:", err.message);
     throw err;
   }
 }
@@ -117,8 +128,8 @@ export async function stopAudioStream() {
     isRecording = false;
     global.__AUDIO_IS_RECORDING__ = false;
     await destroyOpusEncoder();
-    console.log('[audio] stopped');
+    console.log("[audio] stopped");
   } catch (err) {
-    console.warn('[audio] stopAudioStream error:', err.message);
+    console.warn("[audio] stopAudioStream error:", err.message);
   }
 }

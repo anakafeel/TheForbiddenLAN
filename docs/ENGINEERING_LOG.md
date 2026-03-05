@@ -49,15 +49,15 @@ SkyTalk is a push-to-talk (PTT) voice communications app designed for SATCOM-con
 
 The mobile app was originally built on Capacitor + Vite. We migrated to Expo for these reasons:
 
-| Factor | Capacitor | Expo | Winner |
-|--------|-----------|------|--------|
-| **Native module support** | Requires separate Cordova/Cap plugins or manual Android Studio projects | `expo prebuild` generates native project, direct Kotlin/Swift modules | Expo |
-| **Monorepo compatibility** | Vite works but Metro is the RN standard; dual-bundler conflicts | Metro is native to RN; pnpm workspace resolution works with `metro.config.js` | Expo |
-| **Live audio streaming** | No built-in; cordova-plugin-audioinput is abandoned | `react-native-live-audio-stream` works with Metro; native module bridge intact | Expo |
-| **Opus codec** | Would need a Cordova plugin wrapper around native code | Direct `NativeModules` bridge from Kotlin → JS via `ReactContextBaseJavaModule` | Expo |
-| **OTA updates** | None (full rebuild each time) | `expo-updates` for JS bundles; `expo run:android` for native changes | Expo |
-| **Community** | Smaller for RN use cases | Largest RN ecosystem; better docs, more StackOverflow answers | Expo |
-| **Build speed** | Fast (Vite HMR on web, but native builds are manual) | Metro HMR on native; `expo run:android` handles Gradle | Expo |
+| Factor                     | Capacitor                                                               | Expo                                                                            | Winner |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------ |
+| **Native module support**  | Requires separate Cordova/Cap plugins or manual Android Studio projects | `expo prebuild` generates native project, direct Kotlin/Swift modules           | Expo   |
+| **Monorepo compatibility** | Vite works but Metro is the RN standard; dual-bundler conflicts         | Metro is native to RN; pnpm workspace resolution works with `metro.config.js`   | Expo   |
+| **Live audio streaming**   | No built-in; cordova-plugin-audioinput is abandoned                     | `react-native-live-audio-stream` works with Metro; native module bridge intact  | Expo   |
+| **Opus codec**             | Would need a Cordova plugin wrapper around native code                  | Direct `NativeModules` bridge from Kotlin → JS via `ReactContextBaseJavaModule` | Expo   |
+| **OTA updates**            | None (full rebuild each time)                                           | `expo-updates` for JS bundles; `expo run:android` for native changes            | Expo   |
+| **Community**              | Smaller for RN use cases                                                | Largest RN ecosystem; better docs, more StackOverflow answers                   | Expo   |
+| **Build speed**            | Fast (Vite HMR on web, but native builds are manual)                    | Metro HMR on native; `expo run:android` handles Gradle                          | Expo   |
 
 **Key tradeoff**: Expo's bare workflow requires managing native `android/` and `ios/` directories. We accepted this because we need native Kotlin modules for MediaCodec Opus. The managed workflow (Expo Go) cannot load custom native modules.
 
@@ -138,13 +138,13 @@ Write to FileSystem cache → expo-av Sound.createAsync() → Speaker
 
 After fixing static, audio transmitted successfully but receivers heard nothing. This had **five independent root causes**:
 
-| # | Cause | Fix |
-|---|-------|-----|
-| 1 | Server `fanOut()` skips sender — single-device testing impossible | Added loopback mode (env-gated) |
-| 2 | No `Audio.setAudioModeAsync()` after mic recording — playback routes to earpiece | Added `_ensurePlaybackMode()` call before every playback |
-| 3 | No PTT_END timeout — if PTT_END packet is lost, audio buffer grows forever | Added 8-second inactivity timer that auto-flushes |
-| 4 | Half-duplex filter blocked loopback audio | Switched to `onRawMessage` + local `_isLocalTx` flag |
-| 5 | Talkgroup not re-joined on PTT screen mount | Added `useEffect` with `joinChannel` on mount/channel change |
+| #   | Cause                                                                            | Fix                                                          |
+| --- | -------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1   | Server `fanOut()` skips sender — single-device testing impossible                | Added loopback mode (env-gated)                              |
+| 2   | No `Audio.setAudioModeAsync()` after mic recording — playback routes to earpiece | Added `_ensurePlaybackMode()` call before every playback     |
+| 3   | No PTT_END timeout — if PTT_END packet is lost, audio buffer grows forever       | Added 8-second inactivity timer that auto-flushes            |
+| 4   | Half-duplex filter blocked loopback audio                                        | Switched to `onRawMessage` + local `_isLocalTx` flag         |
+| 5   | Talkgroup not re-joined on PTT screen mount                                      | Added `useEffect` with `joinChannel` on mount/channel change |
 
 ### Problem 4: Audio Plays 3× Too Slow
 
@@ -205,13 +205,13 @@ We use Android's built-in MediaCodec Opus encoder/decoder via custom Kotlin nati
 
 ### Encoder (`OpusEncoderModule.kt`)
 
-| Parameter | Value | Why |
-|-----------|-------|-----|
-| Sample Rate | 16 kHz | Wideband voice; good quality for comms |
-| Channels | 1 (mono) | Single mic, half-duplex — stereo wastes bandwidth |
-| Bitrate | 16 kbps CBR | Fits in 22 kbps satellite budget with headroom |
-| Frame Duration | 60 ms | Reduces per-packet JSON/WS overhead (16.6 fps vs 50 fps at 20ms) |
-| VBR | Disabled | Exynos 850 ignores it; CBR gives predictable bitrate |
+| Parameter      | Value       | Why                                                              |
+| -------------- | ----------- | ---------------------------------------------------------------- |
+| Sample Rate    | 16 kHz      | Wideband voice; good quality for comms                           |
+| Channels       | 1 (mono)    | Single mic, half-duplex — stereo wastes bandwidth                |
+| Bitrate        | 16 kbps CBR | Fits in 22 kbps satellite budget with headroom                   |
+| Frame Duration | 60 ms       | Reduces per-packet JSON/WS overhead (16.6 fps vs 50 fps at 20ms) |
+| VBR            | Disabled    | Exynos 850 ignores it; CBR gives predictable bitrate             |
 
 ### Decoder (`OpusDecoderModule.kt`)
 
@@ -235,18 +235,19 @@ Four libraries make up the audio pipeline. Each was chosen after evaluating (and
 **What it does**: Captures raw 16-bit PCM from the microphone in real-time via Android's `AudioRecord`, delivering base64-encoded buffers to JS on each callback.
 
 **Why this library**:
+
 - Delivers raw PCM frames at a configurable buffer size (we use 1920 bytes = 60ms at 16kHz mono)
 - No codec applied at capture time — we need raw PCM to feed our own Opus encoder
 - Lightweight: single native module, no external dependencies
 
 **Alternatives rejected**:
 
-| Library | Why rejected |
-|---------|-------------|
-| `expo-av` Recording API | Records to a file (`.m4a`, `.caf`). Cannot get raw PCM frames in real-time. You only get the file path after `stopAndUnloadAsync()`. Useless for streaming PTT. |
-| `react-native-audio-api` | Web Audio API polyfill. Powerful but massive — pulls in AudioWorklet, AnalyserNode, etc. We only need mic → PCM. Overkill. |
-| `react-native-audio-recorder-player` | Also file-based. Same problem as expo-av Recording. |
-| `cordova-plugin-audioinput` | Capacitor/Cordova plugin. We migrated away from Capacitor. Also abandoned (last commit 2021). |
+| Library                              | Why rejected                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expo-av` Recording API              | Records to a file (`.m4a`, `.caf`). Cannot get raw PCM frames in real-time. You only get the file path after `stopAndUnloadAsync()`. Useless for streaming PTT. |
+| `react-native-audio-api`             | Web Audio API polyfill. Powerful but massive — pulls in AudioWorklet, AnalyserNode, etc. We only need mic → PCM. Overkill.                                      |
+| `react-native-audio-recorder-player` | Also file-based. Same problem as expo-av Recording.                                                                                                             |
+| `cordova-plugin-audioinput`          | Capacitor/Cordova plugin. We migrated away from Capacitor. Also abandoned (last commit 2021).                                                                   |
 
 **Key gotcha**: `LiveAudioStream` holds the Android audio session in recording mode even after `stop()`. If you don't explicitly switch the audio session back to playback mode (`Audio.setAudioModeAsync`), subsequent `expo-av` playback routes to the earpiece or fails silently. This cost us 2 days of debugging.
 
@@ -255,16 +256,17 @@ Four libraries make up the audio pipeline. Each was chosen after evaluating (and
 **What it does**: Plays audio files (WAV, MP3, M4A) through the device speaker. We write decoded PCM + WAV header to the filesystem, then `Sound.createAsync()` plays it.
 
 **Why this library**:
+
 - Already bundled with Expo — zero extra native dependencies
 - Handles audio focus, ducking, and routing (speaker vs earpiece) via `Audio.setAudioModeAsync`
 - Works on both Android and iOS (future)
 
 **Alternatives rejected**:
 
-| Library | Why rejected |
-|---------|-------------|
-| `react-native-audio-api` (AudioBufferSourceNode) | Could play raw PCM from memory without writing a file. But requires a full native rebuild, adds a large AudioWorklet runtime, and is pre-1.0 with breaking API changes. |
-| `expo-speech` | Text-to-speech only. Cannot play arbitrary audio. |
+| Library                                          | Why rejected                                                                                                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `react-native-audio-api` (AudioBufferSourceNode) | Could play raw PCM from memory without writing a file. But requires a full native rebuild, adds a large AudioWorklet runtime, and is pre-1.0 with breaking API changes.       |
+| `expo-speech`                                    | Text-to-speech only. Cannot play arbitrary audio.                                                                                                                             |
 | Raw `android.media.AudioTrack` via native module | Would eliminate the WAV file write (play PCM directly from memory). Optimal for latency. But requires writing a custom native module for both platforms. Future optimization. |
 
 **Key gotcha**: `expo-av` cannot play raw PCM buffers from memory — it requires a file URI. So the RX pipeline must: (1) accumulate PCM frames, (2) prepend a 44-byte WAV header, (3) write to `FileSystem.cacheDirectory`, (4) create a `Sound` from the file URI. This adds ~200ms latency between PTT_END and audio playback start. A native `AudioTrack` module would eliminate this.
@@ -277,14 +279,15 @@ Four libraries make up the audio pipeline. Each was chosen after evaluating (and
 
 **Why native MediaCodec instead of JS libraries**:
 
-| Approach | Why rejected |
-|----------|-------------|
-| `opusscript` (npm) | Uses WebAssembly (Emscripten-compiled libopus). **Hermes JS engine has no WASM support.** Completely non-functional on React Native. Still in `package.json` as a legacy dep — unused. |
-| `@nickvduin/ogg-opus-decoder` | Also WASM-based. Same Hermes problem. |
-| `libopus` compiled to JSI/TurboModule | Would work but requires maintaining a C build chain (CMake, NDK) and cross-compiling for ARM. MediaCodec is already on the device — zero binary size cost. |
-| FFmpeg via `react-native-ffmpeg` | Adds a 15MB+ binary. CLI-based (spawn process per encode). Latency too high for 60ms real-time frames. |
+| Approach                              | Why rejected                                                                                                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `opusscript` (npm)                    | Uses WebAssembly (Emscripten-compiled libopus). **Hermes JS engine has no WASM support.** Completely non-functional on React Native. Still in `package.json` as a legacy dep — unused. |
+| `@nickvduin/ogg-opus-decoder`         | Also WASM-based. Same Hermes problem.                                                                                                                                                  |
+| `libopus` compiled to JSI/TurboModule | Would work but requires maintaining a C build chain (CMake, NDK) and cross-compiling for ARM. MediaCodec is already on the device — zero binary size cost.                             |
+| FFmpeg via `react-native-ffmpeg`      | Adds a 15MB+ binary. CLI-based (spawn process per encode). Latency too high for 60ms real-time frames.                                                                                 |
 
 **Why MediaCodec wins**:
+
 - Zero binary size — already on every Android 10+ device
 - Hardware-accelerated path available on some SoCs (not Exynos 850, but Snapdragon has HW Opus)
 - Clean Java/Kotlin API via `MediaCodec.createByCodecName()`
@@ -308,13 +311,13 @@ RX Path:
   WebSocket  →  OpusDecoderModule.kt (MediaCodec)  →  WAV file  →  expo-av Sound
 ```
 
-| Library | Role | Native rebuild required? | Platform |
-|---------|------|------------------------|----------|
-| `react-native-live-audio-stream` | Mic capture (raw PCM) | Yes (`expo prebuild`) | Android (iOS untested) |
-| `expo-av` | Audio playback (WAV files) | No (bundled with Expo) | Android + iOS |
-| `OpusEncoderModule.kt` | Opus encode (MediaCodec) | Yes (custom native module) | Android only |
-| `OpusDecoderModule.kt` | Opus decode + downsample | Yes (custom native module) | Android only |
-| `opusscript` | **UNUSED** — Hermes has no WASM | N/A | N/A |
+| Library                          | Role                            | Native rebuild required?   | Platform               |
+| -------------------------------- | ------------------------------- | -------------------------- | ---------------------- |
+| `react-native-live-audio-stream` | Mic capture (raw PCM)           | Yes (`expo prebuild`)      | Android (iOS untested) |
+| `expo-av`                        | Audio playback (WAV files)      | No (bundled with Expo)     | Android + iOS          |
+| `OpusEncoderModule.kt`           | Opus encode (MediaCodec)        | Yes (custom native module) | Android only           |
+| `OpusDecoderModule.kt`           | Opus decode + downsample        | Yes (custom native module) | Android only           |
+| `opusscript`                     | **UNUSED** — Hermes has no WASM | N/A                        | N/A                    |
 
 ---
 
@@ -346,13 +349,13 @@ Per 60ms frame:
 
 ### Optimization Knobs (Not Yet Applied)
 
-| Optimization | Savings | Complexity |
-|-------------|---------|------------|
-| Binary WebSocket frames | ~30% (no Base64) | Low |
-| MessagePack instead of JSON | ~20% (smaller envelope) | Medium |
-| Lower bitrate (8 kbps) | ~50% audio | Low (quality tradeoff) |
-| Codec2 instead of Opus | ~85% audio (700 bps) | High (no MediaCodec, need native lib) |
-| Strip `type` field, use opcodes | ~15 bytes/frame | Medium |
+| Optimization                    | Savings                 | Complexity                            |
+| ------------------------------- | ----------------------- | ------------------------------------- |
+| Binary WebSocket frames         | ~30% (no Base64)        | Low                                   |
+| MessagePack instead of JSON     | ~20% (smaller envelope) | Medium                                |
+| Lower bitrate (8 kbps)          | ~50% audio              | Low (quality tradeoff)                |
+| Codec2 instead of Opus          | ~85% audio (700 bps)    | High (no MediaCodec, need native lib) |
+| Strip `type` field, use opcodes | ~15 bytes/frame         | Medium                                |
 
 ---
 
@@ -433,18 +436,18 @@ These are acceptable for hackathon/demo. Production deployment requires proper K
 
 ## Known Limitations
 
-| Area | Limitation | Priority |
-|------|-----------|----------|
-| **Audio quality** | WAV-based playback has ~200ms gap between PTT_END and audio start | Medium |
-| **Streaming playback** | Audio only plays after entire transmission completes (no real-time streaming playback) | High for long messages |
-| **Binary protocol** | JSON + Base64 over text WebSocket adds ~60% overhead vs binary | High for SATCOM deployment |
-| **Encryption key** | Hardcoded AES key, no rotation, no forward secrecy | High for production |
-| **iOS** | No iOS support yet (Kotlin modules are Android-only) | Medium |
-| **Codec2** | Not implemented; would reduce audio to 700 bps but needs native C library | Future |
-| **GPS** | DLS-140 integration exists but untested on real hardware | Low |
-| **E2E tests** | 24 Playwright tests for portal; 9 still failing. No mobile tests. | Medium |
-| **Device ID** | Random per app launch; not persisted | Low |
-| **Reconnection** | WebSocket reconnects up to 5 times with exponential backoff, then gives up | Medium |
+| Area                   | Limitation                                                                             | Priority                   |
+| ---------------------- | -------------------------------------------------------------------------------------- | -------------------------- |
+| **Audio quality**      | WAV-based playback has ~200ms gap between PTT_END and audio start                      | Medium                     |
+| **Streaming playback** | Audio only plays after entire transmission completes (no real-time streaming playback) | High for long messages     |
+| **Binary protocol**    | JSON + Base64 over text WebSocket adds ~60% overhead vs binary                         | High for SATCOM deployment |
+| **Encryption key**     | Hardcoded AES key, no rotation, no forward secrecy                                     | High for production        |
+| **iOS**                | No iOS support yet (Kotlin modules are Android-only)                                   | Medium                     |
+| **Codec2**             | Not implemented; would reduce audio to 700 bps but needs native C library              | Future                     |
+| **GPS**                | DLS-140 integration exists but untested on real hardware                               | Low                        |
+| **E2E tests**          | 24 Playwright tests for portal; 9 still failing. No mobile tests.                      | Medium                     |
+| **Device ID**          | Random per app launch; not persisted                                                   | Low                        |
+| **Reconnection**       | WebSocket reconnects up to 5 times with exponential backoff, then gives up             | Medium                     |
 
 ---
 
@@ -452,42 +455,42 @@ These are acceptable for hackathon/demo. Production deployment requires proper K
 
 ### Mobile App (`packages/mobile/`)
 
-| File | Purpose |
-|------|---------|
-| `src/config.js` | Environment-based configuration (relay URL, device ID) |
-| `src/utils/comms.js` | Singleton comms + RX audio pipeline (decode → WAV → play) |
-| `src/utils/socket.js` | PTT signaling bridge between UI and SDK |
-| `src/utils/audio.js` | TX pipeline (mic → Opus encode → encrypt → relay) |
-| `src/utils/opusDecoder.js` | JS wrapper around native OpusDecoderModule |
-| `src/screens/PTTScreen.jsx` | PTT toggle UI with floor control feedback |
-| `src/screens/LoginScreen.tsx` | Auth → JWT → connectComms() |
-| `src/screens/Channels.jsx` | Channel selection, talkgroup fetch |
-| `src/shims/setup-crypto.js` | Web Crypto polyfill for React Native |
-| `.env` | Relay URL, DLS-140 URL, loopback toggle |
+| File                          | Purpose                                                   |
+| ----------------------------- | --------------------------------------------------------- |
+| `src/config.js`               | Environment-based configuration (relay URL, device ID)    |
+| `src/utils/comms.js`          | Singleton comms + RX audio pipeline (decode → WAV → play) |
+| `src/utils/socket.js`         | PTT signaling bridge between UI and SDK                   |
+| `src/utils/audio.js`          | TX pipeline (mic → Opus encode → encrypt → relay)         |
+| `src/utils/opusDecoder.js`    | JS wrapper around native OpusDecoderModule                |
+| `src/screens/PTTScreen.jsx`   | PTT toggle UI with floor control feedback                 |
+| `src/screens/LoginScreen.tsx` | Auth → JWT → connectComms()                               |
+| `src/screens/Channels.jsx`    | Channel selection, talkgroup fetch                        |
+| `src/shims/setup-crypto.js`   | Web Crypto polyfill for React Native                      |
+| `.env`                        | Relay URL, DLS-140 URL, loopback toggle                   |
 
 ### Native Modules (`packages/mobile/android/app/src/main/java/com/forbiddenlan/skytalk/`)
 
-| File | Purpose |
-|------|---------|
-| `OpusEncoderModule.kt` | MediaCodec Opus encoder (16kHz, 16kbps CBR, 60ms) |
-| `OpusDecoderModule.kt` | MediaCodec Opus decoder + 48→16kHz downsampling |
-| `OpusEncoderPackage.kt` | Registers both modules with React Native bridge |
+| File                    | Purpose                                           |
+| ----------------------- | ------------------------------------------------- |
+| `OpusEncoderModule.kt`  | MediaCodec Opus encoder (16kHz, 16kbps CBR, 60ms) |
+| `OpusDecoderModule.kt`  | MediaCodec Opus decoder + 48→16kHz downsampling   |
+| `OpusEncoderPackage.kt` | Registers both modules with React Native bridge   |
 
 ### Comms SDK (`packages/comms/src/`)
 
-| File | Purpose |
-|------|---------|
+| File                   | Purpose                                              |
+| ---------------------- | ---------------------------------------------------- |
 | `ForbiddenLANComms.ts` | Main class: connect, PTT, floor control, half-duplex |
-| `RelaySocket.ts` | WebSocket client with reconnection |
-| `FloorControl.ts` | Floor state tracking (server is authority) |
-| `AudioPipeline.ts` | TX: sequence Opus chunks over relay |
-| `Encryption.ts` | AES-GCM-256 encrypt/decrypt |
-| `types.ts` | Shared TypeScript interfaces for all message types |
+| `RelaySocket.ts`       | WebSocket client with reconnection                   |
+| `FloorControl.ts`      | Floor state tracking (server is authority)           |
+| `AudioPipeline.ts`     | TX: sequence Opus chunks over relay                  |
+| `Encryption.ts`        | AES-GCM-256 encrypt/decrypt                          |
+| `types.ts`             | Shared TypeScript interfaces for all message types   |
 
 ### Server (`packages/server/src/`)
 
-| File | Purpose |
-|------|---------|
-| `ws/hub.ts` | WebSocket relay: floor control, fan-out routing, session management |
-| `routes/` | REST endpoints (auth, talkgroups, devices, users) |
-| `db/client.ts` | Prisma client |
+| File           | Purpose                                                             |
+| -------------- | ------------------------------------------------------------------- |
+| `ws/hub.ts`    | WebSocket relay: floor control, fan-out routing, session management |
+| `routes/`      | REST endpoints (auth, talkgroups, devices, users)                   |
+| `db/client.ts` | Prisma client                                                       |

@@ -3,7 +3,6 @@
     "name": "SkyTalkMobile",
     "slug": "theforbiddenlan",
     "version": "1.0.0",
-    "entryPoint": "./index.js",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "platforms": [
