@@ -18,6 +18,7 @@ export class AudioPipeline {
     private udp: UdpSocket,
     private sessionId: number,
     private talkgroup: string,
+    private deviceId: string,
     private encryption?: Encryption
   ) {}
 
@@ -38,6 +39,7 @@ export class AudioPipeline {
       type: 'PTT_AUDIO',
       talkgroup: this.talkgroup,
       sessionId: this.sessionId,
+      sender: this.deviceId,
       chunk: this.chunk++,
       data: payload,
     };

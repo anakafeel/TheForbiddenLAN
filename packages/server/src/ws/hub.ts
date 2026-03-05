@@ -52,11 +52,54 @@ export function startUdpServer(options: { port: number }) {
     }
 
     if (parsed.type === 'PTT_AUDIO') {
-      const tg = sessionTalkgroup.get(parsed.sessionId as number);
-      if (!tg) return;
+      // DEBUG: Log what we received
+      if (parsed.chunk <= 2) {
+        console.log(`[hub] UDP PTT_AUDIO received: session=0x${((parsed.sessionId as number) || 0).toString(16)} chunk=${parsed.chunk} sender=${parsed.sender || 'MISSING'} talkgroup=${parsed.talkgroup || 'MISSING'}`);
+      }
+      
+      let tg = sessionTalkgroup.get(parsed.sessionId as number);
+
+      // ── Fallback: recover talkgroup from message if session lookup misses ──
+      // This catches race conditions (UDP arrives before WS PTT_START is processed)
+      // and server-restart scenarios (in-memory sessionTalkgroup map was cleared).
+      if (!tg && parsed.talkgroup) {
+        tg = parsed.talkgroup as string;
+        if (typeof parsed.sessionId === 'number') {
+          sessionTalkgroup.set(parsed.sessionId, tg);
+        }
+        console.warn(`[hub] UDP PTT_AUDIO: session 0x${((parsed.sessionId as number) || 0).toString(16)} not in map — recovered tg from message: ${tg}`);
+      }
+
+      if (!tg) {
+        if (parsed.chunk <= 2) console.warn(`[hub] UDP PTT_AUDIO: DROPPED chunk=${parsed.chunk} — no talkgroup (session=0x${((parsed.sessionId as number) || 0).toString(16)})`);
+        return;
+      }
 
       const holder = talkgroupFloor.get(tg);
-      if (!holder || holder.sessionId !== parsed.sessionId) return;
+      if (!holder) {
+        if (parsed.chunk <= 2) console.warn(`[hub] UDP PTT_AUDIO: DROPPED chunk=${parsed.chunk} — no floor holder for tg=${tg}`);
+        return;
+      }
+
+      if (holder.sessionId !== parsed.sessionId) {
+        // Session mismatch — verify sender by UDP address or by sender field in the message
+        const holderUdp = udpClients.get(holder.senderId);
+        const senderMatchByUdp = holderUdp && holderUdp.address === rinfo.address && holderUdp.port === rinfo.port;
+        // Also check if sender field in message matches holder
+        const senderMatchById = parsed.sender && (parsed.sender === holder.senderId);
+        
+        if (!senderMatchByUdp && !senderMatchById) {
+          if (parsed.chunk <= 2) console.warn(`[hub] UDP PTT_AUDIO: DROPPED chunk=${parsed.chunk} — session mismatch (holder=0x${(holder.sessionId || 0).toString(16)} vs pkt=0x${((parsed.sessionId as number) || 0).toString(16)}) and sender mismatch (holder=${holder.senderId} vs msg.sender=${parsed.sender || 'none'})`);
+          return;
+        }
+        // Same sender, update session
+        sessionTalkgroup.delete(holder.sessionId);
+        if (typeof parsed.sessionId === 'number') {
+          sessionTalkgroup.set(parsed.sessionId, tg);
+          holder.sessionId = parsed.sessionId;
+        }
+        console.warn(`[hub] UDP PTT_AUDIO: session updated for holder ${holder.senderId} → 0x${((parsed.sessionId as number) || 0).toString(16)}`);
+      }
 
       // Update sender's UDP address just in case
       udpClients.set(holder.senderId, rinfo);
@@ -64,6 +107,8 @@ export function startUdpServer(options: { port: number }) {
       const room = rooms.get(tg);
       if (!room) return;
 
+      let wsRelayed = 0;
+      let udpRelayed = 0;
       for (const peer of room) {
         const user = socketUser.get(peer);
         if (!user) continue;
@@ -73,18 +118,31 @@ export function startUdpServer(options: { port: number }) {
         // Look up peer's UDP endpoint by senderDeviceId first, then JWT userId
         const peerUdp = (user.senderDeviceId ? udpClients.get(user.senderDeviceId) : undefined)
           || udpClients.get(user.userId);
+        
         if (peerUdp) {
           udpAudioRelayCount++;
+          udpRelayed++;
           if (udpAudioRelayCount <= 5 || udpAudioRelayCount % 500 === 0) {
             console.log(`[hub] UDP relay #${udpAudioRelayCount}: chunk=${parsed.chunk} → ${user.senderDeviceId || user.userId} (${peerUdp.address}:${peerUdp.port})`);
           }
           udpServer.send(new Uint8Array(msg), peerUdp.port, peerUdp.address);
+        } else {
+          // Log when peer has no UDP registered - this is a common failure point
+          if (parsed.chunk <= 2) {
+            console.warn(`[hub] UDP PTT_AUDIO: NO UDP endpoint for peer ${user.senderDeviceId || user.userId} (registered: ${Array.from(udpClients.keys()).join(', ')})`);
+          }
         }
         // Always deliver via WebSocket too — guarantees receipt if UDP is blocked by NAT.
         // Client deduplicates by sessionId+chunk so double delivery is silent.
         if (peer.readyState === 1) {
           peer.send(msg.toString());
+          wsRelayed++;
         }
+      }
+
+      // Log relay summary for first few chunks and periodically
+      if (parsed.chunk <= 2 || parsed.chunk % 200 === 0) {
+        console.log(`[hub] PTT_AUDIO relay: chunk=${parsed.chunk} → UDP:${udpRelayed} WS:${wsRelayed} | room=${room.size} | session=0x${((parsed.sessionId as number) || 0).toString(16)} | holder=${holder.senderId}`);
       }
     }
   });
@@ -243,14 +301,18 @@ export async function registerHub(app: FastifyInstance) {
       // (used in socketUser) so the UDP relay can find the correct peer endpoint.
       if (msg.sender && typeof msg.sender === 'string') {
         const existingUser = socketUser.get(socket);
-        if (existingUser && !existingUser.senderDeviceId) {
+        if (existingUser) {
+          const isNewSenderId = existingUser.senderDeviceId !== msg.sender;
           existingUser.senderDeviceId = msg.sender;
           deviceIdToSocket.set(msg.sender, socket);
+          
           // Bridge any existing UDP registration for this deviceId to the JWT userId
           const existingUdp = udpClients.get(msg.sender);
           if (existingUdp && existingUser.userId !== msg.sender) {
             udpClients.set(existingUser.userId, existingUdp);
-            console.log(`[hub] Bridged UDP endpoint early: ${msg.sender} → JWT userId ${existingUser.userId}`);
+            console.log(`[hub] Bridged UDP endpoint: ${msg.sender} → JWT userId ${existingUser.userId} (addr: ${existingUdp.address}:${existingUdp.port})`);
+          } else if (isNewSenderId) {
+            console.log(`[hub] Sender device updated: ${msg.sender} for JWT userId ${existingUser.userId}`);
           }
         }
       }
@@ -365,6 +427,7 @@ export async function registerHub(app: FastifyInstance) {
 
           // Fan out PTT_START to all other peers in the talkgroup
           console.log(`[hub] FLOOR_GRANT: ${msg.sender || userId} on ${tg} (session 0x${(msg.sessionId || 0).toString(16).toUpperCase()})`);
+          console.log(`[hub] State: sessions=${sessionTalkgroup.size}, udpClients=${udpClients.size}, room[${tg}]=${rooms.get(tg)?.size ?? 0}, deviceIdToSocket=${deviceIdToSocket.size}`);
           fanOut(socket, tg, rawStr);
           break;
         }

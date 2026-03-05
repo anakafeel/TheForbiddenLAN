@@ -207,6 +207,7 @@ export class ForbiddenLANComms {
       this.udp,
       sessionId,
       this.activeTalkgroup,
+      this.config.deviceId,
     );
     this.audio.startRecording();
 
