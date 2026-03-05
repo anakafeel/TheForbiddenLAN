@@ -1,5 +1,5 @@
 import React from "react";
-import { createDrawerNavigator } from "@react-navigation/drawer";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import DashboardScreen from "../screens/DashboardScreen";
 import Channels from "../screens/Channels";
@@ -7,20 +7,16 @@ import NotificationsScreen from "../screens/NotificationsScreen";
 import PTTScreen from "../screens/PTTScreen.jsx";
 import ProfileScreen from "../screens/ProfileScreen";
 
-const Drawer = createDrawerNavigator();
+const Stack = createNativeStackNavigator();
 
 export default function AppDrawer() {
   return (
-    <Drawer.Navigator initialRouteName="Dashboard" screenOptions={{ headerShown: false }}>
-      <Drawer.Screen name="Dashboard" component={DashboardScreen} options={{ drawerLabel: "Dashboard" }} />
-      <Drawer.Screen name="PTT" component={PTTScreen} options={{ drawerLabel: "PTT" }} />
-      <Drawer.Screen name="Channels" component={Channels} options={{ drawerLabel: "Channels" }} />
-      <Drawer.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ drawerLabel: "Notifications", drawerItemStyle: { display: "none" } }}
-      />
-      <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerLabel: "Profile" }} />
-    </Drawer.Navigator>
+    <Stack.Navigator initialRouteName="Dashboard" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Dashboard" component={DashboardScreen} />
+      <Stack.Screen name="PTT" component={PTTScreen} />
+      <Stack.Screen name="Channels" component={Channels} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+    </Stack.Navigator>
   );
 }

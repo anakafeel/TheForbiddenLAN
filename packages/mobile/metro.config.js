@@ -120,7 +120,10 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   //   1. Intercept "expo/AppEntry" and serve our local index.js directly.
   //   2. When AppEntry.js tries to resolve "../../App", redirect it to App.jsx.
   // ─────────────────────────────────────────────────────────────────────────────
-  if (moduleName === "expo/AppEntry") {
+  // Catch both the bare "expo/AppEntry" and the full pnpm store path variant
+  // (e.g. "./node_modules/.pnpm/expo@54.0.33_.../node_modules/expo/AppEntry")
+  // that Expo bakes into the virtual-metro-entry when the pnpm hash changes.
+  if (moduleName === "expo/AppEntry" || moduleName.includes("/expo/AppEntry")) {
     return {
       type: "sourceFile",
       filePath: path.resolve(projectRoot, "index.js"),
