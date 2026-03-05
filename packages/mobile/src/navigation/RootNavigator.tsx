@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import AuthStack from "./AuthStack";
 import AppDrawer from "./AppDrawer";
+import { useAuth } from "../context/AuthContext";
 
 export default function RootNavigator() {
-  const [loggedIn, setLoggedIn] = useState(true); // change later with real auth
-
-  return loggedIn ? <AppDrawer /> : <AuthStack />;
+  const { isAuthed } = useAuth();
+  return isAuthed ? <AppDrawer /> : <AuthStack />;
 }
