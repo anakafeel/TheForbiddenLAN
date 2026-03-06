@@ -4,8 +4,24 @@ import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-nativ
 import { api } from '../../lib/api';
 import { useAppTheme } from '../../theme';
 
+type DeviceLocation = {
+  deviceId: string;
+  deviceName: string;
+  serial?: string;
+  site?: string;
+  active: boolean;
+  lat: number;
+  lng: number;
+  alt: number;
+  updated_at: string;
+};
+
 // Conditionally import Leaflet only on web to prevent native crashes
-let MapContainer, TileLayer, Marker, Popup, L;
+let MapContainer: any;
+let TileLayer: any;
+let Marker: any;
+let Popup: any;
+let L: any;
 if (Platform.OS === 'web') {
   const rl = require('react-leaflet');
   MapContainer = rl.MapContainer;
@@ -17,43 +33,26 @@ if (Platform.OS === 'web') {
 }
 
 export function AdminMap() {
-  const { colors, spacing, typography } = useAppTheme();
+  const { colors, spacing, typography, isDark } = useAppTheme();
   const styles = useMemo(
     () => createStyles(colors, spacing, typography),
     [colors, spacing, typography],
   );
-  const [positions, setPositions] = useState([]);
+  const [positions, setPositions] = useState<DeviceLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const fetchPositions = useCallback(async () => {
     try {
-      const devRes = await api.get('/devices');
-      const devices = devRes.devices ?? [];
-
-      // Fetch GPS for each device in parallel; allSettled so missing GPS doesn't block others
-      const gpsResults = await Promise.allSettled(
-        devices.map(async (d) => {
-          const gpsRes = await api.get(`/devices/${d.id}/gps`);
-          return {
-            deviceId: d.id,
-            deviceName: d.name ?? d.serial,
-            active: d.active,
-            lat: gpsRes.gps.lat,
-            lng: gpsRes.gps.lng,
-            alt: gpsRes.gps.alt ?? 0,
-            updated_at: gpsRes.gps.updated_at,
-          };
-        })
+      setError('');
+      const res = await api.get<{ locations?: DeviceLocation[] }>('/devices/locations');
+      const valid = (res.locations ?? []).filter(
+        (location) => Number.isFinite(location.lat) && Number.isFinite(location.lng),
       );
-
-      const valid = gpsResults
-        .filter((r) => r.status === 'fulfilled')
-        .map((r) => r.value);
-
       setPositions(valid);
-    } catch (e) {
-      setError(e.message);
+    } catch (e: any) {
+      setPositions([]);
+      setError(e?.message ?? 'Failed to load map locations');
     } finally {
       setLoading(false);
     }
@@ -83,8 +82,16 @@ export function AdminMap() {
     ? [positions[0].lat, positions[0].lng]
     : [49.28, -123.12];
 
+  const tileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const tileAttribution = isDark
+    ? '&copy; OpenStreetMap contributors &copy; CARTO'
+    : '&copy; OpenStreetMap contributors';
+  const mapClassName = isDark ? 'admin-map admin-map--dark' : 'admin-map admin-map--light';
+
   // Custom marker icons: green = active, red = inactive
-  const makeIcon = (active) =>
+  const makeIcon = (active: boolean) =>
     L.divIcon({
       className: '',
       html: `<div style="
@@ -104,19 +111,20 @@ export function AdminMap() {
         <Text style={styles.noData}>No devices have GPS data. Positions will appear when devices report their location.</Text>
       )}
       <div style={{ flex: 1, height: '100%', width: '100%' }}>
-        <MapContainer center={center} zoom={10} style={{ height: '100%', width: '100%' }}>
+        <MapContainer center={center} zoom={10} style={{ height: '100%', width: '100%' }} className={mapClassName}>
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; OpenStreetMap contributors'
+            url={tileUrl}
+            attribution={tileAttribution}
           />
           {positions.map((p) => (
             <Marker key={p.deviceId} position={[p.lat, p.lng]} icon={makeIcon(p.active)}>
               <Popup>
                 <div>
                   <strong>{p.deviceName}</strong><br />
+                  {p.site ? <>Site: {p.site}<br /></> : null}
                   Alt: {Number(p.alt).toFixed(0)}m<br />
                   Status: {p.active ? 'Active' : 'Inactive'}<br />
-                  Updated: {new Date(p.updated_at).toLocaleTimeString()}
+                  Updated: {new Date(p.updated_at).toLocaleString()}
                 </div>
               </Popup>
             </Marker>

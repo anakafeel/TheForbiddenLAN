@@ -46,6 +46,50 @@ export async function deviceRoutes(app: FastifyInstance) {
     return { device: updated };
   });
 
+  // GET /devices/locations — latest known GPS for all devices (admin only)
+  app.get('/locations', async (req, reply) => {
+    const role = (req.user as any).role;
+    if (role !== 'admin') return reply.code(403).send({ error: 'forbidden' });
+
+    const devices = await prisma.device.findMany({
+      select: {
+        id: true,
+        name: true,
+        serial: true,
+        site: true,
+        active: true,
+        gps_updates: {
+          select: {
+            lat: true,
+            lng: true,
+            alt: true,
+            updated_at: true,
+          },
+          orderBy: { updated_at: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const locations = devices.flatMap((device) => {
+      const gps = device.gps_updates[0];
+      if (!gps) return [];
+      return [{
+        deviceId: device.id,
+        deviceName: device.name,
+        serial: device.serial,
+        site: device.site,
+        active: device.active,
+        lat: gps.lat,
+        lng: gps.lng,
+        alt: gps.alt,
+        updated_at: gps.updated_at,
+      }];
+    });
+
+    return { locations };
+  });
+
   // GET /devices/:id/gps — last known GPS for a device
   app.get('/:id/gps', async (req, reply) => {
     const { id } = req.params as any;
