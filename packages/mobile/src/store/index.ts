@@ -21,6 +21,9 @@ export interface AppState {
   signalStatus: SignalStatus;
   floorStatus: FloorStatus;
   gps: GPS | null;
+  // Increments each time the local SQLite op log changes — subscribers
+  // re-query the DB when this bumps (sync_complete and live OP applied).
+  syncVersion: number;
   setJwt: (jwt: string) => void;
   setUser: (u: User | null) => void;
   clearAuth: () => void;
@@ -31,6 +34,7 @@ export interface AppState {
   setSignalStatus: (s: SignalStatus) => void;
   setFloorStatus: (f: FloorStatus) => void;
   setGPS: (g: GPS) => void;
+  bumpSyncVersion: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -43,6 +47,7 @@ export const useStore = create<AppState>((set) => ({
   signalStatus: { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },
   floorStatus: { holder: null, talkgroup: '', timestamp: 0 },
   gps: null,
+  syncVersion: 0,
   setJwt: (jwt) => set({ jwt }),
   setUser: (user) => set({ user }),
   clearAuth: () => set({ jwt: null, user: null }),
@@ -53,4 +58,5 @@ export const useStore = create<AppState>((set) => ({
   setSignalStatus: (signalStatus) => set({ signalStatus }),
   setFloorStatus: (floorStatus) => set({ floorStatus }),
   setGPS: (gps) => set({ gps }),
+  bumpSyncVersion: () => set((state) => ({ syncVersion: state.syncVersion + 1 })),
 }));

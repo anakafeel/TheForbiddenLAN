@@ -1,19 +1,26 @@
-// useComms — wraps ForbiddenLANComms with mic capture, audio playback, and AES-GCM encryption.
-// IS_MOCK=false uses MockRelaySocket (no backend needed). Set IS_MOCK=true to bypass comms entirely.
-import { useEffect, useRef } from 'react';
-import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
+// useComms — wraps ForbiddenLANComms with mic capture, audio playback, AES-GCM encryption,
+// and SQLite sync (SyncClient wired in the connect callback).
+//
+// syncReady is exposed so screens can gate talkgroup-dependent UI behind it.
+// JOIN_TALKGROUP should only be sent after syncReady is true (failure #4 mitigation).
+
+import { useEffect, useRef, useState } from 'react';
+import { ForbiddenLANComms, SyncClient } from '@forbiddenlan/comms';
+import { Encryption } from '@forbiddenlan/comms';
 import { useStore } from '../store';
 import { useAudioCapture } from './useAudioCapture';
 import { useAudioPlayback } from './useAudioPlayback';
 import { CONFIG } from '../config';
+import { getDb } from '../db/client';
+import { ExpoSQLiteAdapter } from '../db/ExpoSQLiteAdapter';
 
-const IS_MOCK = false;
 const DEVICE_ID = 'device-placeholder-uuid';
 
 export function useComms() {
-  const { setSignalStatus, setFloorStatus, setGPS, jwt, activeTalkgroup } = useStore();
+  const { setSignalStatus, setFloorStatus, setGPS, jwt, activeTalkgroup, bumpSyncVersion } = useStore();
   const commsRef = useRef<ForbiddenLANComms | null>(null);
   const encryption = useRef<Encryption | null>(null);
+  const [syncReady, setSyncReady] = useState(false);
 
   const { enqueue: playChunk, clear: clearPlayback } = useAudioPlayback();
 
@@ -25,13 +32,15 @@ export function useComms() {
 
   const { start: startMic, stop: stopMic } = useAudioCapture(
     async (base64Chunk) => {
-      // mic captured a chunk — push to comms layer
       await commsRef.current?.sendAudioChunk(base64Chunk);
     }
   );
 
-  // Initialize comms with MockRelaySocket (no real server needed)
   useEffect(() => {
+    if (!jwt) return;
+
+    setSyncReady(false);
+
     const comms = new ForbiddenLANComms({
       relayUrl: CONFIG.WS_URL,
       dls140Url: CONFIG.DLS140_URL,
@@ -39,20 +48,58 @@ export function useComms() {
       mock: CONFIG.MOCK_MODE,
     });
 
-    comms.connect(jwt ?? 'mock-dev-token').then(() => {
+    // Set up SyncClient before registering onMessage so no messages are missed
+    const db = getDb();
+    const adapter = new ExpoSQLiteAdapter(db);
+    const syncClient = new SyncClient(adapter);
+
+    syncClient.onSyncComplete(() => {
+      console.log('[useComms] sync_complete — SQLite is up to date');
+      setSyncReady(true);
+      bumpSyncVersion();
+    });
+
+    comms.connect(jwt).then(() => {
       commsRef.current = comms;
 
-      // Wire incoming audio to playback (must run after commsRef is ready)
       comms.onMessage(async (msg: any) => {
+        // ── Sync messages ───────────────────────────────────────────────
+        if (msg.type === 'SYNC_TIME' && msg.serverTime !== undefined) {
+          // WS connected — fire SYNC_REQUEST with our current cursor
+          syncClient
+            .startSync((m) => comms.sendRaw(m))
+            .catch((e) => console.warn('[useComms] startSync error:', e));
+          return;
+        }
+
+        if (msg.type === 'SYNC_BATCH') {
+          syncClient
+            .handleSyncBatch(msg, (m) => comms.sendRaw(m))
+            .catch((e) => console.warn('[useComms] handleSyncBatch error:', e));
+          return;
+        }
+
+        if (msg.type === 'OP' && msg.op) {
+          syncClient
+            .handleLiveOp(msg.op)
+            .then(() => bumpSyncVersion())
+            .catch((e) => console.warn('[useComms] handleLiveOp error:', e));
+          return;
+        }
+
+        // ── PTT audio ───────────────────────────────────────────────────
         if (msg.type === 'PTT_AUDIO' && msg.data) {
-          // Decrypt if encryption is ready
           const decoded = encryption.current
             ? await encryption.current.decrypt(msg.data)
             : msg.data;
           playChunk(decoded);
+          return;
         }
+
+        // ── Floor control ───────────────────────────────────────────────
         if (msg.type === 'FLOOR_GRANT') {
           setFloorStatus(commsRef.current!.getFloorStatus(activeTalkgroup));
+          return;
         }
       });
     });
@@ -68,42 +115,41 @@ export function useComms() {
       clearInterval(gpsInterval);
       cleanupPolling();
       comms.disconnect();
+      commsRef.current = null;
     };
   }, [jwt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startPTT = async (tg: string) => {
-    if (IS_MOCK) {
-      console.log('[MOCK] PTT start', tg);
-      return;
-    }
     commsRef.current?.startPTT();
-    await startMic(); // start capturing mic — browser will prompt for permission
+    await startMic();
   };
 
   const stopPTT = () => {
-    if (IS_MOCK) {
-      console.log('[MOCK] PTT stop');
-      return;
-    }
-    stopMic(); // stop capturing mic
-    clearPlayback(); // discard any buffered incoming audio (half-duplex)
+    stopMic();
+    clearPlayback();
     commsRef.current?.stopPTT();
   };
 
   const sendText = (tg: string, text: string) => {
-    if (IS_MOCK) { console.log('[MOCK] text', tg, text); return; }
     commsRef.current?.sendText(tg, text);
   };
 
   const onMessage = (handler: (msg: any) => void) => {
-    if (IS_MOCK) return;
     commsRef.current?.onMessage(handler);
   };
 
   const sendAudioChunk = async (base64OpusData: string) => {
-    if (IS_MOCK) return;
     await commsRef.current?.sendAudioChunk(base64OpusData);
   };
 
-  return { startPTT, stopPTT, sendText, onMessage, sendAudioChunk, deviceId: DEVICE_ID };
+  // Gate joinTalkgroup behind syncReady — caller must check syncReady first
+  const joinTalkgroup = (talkgroupId: string) => {
+    if (!syncReady) {
+      console.warn('[useComms] joinTalkgroup called before sync_complete — ignoring');
+      return;
+    }
+    commsRef.current?.joinTalkgroup(talkgroupId);
+  };
+
+  return { startPTT, stopPTT, sendText, onMessage, sendAudioChunk, joinTalkgroup, syncReady, deviceId: DEVICE_ID };
 }

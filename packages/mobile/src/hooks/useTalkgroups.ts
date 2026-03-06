@@ -1,7 +1,15 @@
-// Talkgroup API hooks — list, join, leave, members
+// Talkgroup hooks — reads from local SQLite, writes go via WebSocket admin ops or REST shim.
+//
+// useTalkgroups         — reads talkgroup list from SQLite (re-queries on syncVersion bump)
+// useJoinTalkgroup      — REST shim POST (WebSocket REQUEST_JOIN_TALKGROUP once shim is removed)
+// useLeaveTalkgroup     — REST shim DELETE
+// useTalkgroupMembers   — REST shim GET (users table not cached in SQLite)
+// useKeyRotation        — reads rotation_counter from SQLite talkgroups table
+
 import { useState, useCallback, useEffect } from 'react';
 import { CONFIG } from '../config';
 import { useStore, type AppState } from '../store';
+import { getDb } from '../db/client';
 
 interface Talkgroup {
   id: string;
@@ -28,16 +36,18 @@ interface TalkgroupState {
 }
 
 /**
- * useTalkgroups — GET /talkgroups
- * Fetches talkgroups the authenticated user belongs to
+ * useTalkgroups — reads talkgroup list from local SQLite.
+ * Re-queries whenever the op log is updated (syncVersion bump).
+ * Admins see all talkgroups; regular users see only talkgroups they're a member of.
  */
 export function useTalkgroups() {
   const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([]);
   const [state, setState] = useState<TalkgroupState>({ loading: false, error: null });
-  const jwt = useStore((s: AppState) => s.jwt);
+  const user = useStore((s: AppState) => s.user);
+  const syncVersion = useStore((s: AppState) => s.syncVersion);
 
   const fetchTalkgroups = useCallback(async (): Promise<Talkgroup[]> => {
-    if (!jwt) {
+    if (!user) {
       setState({ loading: false, error: 'Not authenticated' });
       return [];
     }
@@ -45,43 +55,45 @@ export function useTalkgroups() {
     setState({ loading: true, error: null });
 
     try {
-      const res = await fetch(`${CONFIG.API_URL}/talkgroups`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-        },
-      });
+      const db = getDb();
+      let rows: Talkgroup[];
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setState({ loading: false, error: data.error ?? 'Failed to fetch talkgroups' });
-        return [];
+      if (user.role === 'admin') {
+        rows = await db.getAllAsync<Talkgroup>('SELECT * FROM talkgroups ORDER BY created_at ASC');
+      } else {
+        rows = await db.getAllAsync<Talkgroup>(
+          `SELECT t.id, t.name, t.rotation_counter, t.created_at
+           FROM talkgroups t
+           JOIN memberships m ON t.id = m.talkgroup_id
+           WHERE m.user_id = ?
+           ORDER BY t.created_at ASC`,
+          [user.sub],
+        );
       }
 
-      setTalkgroups(data.talkgroups);
+      setTalkgroups(rows);
       setState({ loading: false, error: null });
-      return data.talkgroups;
+      return rows;
     } catch (err) {
-      const errorMsg = 'Cannot reach server';
+      const errorMsg = 'Failed to read talkgroups from local database';
       setState({ loading: false, error: errorMsg });
       return [];
     }
-  }, [jwt]);
+  }, [user]);
 
-  // Auto-fetch on mount when JWT is available
+  // Re-query whenever the op log changes (initial sync complete + live ops)
   useEffect(() => {
-    if (jwt) {
+    if (user) {
       fetchTalkgroups();
     }
-  }, [jwt, fetchTalkgroups]);
+  }, [user, syncVersion, fetchTalkgroups]);
 
   return { talkgroups, fetchTalkgroups, ...state };
 }
 
 /**
- * useJoinTalkgroup — POST /talkgroups/:id/join
- * Joins a talkgroup
+ * useJoinTalkgroup — POST /talkgroups/:id/join (REST shim)
+ * When the shim is removed this will switch to REQUEST_JOIN_TALKGROUP over WebSocket.
  */
 export function useJoinTalkgroup() {
   const [state, setState] = useState<TalkgroupState>({ loading: false, error: null });
@@ -123,8 +135,7 @@ export function useJoinTalkgroup() {
 }
 
 /**
- * useLeaveTalkgroup — DELETE /talkgroups/:id/leave
- * Leaves a talkgroup
+ * useLeaveTalkgroup — DELETE /talkgroups/:id/leave (REST shim)
  */
 export function useLeaveTalkgroup() {
   const [state, setState] = useState<TalkgroupState>({ loading: false, error: null });
@@ -165,8 +176,8 @@ export function useLeaveTalkgroup() {
 }
 
 /**
- * useTalkgroupMembers — GET /talkgroups/:id/members
- * Fetches members of a talkgroup
+ * useTalkgroupMembers — GET /talkgroups/:id/members (REST shim)
+ * Stays on REST because the users table is not cached in local SQLite.
  */
 export function useTalkgroupMembers() {
   const [members, setMembers] = useState<TalkgroupMember[]>([]);
@@ -210,45 +221,37 @@ export function useTalkgroupMembers() {
 }
 
 /**
- * useKeyRotation — GET /keys/rotation
- * Gets the current rotation counter for a talkgroup
+ * useKeyRotation — reads rotation_counter from local SQLite talkgroups table.
  */
 export function useKeyRotation() {
   const [counter, setCounter] = useState<number | null>(null);
   const [state, setState] = useState<TalkgroupState>({ loading: false, error: null });
-  const jwt = useStore((s: AppState) => s.jwt);
+  const syncVersion = useStore((s: AppState) => s.syncVersion);
 
   const fetchRotationCounter = useCallback(async (talkgroupId: string): Promise<{ counter?: number; error?: string }> => {
-    if (!jwt) {
-      return { error: 'Not authenticated' };
-    }
-
     setState({ loading: true, error: null });
 
     try {
-      const res = await fetch(`${CONFIG.API_URL}/keys/rotation?talkgroupId=${talkgroupId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-        },
-      });
+      const db = getDb();
+      const row = await db.getFirstAsync<{ rotation_counter: number }>(
+        'SELECT rotation_counter FROM talkgroups WHERE id=?',
+        [talkgroupId],
+      );
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setState({ loading: false, error: data.error ?? 'Failed to fetch rotation counter' });
-        return { error: data.error ?? 'Failed to fetch rotation counter' };
+      if (!row) {
+        setState({ loading: false, error: 'Talkgroup not found in local database' });
+        return { error: 'Talkgroup not found' };
       }
 
-      setCounter(data.counter);
+      setCounter(row.rotation_counter);
       setState({ loading: false, error: null });
-      return { counter: data.counter };
+      return { counter: row.rotation_counter };
     } catch (err) {
-      const errorMsg = 'Cannot reach server';
+      const errorMsg = 'Failed to read rotation counter from local database';
       setState({ loading: false, error: errorMsg });
       return { error: errorMsg };
     }
-  }, [jwt]);
+  }, [syncVersion]); // re-create when op log changes so callers get fresh data
 
   return { counter, fetchRotationCounter, ...state };
 }

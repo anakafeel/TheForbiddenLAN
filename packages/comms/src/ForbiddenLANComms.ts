@@ -306,6 +306,11 @@ export class ForbiddenLANComms {
     });
   }
 
+  /** Send an arbitrary message over the relay WebSocket. Used by SyncClient. */
+  sendRaw(msg: object): void {
+    this.relay.send(msg as any);
+  }
+
   setTransportMode(mode: "cellular" | "satcom"): void {
     // UDP is always enabled for audio — the mode flag now only controls
     // whether satellite visibility prediction is active (for NORAD UI).

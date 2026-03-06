@@ -1,7 +1,23 @@
 // Authentication API hooks — login, register, changePassword
+// JWT is persisted to expo-secure-store so it survives app restarts.
+// On startup, App.tsx calls restoreSession() to reload the JWT.
 import { useState, useCallback } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { CONFIG } from '../config';
 import { useStore, type AppState } from '../store';
+
+const JWT_KEY = 'forbiddenlan.jwt';
+
+export async function restoreSession(setJwt: (jwt: string) => void): Promise<void> {
+  try {
+    const stored = await SecureStore.getItemAsync(JWT_KEY);
+    if (stored) {
+      setJwt(stored);
+    }
+  } catch {
+    // SecureStore unavailable (simulator or permissions issue) — ignore
+  }
+}
 
 interface AuthResponse {
   jwt?: string;
@@ -16,7 +32,7 @@ interface AuthState {
 
 /**
  * useLogin — POST /auth/login
- * Returns { jwt } on success
+ * Returns { jwt } on success. Persists JWT to SecureStore.
  */
 export function useLogin() {
   const [state, setState] = useState<AuthState>({ loading: false, error: null });
@@ -40,6 +56,7 @@ export function useLogin() {
       }
 
       setJwt(data.jwt);
+      await SecureStore.setItemAsync(JWT_KEY, data.jwt);
       setState({ loading: false, error: null });
       return { jwt: data.jwt };
     } catch (err) {
@@ -54,7 +71,7 @@ export function useLogin() {
 
 /**
  * useRegister — POST /auth/register
- * Creates a new user account and returns { jwt, userId }
+ * Creates a new user account and returns { jwt, userId }. Persists JWT to SecureStore.
  */
 export function useRegister() {
   const [state, setState] = useState<AuthState>({ loading: false, error: null });
@@ -83,6 +100,7 @@ export function useRegister() {
       }
 
       setJwt(data.jwt);
+      await SecureStore.setItemAsync(JWT_KEY, data.jwt);
       setState({ loading: false, error: null });
       return { jwt: data.jwt, userId: data.userId };
     } catch (err) {
@@ -97,7 +115,6 @@ export function useRegister() {
 
 /**
  * useChangePassword — POST /auth/changepassword
- * Changes password for authenticated user
  */
 export function useChangePassword() {
   const [state, setState] = useState<AuthState>({ loading: false, error: null });
@@ -143,14 +160,16 @@ export function useChangePassword() {
 }
 
 /**
- * useLogout — clears JWT from store
+ * useLogout — clears JWT from store and SecureStore
  */
 export function useLogout() {
   const setJwt = useStore((s: AppState) => s.setJwt);
 
-  const logout = useCallback(() => {
-    // Clear the JWT (set to empty string or null depending on store implementation)
+  const logout = useCallback(async () => {
     setJwt('');
+    try {
+      await SecureStore.deleteItemAsync(JWT_KEY);
+    } catch {}
   }, [setJwt]);
 
   return { logout };

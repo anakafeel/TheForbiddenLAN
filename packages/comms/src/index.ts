@@ -7,3 +7,5 @@ export * from './FloorControl';
 export * from './GPSPoller';
 export * from './AudioPipeline';
 export * from './Encryption';
+export * from './SyncAdapter';
+export * from './SyncClient';
