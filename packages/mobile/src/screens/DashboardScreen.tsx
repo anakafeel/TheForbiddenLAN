@@ -1,24 +1,108 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
+import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Linking } from "react-native";
 import BottomMenu from "../components/BottomMenu";
 import { useAppTheme } from "../theme";
-import { MOCK_NOTIFICATIONS, getUnreadCount } from "../data/notifications";
 import { useStore, type ConnectionMode } from "../store";
 import { comms } from "../utils/comms";
+import { CONFIG } from "../config";
+import {
+  getSignalColor,
+  getSignalStrengthFromBars,
+} from "../utils/signalStrength";
 
-const ACTIVE_USERS = [
-  { id: "u1", name: "ECHO-1", status: "ACTIVE", channel: "Tactical-Main" },
-  { id: "u2", name: "BRAVO-2", status: "ACTIVE", channel: "Recon-Units" },
-  { id: "u3", name: "CHARLIE-3", status: "IDLE", channel: "HQ-Command" },
-  { id: "u4", name: "DELTA-4", status: "ACTIVE", channel: "Tactical-Main" },
-  { id: "u5", name: "FOXTROT-5", status: "IDLE", channel: "Recon-Units" },
-];
+type Talkgroup = {
+  id: string;
+  name: string;
+  discord_channel_id?: string | null;
+  discordChannelId?: string | null;
+  discord_channel_url?: string | null;
+  discordChannelUrl?: string | null;
+};
+
+type TalkgroupMember = {
+  id: string;
+  username: string;
+};
+
+type ActiveUserRow = {
+  key: string;
+  userId: string;
+  displayName: string;
+  channelId: string;
+  channelName: string;
+  discordUrl: string | null;
+};
+
+function normalizeDiscordKey(value: string) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function formatUserLabel(userId: string, localUserId?: string | null) {
+  if (!userId) return "UNKNOWN";
+  if (localUserId && userId === localUserId) return "YOU";
+  if (userId.length <= 20) return userId;
+  return `${userId.slice(0, 8)}...${userId.slice(-6)}`;
+}
+
+function getMinutesAgo(createdAt: number) {
+  const deltaMs = Math.max(0, Date.now() - createdAt);
+  return Math.floor(deltaMs / 60_000);
+}
+
+function parseDiscordChannelMap(raw: string | undefined) {
+  if (!raw) return {} as Record<string, string>;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {} as Record<string, string>;
+    }
+    const map: Record<string, string> = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      if (typeof value === "string" && value.trim()) {
+        map[normalizeDiscordKey(key)] = value.trim();
+      }
+    });
+    return map;
+  } catch (err) {
+    console.warn("[Dashboard] Invalid EXPO_PUBLIC_DISCORD_CHANNEL_MAP JSON:", err);
+    return {} as Record<string, string>;
+  }
+}
+
+function resolveDiscordUrl(
+  talkgroup: Talkgroup,
+  discordGuildId: string | undefined,
+  discordChannelMap: Record<string, string>,
+) {
+  const directUrl =
+    talkgroup.discordChannelUrl ||
+    talkgroup.discord_channel_url ||
+    null;
+  if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    return directUrl;
+  }
+
+  const configuredChannel =
+    talkgroup.discordChannelId ||
+    talkgroup.discord_channel_id ||
+    discordChannelMap[normalizeDiscordKey(talkgroup.id)] ||
+    discordChannelMap[normalizeDiscordKey(talkgroup.name)] ||
+    null;
+
+  if (!configuredChannel) return null;
+  if (/^https?:\/\//i.test(configuredChannel)) return configuredChannel;
+  if (!discordGuildId) return null;
+
+  return `https://discord.com/channels/${discordGuildId}/${configuredChannel}`;
+}
 
 function StatusCard({
   label,
   value,
   metric,
   bars,
+  colors,
+  strength,
   isActive,
   onPress,
   styles,
@@ -27,16 +111,22 @@ function StatusCard({
   value: string;
   metric: string;
   bars: number;
+  colors: any;
+  strength?: "strong" | "weak" | "none";
   isActive?: boolean;
   onPress?: () => void;
   styles: any;
 }) {
+  const resolvedStrength = strength ?? getSignalStrengthFromBars(bars, 4);
+  const signalColor = getSignalColor(resolvedStrength, colors);
+
   return (
     <Pressable
       style={({ pressed }) => [
         styles.bentoCard,
         styles.signalCard,
         isActive && styles.signalCardActive,
+        isActive && { borderColor: signalColor, shadowColor: signalColor },
         pressed && styles.signalCardPressed,
       ]}
       onPress={onPress}
@@ -50,14 +140,14 @@ function StatusCard({
               style={[
                 styles.signalBar,
                 { height: 5 + n * 4 },
-                n <= bars ? styles.signalBarOn : styles.signalBarOff,
+                n <= bars ? [styles.signalBarOn, { backgroundColor: signalColor }] : styles.signalBarOff,
               ]}
             />
           ))}
         </View>
       </View>
       <Text style={styles.signalValue}>{value}</Text>
-      <Text style={styles.signalMetric}>{metric}</Text>
+      <Text style={[styles.signalMetric, { color: signalColor }]}>{metric}</Text>
     </Pressable>
   );
 }
@@ -69,16 +159,220 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     [colors, spacing, radius, typography],
   );
 
-  const unread = getUnreadCount();
-  const notificationFeed = MOCK_NOTIFICATIONS;
+  const notifications = useStore((s) => s.notifications);
+  const unread = notifications.filter((n) => n.unread).length;
+  const notificationFeed = notifications.slice(0, 8);
+  const jwt = useStore((s) => s.jwt);
+  const user = useStore((s) => s.user);
   const preferredConnection = useStore((s) => s.preferredConnection);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
+
+  const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([]);
+  const [presenceByTalkgroup, setPresenceByTalkgroup] = useState<Record<string, string[]>>({});
+  const [membersById, setMembersById] = useState<Record<string, TalkgroupMember>>({});
+
+  const mountedRef = useRef(true);
+
+  const discordGuildId = CONFIG.DISCORD_GUILD_ID;
+  const discordChannelMap = useMemo(
+    () => parseDiscordChannelMap(CONFIG.DISCORD_CHANNEL_MAP),
+    [],
+  );
 
   const selectConnection = (mode: ConnectionMode) => {
     setPreferredConnection(mode);
     // Switch actual transport — 'satellite' maps to 'satcom' in the comms SDK
     comms.setTransportMode(mode === 'satellite' ? 'satcom' : 'cellular');
   };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!jwt) {
+      setTalkgroups([]);
+      setPresenceByTalkgroup({});
+      setMembersById({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateTalkgroups = async () => {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/talkgroups`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) throw new Error(`Failed to fetch talkgroups: ${res.status}`);
+
+        const data = await res.json();
+        const rawTalkgroups = Array.isArray(data?.talkgroups)
+          ? data.talkgroups
+          : Array.isArray(data)
+            ? data
+            : [];
+
+        const mappedTalkgroups = rawTalkgroups
+          .filter((tg: any) => tg && tg.id && tg.name)
+          .map((tg: any) => ({
+            id: String(tg.id),
+            name: String(tg.name),
+            discord_channel_id:
+              typeof tg.discord_channel_id === "string" ? tg.discord_channel_id : null,
+            discordChannelId:
+              typeof tg.discordChannelId === "string" ? tg.discordChannelId : null,
+            discord_channel_url:
+              typeof tg.discord_channel_url === "string" ? tg.discord_channel_url : null,
+            discordChannelUrl:
+              typeof tg.discordChannelUrl === "string" ? tg.discordChannelUrl : null,
+          }));
+
+        if (cancelled || !mountedRef.current) return;
+
+        setTalkgroups(mappedTalkgroups);
+        setPresenceByTalkgroup((prev) => {
+          const next: Record<string, string[]> = {};
+          mappedTalkgroups.forEach((tg) => {
+            next[tg.id] = prev[tg.id] ?? [];
+          });
+          return next;
+        });
+
+        mappedTalkgroups.forEach((tg) => {
+          comms.joinTalkgroup(tg.id);
+        });
+
+        const memberChunks = await Promise.all(
+          mappedTalkgroups.map(async (tg) => {
+            try {
+              const membersRes = await fetch(`${CONFIG.API_URL}/talkgroups/${tg.id}/members`, {
+                headers: { Authorization: `Bearer ${jwt}` },
+              });
+              if (!membersRes.ok) return [];
+              const membersData = await membersRes.json();
+              return Array.isArray(membersData?.members) ? membersData.members : [];
+            } catch {
+              return [];
+            }
+          }),
+        );
+
+        if (cancelled || !mountedRef.current) return;
+
+        const mergedMembers: Record<string, TalkgroupMember> = {};
+        memberChunks.flat().forEach((member: any) => {
+          if (!member?.id) return;
+          const userId = String(member.id);
+          mergedMembers[userId] = {
+            id: userId,
+            username: typeof member.username === "string" ? member.username : userId,
+          };
+        });
+
+        setMembersById(mergedMembers);
+      } catch (err) {
+        console.warn("[Dashboard] Failed to hydrate active users panel:", err);
+        if (!cancelled && mountedRef.current) {
+          setTalkgroups([]);
+          setPresenceByTalkgroup({});
+          setMembersById({});
+        }
+      }
+    };
+
+    hydrateTalkgroups();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jwt]);
+
+  useEffect(() => {
+    const handleMessage = (msg: any) => {
+      if (!mountedRef.current || !msg || msg.type !== "PRESENCE") return;
+      if (!msg.talkgroup) return;
+
+      const talkgroupId = String(msg.talkgroup);
+      const online = Array.isArray(msg.online)
+        ? Array.from(new Set(msg.online.map((u: any) => String(u)).filter(Boolean)))
+        : [];
+
+      setPresenceByTalkgroup((prev) => ({
+        ...prev,
+        [talkgroupId]: online,
+      }));
+    };
+
+    try {
+      comms.onMessage(handleMessage);
+    } catch (err) {
+      console.warn("[Dashboard] Presence listener unavailable:", err);
+    }
+  }, []);
+
+  const activeUsers = useMemo<ActiveUserRow[]>(() => {
+    if (talkgroups.length === 0) return [];
+
+    const users: ActiveUserRow[] = [];
+    const seen = new Set<string>();
+
+    talkgroups.forEach((tg) => {
+      const onlineUsers = presenceByTalkgroup[tg.id] ?? [];
+      if (!Array.isArray(onlineUsers) || onlineUsers.length === 0) return;
+
+      const discordUrl = resolveDiscordUrl(tg, discordGuildId, discordChannelMap);
+
+      onlineUsers.forEach((userId) => {
+        const rowKey = `${tg.id}:${userId}`;
+        if (seen.has(rowKey)) return;
+        seen.add(rowKey);
+
+        const member = membersById[userId];
+        users.push({
+          key: rowKey,
+          userId,
+          displayName:
+            member?.username ||
+            formatUserLabel(userId, user?.sub ?? null),
+          channelId: tg.id,
+          channelName: tg.name,
+          discordUrl,
+        });
+      });
+    });
+
+    users.sort((a, b) => {
+      if (a.channelName === b.channelName) {
+        return a.displayName.localeCompare(b.displayName);
+      }
+      return a.channelName.localeCompare(b.channelName);
+    });
+
+    return users;
+  }, [
+    talkgroups,
+    presenceByTalkgroup,
+    membersById,
+    user?.sub,
+    discordGuildId,
+    discordChannelMap,
+  ]);
+
+  const handleUserPress = useCallback(async (activeUser: ActiveUserRow) => {
+    if (!activeUser.discordUrl) return;
+    try {
+      await Linking.openURL(activeUser.discordUrl);
+    } catch (err) {
+      console.warn(
+        `[Dashboard] Failed to open Discord channel for ${activeUser.channelName}:`,
+        err,
+      );
+    }
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -116,18 +410,38 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               nestedScrollEnabled
               showsVerticalScrollIndicator
             >
-              {ACTIVE_USERS.map((user) => (
-                <View key={user.id} style={styles.userRow}>
-                  <View style={styles.userRowLeft}>
-                    <View style={[styles.userDot, user.status === "ACTIVE" ? styles.userDotActive : styles.userDotIdle]} />
-                    <View>
-                      <Text style={styles.userName}>{user.name}</Text>
-                      <Text style={styles.userChannel}>{user.channel}</Text>
+              {activeUsers.length === 0 ? (
+                <Text style={styles.usersEmptyText}>No live users in joined talk groups</Text>
+              ) : (
+                activeUsers.map((activeUser) => (
+                  <Pressable
+                    key={activeUser.key}
+                    onPress={() => handleUserPress(activeUser)}
+                    disabled={!activeUser.discordUrl}
+                    style={({ pressed }) => [
+                      styles.userRow,
+                      !activeUser.discordUrl && styles.userRowDisabled,
+                      pressed && activeUser.discordUrl && styles.userRowPressed,
+                    ]}
+                  >
+                    <View style={styles.userRowLeft}>
+                      <View style={[styles.userDot, styles.userDotActive]} />
+                      <View>
+                        <Text style={styles.userName}>{activeUser.displayName}</Text>
+                        <Text style={styles.userChannel}>{activeUser.channelName}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={styles.userStatus}>{user.status}</Text>
-                </View>
-              ))}
+                    <Text
+                      style={[
+                        styles.userStatus,
+                        !activeUser.discordUrl && styles.userStatusUnavailable,
+                      ]}
+                    >
+                      {activeUser.discordUrl ? "DISCORD" : "UNAVAILABLE"}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
             </ScrollView>
           </View>
 
@@ -137,15 +451,19 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               value="Strong"
               metric="+99% Latency Opt."
               bars={4}
+              strength="strong"
+              colors={colors}
               isActive={preferredConnection === "satellite"}
               onPress={() => selectConnection("satellite")}
               styles={styles}
             />
             <StatusCard
               label="Cellular"
-              value="Optimal"
+              value="Weak"
               metric="+95% Signal"
-              bars={3}
+              bars={2}
+              strength="weak"
+              colors={colors}
               isActive={preferredConnection === "cellular"}
               onPress={() => selectConnection("cellular")}
               styles={styles}
@@ -167,18 +485,22 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
             nestedScrollEnabled
             showsVerticalScrollIndicator
           >
-            {notificationFeed.map((n) => (
-              <Pressable key={n.id} style={styles.notificationCard} onPress={() => navigation.navigate("Notifications")}>
-                <View style={[styles.notificationIcon, n.severity === "warning" ? styles.notificationWarn : styles.notificationInfo]}>
-                  <Text style={styles.notificationIconText}>{n.severity === "warning" ? "⚠" : "i"}</Text>
-                </View>
-                <View style={styles.notificationCopy}>
-                  <Text style={styles.notificationTitle}>{n.title}</Text>
-                  <Text style={styles.notificationMessage}>{n.message}</Text>
-                </View>
-                <Text style={styles.notificationTime}>{n.minutesAgo}m ago</Text>
-              </Pressable>
-            ))}
+            {notificationFeed.length === 0 ? (
+              <Text style={styles.notificationEmpty}>No real-time alerts yet</Text>
+            ) : (
+              notificationFeed.map((n) => (
+                <Pressable key={n.id} style={styles.notificationCard} onPress={() => navigation.navigate("Notifications")}>
+                  <View style={[styles.notificationIcon, n.severity === "warning" ? styles.notificationWarn : styles.notificationInfo]}>
+                    <Text style={styles.notificationIconText}>{n.severity === "warning" ? "⚠" : "i"}</Text>
+                  </View>
+                  <View style={styles.notificationCopy}>
+                    <Text style={styles.notificationTitle}>{n.title}</Text>
+                    <Text style={styles.notificationMessage}>{n.message}</Text>
+                  </View>
+                  <Text style={styles.notificationTime}>{getMinutesAgo(n.createdAt)}m ago</Text>
+                </Pressable>
+              ))
+            )}
           </ScrollView>
         </View>
       </ScrollView>
@@ -291,6 +613,12 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     gap: spacing.sm,
     paddingBottom: spacing.md,
   },
+  usersEmptyText: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+    textAlign: "center",
+    paddingTop: spacing.md,
+  },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -300,6 +628,12 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     borderColor: colors.border.subtle,
     borderRadius: radius.lg,
     padding: spacing.sm,
+  },
+  userRowPressed: {
+    opacity: 0.9,
+  },
+  userRowDisabled: {
+    opacity: 0.55,
   },
   userRowLeft: {
     flexDirection: "row",
@@ -327,9 +661,12 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     fontSize: typography.size.xs,
   },
   userStatus: {
-    color: colors.text.secondary,
+    color: colors.status.info,
     fontSize: 10,
     fontWeight: "700",
+  },
+  userStatusUnavailable: {
+    color: colors.text.muted,
   },
   signalStack: {
     flex: 0.95,
@@ -433,6 +770,12 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
   notificationsList: {
     gap: spacing.md,
     paddingBottom: spacing.xs,
+  },
+  notificationEmpty: {
+    color: colors.text.muted,
+    fontSize: typography.size.sm,
+    textAlign: "center",
+    paddingVertical: spacing.md,
   },
   notificationCard: {
     backgroundColor: colors.background.tertiary,

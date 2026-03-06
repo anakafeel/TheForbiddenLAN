@@ -67,7 +67,7 @@ export function AdminDashboard() {
         <StatCard label="Total Users" value={stats.users} color={colors.status.info} styles={styles} />
         <StatCard label="Total Devices" value={stats.devices} color={colors.accent.primaryLight} styles={styles} />
         <StatCard label="Active Devices" value={stats.activeDevices} color={colors.status.active} styles={styles} />
-        <StatCard label="Talkgroups" value={stats.talkgroups} color={colors.status.warning} styles={styles} />
+        <StatCard label="Talk Groups" value={stats.talkgroups} color={colors.status.warning} styles={styles} />
       </View>
 
       {/* Device list */}

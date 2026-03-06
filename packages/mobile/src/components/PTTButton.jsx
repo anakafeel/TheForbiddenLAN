@@ -3,6 +3,8 @@ import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { emitStartTalking, emitStopTalking } from '../utils/socket';
 import { useAppTheme } from '../theme';
+import { useStore } from '../store';
+import { playPTTPressBeep } from '../utils/pttSounds';
 
 export default function PTTButton({ userId, onTransmitChange }) {
   const { colors, spacing, typography } = useAppTheme();
@@ -10,10 +12,12 @@ export default function PTTButton({ userId, onTransmitChange }) {
     () => createStyles(colors, spacing, typography),
     [colors, spacing, typography],
   );
+  const soundsEnabled = useStore((s) => s.soundsEnabled);
   const [transmitting, setTransmitting] = useState(false);
 
   const onPressIn = async () => {
     if (transmitting) return;
+    playPTTPressBeep(soundsEnabled);
     setTransmitting(true);
     onTransmitChange?.(true);
     emitStartTalking(userId);

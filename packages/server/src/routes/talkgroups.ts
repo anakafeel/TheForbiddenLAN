@@ -6,7 +6,20 @@ import { randomBytes } from 'crypto';
 export async function talkgroupRoutes(app: FastifyInstance) {
   // All routes require JWT
   app.addHook('onRequest', async (req, reply) => {
-    try { await req.jwtVerify(); } catch { reply.code(401).send({ error: 'unauthorized' }); }
+    try {
+      await req.jwtVerify();
+    } catch {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+
+    const userId = (req.user as any)?.sub;
+    if (!userId) return reply.code(401).send({ error: 'unauthorized' });
+
+    const activeUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!activeUser) return reply.code(401).send({ error: 'user_not_found' });
   });
 
   // GET /talkgroups — list talkgroups the authenticated user belongs to

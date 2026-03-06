@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import { CONFIG } from '../config';
 import { useAppTheme } from '../theme';
-
-let Icon;
-if (Platform.OS !== 'web') {
-  Icon = require('react-native-vector-icons/MaterialCommunityIcons').default;
-}
+import {
+  getBarsFromPercent,
+  getSignalColor,
+  getSignalStrengthFromPercent,
+} from '../utils/signalStrength';
 
 export default function NetworkInfo() {
   const { colors, spacing, radius, typography } = useAppTheme();
@@ -18,34 +17,37 @@ export default function NetworkInfo() {
   const [state, setState] = useState({ type: 'unknown', isConnected: false });
 
   useEffect(() => {
-    if (CONFIG.MOCK_MODE) {
-      setState({
-        type: 'satellite',
-        isConnected: true,
-        details: {
-          strength: -40,
-        },
-      });
-    } else {
-      const unsubscribe = NetInfo.addEventListener(info => {
-        setState(info);
-      });
-      return unsubscribe;
-    }
+    const unsubscribe = NetInfo.addEventListener(info => {
+      setState(info);
+    });
+    return unsubscribe;
   }, []);
 
-  const getSignalIcon = () => {
-    if (state.type === 'wifi') return '📶';
-    if (state.type === 'cellular') return '📱';
-    return '📡';
-  };
+  const signalPercent = useMemo(() => {
+    if (!state.isConnected) return 0;
+    const rawStrength = state?.details?.strength;
+    if (typeof rawStrength === 'number' && Number.isFinite(rawStrength)) {
+      if (rawStrength > 0) return Math.max(0, Math.min(100, rawStrength));
+      // Typical dBm range normalization for mobile UI
+      if (rawStrength <= -120) return 0;
+      if (rawStrength >= -50) return 100;
+      return Math.round(((rawStrength + 120) / 70) * 100);
+    }
+    if (state.type === 'wifi') return 85;
+    if (state.type === 'cellular') return 62;
+    return 48;
+  }, [state]);
+
+  const signalStrength = getSignalStrengthFromPercent(signalPercent);
+  const activeBars = getBarsFromPercent(signalPercent, 4);
+  const signalColor = getSignalColor(signalStrength, colors);
 
   return (
     <View style={styles.container}>
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, state.isConnected && styles.statusDotActive]} />
         <Text style={styles.statusLabel}>NETWORK STATUS:</Text>
-        <View style={styles.statusBadge}>
+        <View style={[styles.statusBadge, !state.isConnected && styles.statusBadgeOffline]}>
           <Text style={styles.statusBadgeText}>
             {state.isConnected ? 'CONNECTED' : 'OFFLINE'}
           </Text>
@@ -67,11 +69,14 @@ export default function NetworkInfo() {
                 style={[
                   styles.signalBar,
                   { height: 4 + i * 4 },
-                  i <= 3 && styles.signalBarActive
+                  i <= activeBars && [styles.signalBarActive, { backgroundColor: signalColor }],
                 ]}
               />
             ))}
           </View>
+          <Text style={[styles.signalStrengthText, { color: signalColor }]}>
+            {signalStrength.toUpperCase()}
+          </Text>
         </View>
         <View style={styles.infoDivider} />
         <View style={styles.infoItem}>
@@ -119,6 +124,9 @@ function createStyles(colors, spacing, radius, typography) {
       paddingVertical: 2,
       borderRadius: radius.sm,
     },
+    statusBadgeOffline: {
+      backgroundColor: colors.background.tertiary,
+    },
     statusBadgeText: {
       color: colors.text.inverse,
       fontSize: typography.size.xs,
@@ -163,6 +171,11 @@ function createStyles(colors, spacing, radius, typography) {
     signalBarActive: {
       backgroundColor: colors.accent.primary,
       opacity: 1,
+    },
+    signalStrengthText: {
+      fontSize: typography.size.xs,
+      fontWeight: typography.weight.bold,
+      marginTop: spacing.xs,
     },
   });
 }

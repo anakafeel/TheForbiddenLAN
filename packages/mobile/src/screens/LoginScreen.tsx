@@ -58,6 +58,13 @@ export function LoginScreen() {
       const store = useStore.getState();
       store.setJwt(data.jwt);
       store.setUser({ sub: payload.sub, username: payload.username, role: payload.role });
+      store.setProfile({
+        displayName: payload.username ?? "",
+        callsign: (payload.username ?? "")
+          .replace(/[^a-z0-9]/gi, "")
+          .toUpperCase()
+          .slice(0, 8),
+      });
 
       // Only connect to the relay for regular users (PTT). Admins don't need comms.
       // Lazy import to avoid pulling native audio modules on web.

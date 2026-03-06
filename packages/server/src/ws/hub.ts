@@ -18,6 +18,27 @@ const sessionTalkgroup = new Map<number, string>();
 // Reverse lookup: senderDeviceId → WebSocket (for matching UDP registrations to WS connections)
 const deviceIdToSocket = new Map<string, WebSocket>();
 
+/**
+ * Force close all active WebSocket sessions for a given JWT user id.
+ * Used by admin user deletion so removed users are disconnected immediately.
+ */
+export function disconnectUserSessions(userId: string, reason = 'user_removed') {
+  let disconnected = 0;
+  for (const [socket, userMeta] of socketUser.entries()) {
+    if (userMeta.userId !== userId) continue;
+    disconnected += 1;
+    try {
+      socket.close(1008, reason);
+    } catch (_) {
+      // ignore close errors — close event cleanup still handles map cleanup when possible
+    }
+  }
+  if (disconnected > 0) {
+    console.log(`[hub] disconnected ${disconnected} socket(s) for removed user ${userId}`);
+  }
+  return disconnected;
+}
+
 // ── UDP Transport Layer ───────────────────────────────────────────────────────
 export const udpServer = dgram.createSocket('udp4');
 // userId → remote UDP address/port
@@ -274,15 +295,20 @@ export async function registerHub(app: FastifyInstance) {
       return;
     }
 
-    // Look up device_id for GPS writes
+    // Look up device_id for GPS writes and ensure user still exists.
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { device_id: true },
       });
+      if (!user) {
+        socket.close(1008, 'user_not_found');
+        return;
+      }
       deviceId = user?.device_id ?? null;
     } catch {
-      // DB lookup failed — continue without deviceId
+      socket.close(1011, 'server_error');
+      return;
     }
 
     socketUser.set(socket, { userId, deviceId, senderDeviceId: null });

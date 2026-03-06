@@ -60,7 +60,7 @@ export function AdminTalkgroups() {
     if (typeof window !== 'undefined' && window.confirm) {
       if (window.confirm(`Delete "${tg.name}"?`)) doDelete();
     } else {
-      Alert.alert('Delete Talkgroup', `Delete "${tg.name}"?`, [
+      Alert.alert('Delete Talk Group', `Delete "${tg.name}"?`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: doDelete },
       ]);
@@ -79,7 +79,7 @@ export function AdminTalkgroups() {
       }
     };
     if (typeof window !== 'undefined' && window.confirm) {
-      if (window.confirm(`Rotate encryption key for "${tg.name}"? All members will need to re-derive their keys.`)) doRotate();
+      if (window.confirm(`Rotate encryption key for "${tg.name}"? All members will need to re-derive their Talk Group keys.`)) doRotate();
     } else {
       Alert.alert('Rotate Key', `Rotate key for "${tg.name}"?`, [
         { text: 'Cancel', style: 'cancel' },
@@ -127,7 +127,7 @@ export function AdminTalkgroups() {
       }
     };
     if (typeof window !== 'undefined' && window.confirm) {
-      if (window.confirm(`Remove "${username}" from this talkgroup?`)) doRemove();
+      if (window.confirm(`Remove "${username}" from this talk group?`)) doRemove();
     } else {
       Alert.alert('Remove Member', `Remove "${username}"?`, [
         { text: 'Cancel', style: 'cancel' },
@@ -146,7 +146,9 @@ export function AdminTalkgroups() {
 
       {/* Header row */}
       <View style={styles.headerRow}>
-        <Text style={styles.countText}>{talkgroups.length} talkgroup{talkgroups.length !== 1 ? 's' : ''}</Text>
+        <Text style={styles.countText}>
+          {talkgroups.length} Talk Group{talkgroups.length !== 1 ? 's' : ''}
+        </Text>
         <Pressable onPress={load} style={styles.refreshBtn}>
           <Text style={styles.refreshText}>Refresh</Text>
         </Pressable>
@@ -155,11 +157,11 @@ export function AdminTalkgroups() {
       {/* Create form card */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Create Talkgroup</Text>
+          <Text style={styles.sectionTitle}>Create Talk Group</Text>
         </View>
         <View style={styles.createBody}>
           <TextInput
-            placeholder="Talkgroup name"
+            placeholder="Talk Group name"
             placeholderTextColor={colors.text.muted}
             value={newName}
             onChangeText={setNewName}
@@ -171,9 +173,9 @@ export function AdminTalkgroups() {
         </View>
       </View>
 
-      {/* Talkgroup list */}
+      {/* Talk Group list */}
       {talkgroups.length === 0 ? (
-        <Text style={styles.empty}>No talkgroups</Text>
+        <Text style={styles.empty}>No Talk Groups</Text>
       ) : (
         talkgroups.map(item => (
           <View key={item.id} style={styles.card}>

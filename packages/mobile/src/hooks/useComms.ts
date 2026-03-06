@@ -1,5 +1,4 @@
 // useComms — wraps ForbiddenLANComms with mic capture, audio playback, and AES-GCM encryption.
-// IS_MOCK=false uses MockRelaySocket (no backend needed). Set IS_MOCK=true to bypass comms entirely.
 import { useEffect, useRef } from 'react';
 import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { useStore } from '../store';
@@ -7,7 +6,6 @@ import { useAudioCapture } from './useAudioCapture';
 import { useAudioPlayback } from './useAudioPlayback';
 import { CONFIG } from '../config';
 
-const IS_MOCK = false;
 const DEVICE_ID = 'device-placeholder-uuid';
 
 export function useComms() {
@@ -30,16 +28,17 @@ export function useComms() {
     }
   );
 
-  // Initialize comms with MockRelaySocket (no real server needed)
+  // Initialize comms with configured relay endpoints
   useEffect(() => {
+    if (!jwt) return;
+
     const comms = new ForbiddenLANComms({
       relayUrl: CONFIG.WS_URL,
       dls140Url: CONFIG.DLS140_URL,
       deviceId: CONFIG.DEVICE_ID,
-      mock: CONFIG.MOCK_MODE,
     });
 
-    comms.connect(jwt ?? 'mock-dev-token').then(() => {
+    comms.connect(jwt).then(() => {
       commsRef.current = comms;
 
       // Wire incoming audio to playback (must run after commsRef is ready)
@@ -71,37 +70,26 @@ export function useComms() {
     };
   }, [jwt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startPTT = async (tg: string) => {
-    if (IS_MOCK) {
-      console.log('[MOCK] PTT start', tg);
-      return;
-    }
+  const startPTT = async () => {
     commsRef.current?.startPTT();
     await startMic(); // start capturing mic — browser will prompt for permission
   };
 
   const stopPTT = () => {
-    if (IS_MOCK) {
-      console.log('[MOCK] PTT stop');
-      return;
-    }
     stopMic(); // stop capturing mic
     clearPlayback(); // discard any buffered incoming audio (half-duplex)
     commsRef.current?.stopPTT();
   };
 
   const sendText = (tg: string, text: string) => {
-    if (IS_MOCK) { console.log('[MOCK] text', tg, text); return; }
     commsRef.current?.sendText(tg, text);
   };
 
   const onMessage = (handler: (msg: any) => void) => {
-    if (IS_MOCK) return;
     commsRef.current?.onMessage(handler);
   };
 
   const sendAudioChunk = async (base64OpusData: string) => {
-    if (IS_MOCK) return;
     await commsRef.current?.sendAudioChunk(base64OpusData);
   };
 

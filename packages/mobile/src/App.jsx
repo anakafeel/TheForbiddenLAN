@@ -51,7 +51,11 @@ function AdminNavigator() {
     >
       <AdminTabs.Screen name="Dashboard" component={AdminDashboard} options={{ tabBarLabel: 'Dashboard' }} />
       <AdminTabs.Screen name="Devices" component={AdminDevices} options={{ tabBarLabel: 'Devices' }} />
-      <AdminTabs.Screen name="Talkgroups" component={AdminTalkgroups} options={{ tabBarLabel: 'Talkgroups' }} />
+      <AdminTabs.Screen
+        name="Talkgroups"
+        component={AdminTalkgroups}
+        options={{ tabBarLabel: 'Talk Groups', title: 'Talk Groups' }}
+      />
       <AdminTabs.Screen name="Users" component={AdminUsers} options={{ tabBarLabel: 'Users' }} />
       <AdminTabs.Screen name="Map" component={AdminMap} options={{ tabBarLabel: 'Map' }} />
     </AdminTabs.Navigator>

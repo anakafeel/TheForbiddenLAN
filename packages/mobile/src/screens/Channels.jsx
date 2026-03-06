@@ -1,22 +1,14 @@
 import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable, Platform } from 'react-native';
+import { Mic } from 'lucide-react';
 import { ChannelContext } from '../context/ChannelContext';
 import { emitStartTalking, emitStopTalking, joinChannel, connectComms } from '../utils/socket';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
-import { getFloorState } from '../utils/comms';
 import { CONFIG } from '../config';
 import { useStore } from '../store';
 import { useAppTheme } from '../theme';
+import { playPTTPressBeep } from '../utils/pttSounds';
 import BottomMenu from '../components/BottomMenu';
-
-// Mock channels for UI testing (no backend required)
-const MOCK_CHANNELS = [
-  { id: 'channel-1', name: 'Channel 1', status: 'active', users: 10, transmitting: true },
-  { id: 'channel-2', name: 'Channel 2', status: 'monitoring', users: 5, transmitting: false },
-  { id: 'channel-3', name: 'Channel 3', status: 'idle', users: 8, transmitting: false },
-  { id: 'channel-4', name: 'Channel 4', status: 'idle', users: 3, transmitting: false },
-  { id: 'channel-5', name: 'Channel 5', status: 'idle', users: 12, transmitting: false },
-];
 
 // Filter Tabs Component
 function FilterTabs({ activeFilter, onFilterChange, styles }) {
@@ -95,7 +87,11 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
           pressed && styles.inlinePttButtonPressed,
         ]}
       >
-        <Text style={styles.inlinePttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
+        {Platform.OS === 'web' ? (
+          <Mic size={22} strokeWidth={2.2} color="#FFFFFF" />
+        ) : (
+          <Text style={styles.inlinePttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
+        )}
         <Text style={[styles.inlinePttLabel, isTransmitting && styles.inlinePttLabelActive]}>
           {isTransmitting ? 'LIVE' : 'HOLD'}
         </Text>
@@ -112,31 +108,29 @@ export default function ChannelsScreen({ navigation }) {
   );
 
   const { setCurrent, current } = useContext(ChannelContext);
-  // const [channels, setChannels] = useState(CONFIG.MOCK_MODE ? MOCK_CHANNELS : []);
-  const [channels, setChannels] = useState(MOCK_CHANNELS); // Initial state before fetch
+  const [channels, setChannels] = useState([]);
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isTransmitting, setIsTransmitting] = useState(false);
   const [transmittingChannelId, setTransmittingChannelId] = useState(null);
-  const [currentSpeaker, setCurrentSpeaker] = useState(null);
-  const [channelSpeakers, setChannelSpeakers] = useState({}); // Track speakers per channel
 
   const jwt = useStore(state => state.jwt);
+  const soundsEnabled = useStore((state) => state.soundsEnabled);
 
   useEffect(() => {
-    if (CONFIG.MOCK_MODE) {
-      setChannels(MOCK_CHANNELS);
-      return;
-    }
-
     if (!jwt) {
       console.error('[Channels] No JWT found, cannot fetch talkgroups.');
+      setChannels([]);
       return;
     }
 
     const fetchTalkgroups = async () => {
       // Re-establish WebSocket context on Fast Refresh since the Login screen was skipped
-      await connectComms(jwt);
+      try {
+        await connectComms(jwt);
+      } catch (err) {
+        console.warn('[Channels] Comms reconnect failed, staying in local mode:', err);
+      }
       
       try {
         const res = await fetch(`${CONFIG.API_URL}/talkgroups`, {
@@ -163,35 +157,6 @@ export default function ChannelsScreen({ navigation }) {
           }));
 
         setChannels(mappedChannels);
-        // Demo Hack: If user has no channels, force them into the first available one so testing isn't blocked.
-        if (mappedChannels.length === 0) {
-          console.log('[Channels] User has no channels! Attempting Emergency Demo Auto-Join...');
-          try {
-            // Because there's no GET /all-talkgroups, we will use a hack: create a temp one 
-            // or just try to join a hardcoded ID if we knew it. Let's create 'E2E-TEST' instead.
-            console.log('[Channels] Re-creating E2E-TEST channel for this user...');
-            await fetch(`${CONFIG.API_URL}/talkgroups`, {
-              method: 'POST',
-              headers: { 
-                'Authorization': `Bearer ${jwt}`, 
-                'Content-Type': 'application/json' 
-              },
-              body: JSON.stringify({ name: 'E2E-TEST' })
-            }); // Might fail with 409 if exists, but that's fine.
-            
-            // Now that E2E-TEST might exist, let's just cheat and tell the UI to render it locally 
-            // so we can click it and send audio. The backend hub.ts uses an in-memory map anyway!
-            setChannels([{
-              id: 'e2e-test-uuid',
-              name: 'E2E-TEST',
-              status: 'idle',
-              users: 2,
-              transmitting: false,
-            }]);
-          } catch(e) {
-            console.error('[Channels] Demo join failed', e);
-          }
-        }
       } catch (err) {
         console.error('[Channels] Error fetching talkgroups:', err);
       }
@@ -199,47 +164,6 @@ export default function ChannelsScreen({ navigation }) {
 
     fetchTalkgroups();
   }, [jwt]);
-
-  // Simulate random speakers across ALL channels
-  useEffect(() => {
-    const speakers = ['ECHO-1', 'BRAVO-2', 'CHARLIE-3', 'DELTA-4', 'FOXTROT-5', 'GOLF-6'];
-    
-    const interval = setInterval(() => {
-      // Randomly pick a channel to have activity
-      const randomChannel = MOCK_CHANNELS[Math.floor(Math.random() * MOCK_CHANNELS.length)];
-      
-      if (Math.random() > 0.5) {
-        const speaker = speakers[Math.floor(Math.random() * speakers.length)];
-        setChannelSpeakers(prev => ({ ...prev, [randomChannel.id]: speaker }));
-        
-        // Clear after random duration
-        setTimeout(() => {
-          setChannelSpeakers(prev => ({ ...prev, [randomChannel.id]: null }));
-        }, 1500 + Math.random() * 2500);
-      }
-    }, 2500);
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  // Current channel speaker (when you're in the channel)
-  useEffect(() => {
-    if (!current || isTransmitting) {
-      setCurrentSpeaker(null);
-      return;
-    }
-    
-    const speakers = ['ECHO-1', 'BRAVO-2', 'CHARLIE-3', 'DELTA-4'];
-    const interval = setInterval(() => {
-      if (Math.random() > 0.6) {
-        const speaker = speakers[Math.floor(Math.random() * speakers.length)];
-        setCurrentSpeaker(speaker);
-        setTimeout(() => setCurrentSpeaker(null), 2000 + Math.random() * 2000);
-      }
-    }, 4000);
-    
-    return () => clearInterval(interval);
-  }, [current, isTransmitting]);
 
   const selectChannel = channel => {
     if (current?.id === channel.id) {
@@ -251,8 +175,17 @@ export default function ChannelsScreen({ navigation }) {
     }
   };
 
+  const handleMenuPress = useCallback(() => {
+    if (typeof navigation?.openDrawer === 'function') {
+      navigation.openDrawer();
+      return;
+    }
+    navigation?.navigate?.('Dashboard');
+  }, [navigation]);
+
   const handlePTTStart = useCallback(async (targetChannel) => {
     if (!targetChannel?.id) return;
+    playPTTPressBeep(soundsEnabled);
 
     // If already transmitting on another channel, stop first to avoid overlapping streams.
     if (isTransmitting) {
@@ -286,7 +219,7 @@ export default function ChannelsScreen({ navigation }) {
       setIsTransmitting(false);
       setTransmittingChannelId(null);
     }
-  }, [current, isTransmitting, transmittingChannelId, setCurrent]);
+  }, [current, isTransmitting, transmittingChannelId, setCurrent, soundsEnabled]);
 
   const handlePTTEnd = useCallback(async (targetChannel) => {
     const channelId = transmittingChannelId ?? targetChannel?.id ?? current?.id;
@@ -294,7 +227,11 @@ export default function ChannelsScreen({ navigation }) {
     if (targetChannel?.id && channelId !== targetChannel.id) return;
     setIsTransmitting(false);
     // stopAudioStream MUST come before emitStopTalking — avoids dropping last audio chunk
-    await stopAudioStream();
+    try {
+      await stopAudioStream();
+    } catch (e) {
+      console.warn('[Channels] Audio stop error:', e);
+    }
     emitStopTalking(CONFIG.DEVICE_ID, channelId);
     setTransmittingChannelId(null);
   }, [current, isTransmitting, transmittingChannelId]);
@@ -313,8 +250,8 @@ export default function ChannelsScreen({ navigation }) {
       onPress={() => selectChannel(item)}
       isActive={current?.id === item.id}
       isTransmitting={isTransmitting && transmittingChannelId === item.id}
-      currentSpeaker={current?.id === item.id ? currentSpeaker : null}
-      channelSpeaker={channelSpeakers[item.id]}
+      currentSpeaker={null}
+      channelSpeaker={null}
       onPTTStart={handlePTTStart}
       onPTTEnd={handlePTTEnd}
       styles={styles}
@@ -326,7 +263,7 @@ export default function ChannelsScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Pressable onPress={() => navigation.openDrawer()} hitSlop={10}>
+          <Pressable onPress={handleMenuPress} hitSlop={10}>
             <Text style={styles.menuIcon}>☰</Text>
           </Pressable>
           <Text style={styles.title}>SKYTALK</Text>
@@ -340,7 +277,7 @@ export default function ChannelsScreen({ navigation }) {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search channels..."
+            placeholder="Search talk groups..."
             placeholderTextColor={colors.text.muted}
             value={searchQuery}
             onChangeText={setSearchQuery}

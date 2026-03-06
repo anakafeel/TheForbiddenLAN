@@ -33,6 +33,11 @@ export const CONFIG = {
   // ── Identity ──────────────────────────────────────────────────────────────
   DEVICE_ID: process.env.EXPO_PUBLIC_DEVICE_ID ?? _stableDeviceId(),
   TALKGROUP: process.env.EXPO_PUBLIC_TALKGROUP ?? undefined,
+
+  // ── Integrations ──────────────────────────────────────────────────────────
+  DISCORD_GUILD_ID: process.env.EXPO_PUBLIC_DISCORD_GUILD_ID ?? undefined,
+  DISCORD_CHANNEL_MAP: process.env.EXPO_PUBLIC_DISCORD_CHANNEL_MAP ?? undefined,
+  DISCORD_INVITE_URL: process.env.EXPO_PUBLIC_DISCORD_INVITE_URL ?? undefined,
 };
 
 export default CONFIG;

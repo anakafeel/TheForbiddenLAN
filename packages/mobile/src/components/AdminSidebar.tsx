@@ -2,6 +2,7 @@
 // Manages its own active tab state and renders admin screens directly.
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Mic, TvMinimalPlay, House, User, MapPin } from 'lucide-react';
 import { useAppTheme } from '../theme';
 import { useStore } from '../store';
 
@@ -12,11 +13,11 @@ import { AdminUsers } from '../screens/admin/AdminUsers';
 import { AdminMap } from '../screens/admin/AdminMap';
 
 const TAB_CONFIG = [
-  { key: 'Dashboard',  label: 'Dashboard',  icon: '\u25A3' },   // filled square
-  { key: 'Devices',    label: 'Devices',     icon: '\u25C8' },   // diamond in square
-  { key: 'Talkgroups', label: 'Talkgroups',  icon: '\u25CE' },   // bullseye
-  { key: 'Users',      label: 'Users',       icon: '\u25CB' },   // circle
-  { key: 'Map',        label: 'Map',         icon: '\u25C7' },   // diamond
+  { key: 'Dashboard',  label: 'Dashboard',  Icon: House },
+  { key: 'Devices',    label: 'Devices',    Icon: TvMinimalPlay },
+  { key: 'Talkgroups', label: 'Talk Groups', Icon: Mic },
+  { key: 'Users',      label: 'Users',      Icon: User },
+  { key: 'Map',        label: 'Map',        Icon: MapPin },
 ] as const;
 
 const SCREEN_MAP = {
@@ -38,6 +39,7 @@ export function AdminSidebar() {
   const clearAuth = useStore(s => s.clearAuth);
   const user = useStore(s => s.user);
   const ActiveComponent = SCREEN_MAP[activeTab] ?? AdminDashboard;
+  const activeTabLabel = TAB_CONFIG.find((tab) => tab.key === activeTab)?.label ?? activeTab;
 
   return (
     <View style={styles.layout}>
@@ -63,7 +65,13 @@ export function AdminSidebar() {
                 style={[styles.navItem, isActive && styles.navItemActive]}
               >
                 {isActive && <View style={styles.activeIndicator} />}
-                <Text style={[styles.navIcon, isActive && styles.navIconActive]}>{tab.icon}</Text>
+                <View style={styles.navIconWrap}>
+                  <tab.Icon
+                    size={16}
+                    strokeWidth={2.2}
+                    color={isActive ? colors.status.active : colors.text.muted}
+                  />
+                </View>
                 <Text style={[styles.navText, isActive && styles.navTextActive]}>
                   {tab.label}
                 </Text>
@@ -102,7 +110,7 @@ export function AdminSidebar() {
       {/* Content area with header */}
       <View style={styles.contentWrapper}>
         <View style={styles.contentHeader}>
-          <Text style={styles.contentTitle}>{activeTab}</Text>
+          <Text style={styles.contentTitle}>{activeTabLabel}</Text>
         </View>
         <View style={styles.content}>
           <ActiveComponent />
@@ -170,15 +178,11 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
       borderRadius: 2,
       backgroundColor: colors.status.active,
     },
-    navIcon: {
-      color: colors.text.muted,
-      fontSize: typography.size.md,
+    navIconWrap: {
       marginRight: spacing.sm,
       width: 20,
-      textAlign: 'center',
-    },
-    navIconActive: {
-      color: colors.status.active,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     navText: {
       color: colors.text.muted,

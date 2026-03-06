@@ -1,12 +1,13 @@
 import React, { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import { useAppTheme } from "../theme";
+import { Mic, TvMinimalPlay, House, UserPen } from "lucide-react";
 
 const ITEMS = [
-  { key: "Dashboard", icon: "⌂" },
-  { key: "Channels", icon: "📡" },
-  { key: "PTT", icon: "🎙️" },
-  { key: "Profile", icon: "👤" },
+  { key: "Dashboard", Icon: House, fallback: "⌂" },
+  { key: "Channels", label: "Talk Groups", Icon: TvMinimalPlay, fallback: "📡" },
+  { key: "PTT", Icon: Mic, fallback: "🎙️" },
+  { key: "Profile", Icon: UserPen, fallback: "👤" },
 ];
 
 export default function BottomMenu({ navigation, active }) {
@@ -20,15 +21,23 @@ export default function BottomMenu({ navigation, active }) {
     <View style={styles.wrap}>
       {ITEMS.map((item) => {
         const isActive = active === item.key;
-        const forceWhiteIcon = item.key === "Dashboard" || item.key === "Profile";
+        const iconColor = isActive ? colors.text.primary : colors.text.muted;
         return (
           <Pressable
             key={item.key}
             style={({ pressed }) => [styles.item, isActive && styles.itemActive, pressed && styles.itemPressed]}
             onPress={() => navigation.navigate(item.key)}
           >
-            <Text style={[styles.icon, forceWhiteIcon && styles.iconWhite]}>{item.icon}</Text>
-            <Text style={[styles.label, isActive && styles.labelActive]}>{item.key}</Text>
+            <View style={styles.iconWrap}>
+              {Platform.OS === "web" ? (
+                <item.Icon size={16} color={iconColor} strokeWidth={2.2} />
+              ) : (
+                <Text style={styles.icon}>{item.fallback}</Text>
+              )}
+            </View>
+            <Text style={[styles.label, isActive && styles.labelActive]}>
+              {item.label ?? item.key}
+            </Text>
           </Pressable>
         );
       })}
@@ -68,8 +77,11 @@ function createStyles(colors, spacing, radius, typography) {
     fontSize: 16,
     marginBottom: 2,
   },
-  iconWhite: {
-    color: colors.text.primary,
+  iconWrap: {
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 2,
   },
   label: {
     color: colors.text.muted,

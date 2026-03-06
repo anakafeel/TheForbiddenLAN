@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import prisma from '../db/client.js';
 import { getIridiumTles } from '../services/tleFetcher.js';
 
 export const tleRoutes: FastifyPluginAsync = async (fastify) => {
@@ -8,10 +9,19 @@ export const tleRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       // Must be authenticated to access TLEs
       await request.jwtVerify();
+      const userId = (request.user as any)?.sub;
+      if (!userId) return reply.status(401).send({ error: 'unauthorized' });
+
+      const activeUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!activeUser) return reply.status(401).send({ error: 'user_not_found' });
+
       const tles = await getIridiumTles();
-      reply.type('text/plain').send(tles);
+      return reply.type('text/plain').send(tles);
     } catch (err) {
-      reply.status(500).send({ error: 'Failed to fetch TLEs' });
+      return reply.status(500).send({ error: 'Failed to fetch TLEs' });
     }
   });
 };
