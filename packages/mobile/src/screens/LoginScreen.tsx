@@ -127,6 +127,9 @@ export function LoginScreen() {
           .replace(/[^a-z0-9]/gi, "")
           .toUpperCase()
           .slice(0, 8),
+        photoUrl: "",
+        unit: "",
+        statusMessage: "",
       });
 
       // Only connect to the relay for regular users (PTT). Admins don't need comms.

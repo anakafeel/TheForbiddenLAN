@@ -1,10 +1,15 @@
 // Admin Users — list users + register new user form.
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
-import { api } from '../../lib/api';
+import {
+  listAdminUsers,
+  createAdminUser,
+  deleteAdminUser,
+  getAdminErrorMessage,
+  type AdminUser,
+} from '../../lib/adminApi';
 import { useAppTheme } from '../../theme';
 import { useStore } from '../../store';
-import { CONFIG } from '../../config';
 
 export function AdminUsers() {
   const { colors, spacing, radius, typography } = useAppTheme();
@@ -12,7 +17,7 @@ export function AdminUsers() {
     () => createStyles(colors, spacing, radius, typography),
     [colors, spacing, radius, typography],
   );
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(true);
@@ -24,10 +29,10 @@ export function AdminUsers() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/users');
-      setUsers(res.users ?? []);
+      const userRows = await listAdminUsers();
+      setUsers(userRows);
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -41,13 +46,13 @@ export function AdminUsers() {
       return;
     }
     try {
-      await api.post('/auth/register', { username: newUsername.trim(), password: newPassword.trim() });
+      await createAdminUser({ username: newUsername.trim(), password: newPassword.trim(), role: 'user' });
       setNewUsername('');
       setNewPassword('');
       setError('');
-      load();
+      await load();
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     }
   };
 
@@ -75,9 +80,9 @@ export function AdminUsers() {
     });
   }, []);
 
-  const removeUser = useCallback(async (item: any) => {
+  const removeUser = useCallback(async (item: AdminUser) => {
     if (!item?.id || !item?.username) return;
-    if (item.id === authUser?.sub) {
+    if (item.id === authUser?.sub || item.username === authUser?.username) {
       setError('You cannot remove the currently logged-in admin.');
       return;
     }
@@ -88,50 +93,21 @@ export function AdminUsers() {
     setDeletingUserId(item.id);
     setError('');
     try {
-      let triedDeleteMethod = false;
-      try {
-        // Prefer POST fallback endpoint (more proxy/CORS-friendly than DELETE).
-        await api.post(`/users/${item.id}/remove`);
-      } catch (postErr: any) {
-        const status = Number(postErr?.status || 0);
-        // Backward compatibility for servers that only support DELETE /users/:id.
-        if ([404, 405, 501].includes(status)) {
-          triedDeleteMethod = true;
-          await api.delete(`/users/${item.id}`);
-        } else {
-          throw postErr;
-        }
-      }
-
-      let listRes = await api.get('/users');
-      let nextUsers = Array.isArray(listRes?.users) ? listRes.users : [];
-      let stillExists = nextUsers.some((u: any) => u?.id === item.id);
-
-      // If POST succeeded but server still reports the user, force a DELETE retry once.
-      if (stillExists && !triedDeleteMethod) {
-        triedDeleteMethod = true;
-        await api.delete(`/users/${item.id}`).catch(() => {});
-        listRes = await api.get('/users');
-        nextUsers = Array.isArray(listRes?.users) ? listRes.users : [];
-        stillExists = nextUsers.some((u: any) => u?.id === item.id);
-      }
+      await deleteAdminUser(item);
+      const nextUsers = await listAdminUsers();
+      const stillExists = nextUsers.some((u) => u.id === item.id || u.username === item.username);
 
       if (stillExists) {
-        throw new Error(
-          `User still exists after remove request on API target ${CONFIG.API_URL}.`,
-        );
+        throw new Error('User still exists after delete request.');
       }
 
       setUsers(nextUsers);
-    } catch (e: any) {
-      const apiMessage = e?.body?.error;
-      setError(
-        typeof apiMessage === 'string' ? apiMessage : (e?.message ?? 'Failed to delete user'),
-      );
+    } catch (e) {
+      setError(getAdminErrorMessage(e, 'Failed to delete user'));
     } finally {
       setDeletingUserId(null);
     }
-  }, [authUser?.sub, confirmDelete, load]);
+  }, [authUser?.sub, authUser?.username, confirmDelete]);
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={colors.status.info} /></View>;
@@ -215,14 +191,14 @@ export function AdminUsers() {
 
               <Pressable
                 onPress={() => removeUser(item)}
-                disabled={item.id === authUser?.sub || deletingUserId === item.id}
+                disabled={item.id === authUser?.sub || item.username === authUser?.username || deletingUserId === item.id}
                 style={[
                   styles.deleteBtn,
-                  (item.id === authUser?.sub || deletingUserId === item.id) && styles.deleteBtnDisabled,
+                  (item.id === authUser?.sub || item.username === authUser?.username || deletingUserId === item.id) && styles.deleteBtnDisabled,
                 ]}
               >
                 <Text style={styles.deleteBtnText}>
-                  {item.id === authUser?.sub
+                  {item.id === authUser?.sub || item.username === authUser?.username
                     ? 'CURRENT'
                     : deletingUserId === item.id
                       ? 'REMOVING...'

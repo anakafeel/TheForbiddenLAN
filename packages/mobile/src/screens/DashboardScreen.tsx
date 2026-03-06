@@ -1,13 +1,17 @@
-import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Switch, Linking } from "react-native";
+import React, { useMemo, useEffect, useState, useCallback, useRef, useContext } from "react";
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
 import BottomMenu from "../components/BottomMenu";
 import { useAppTheme } from "../theme";
 import { useStore, type ConnectionMode } from "../store";
 import { comms } from "../utils/comms";
 import { CONFIG } from "../config";
+import { ChannelContext } from "../context/ChannelContext";
+import { joinChannel } from "../utils/socket";
 import {
   getSignalColor,
   getSignalStrengthFromBars,
+  getSignalStrengthFromPercent,
+  getBarsFromPercent,
 } from "../utils/signalStrength";
 
 type Talkgroup = {
@@ -22,6 +26,8 @@ type Talkgroup = {
 type TalkgroupMember = {
   id: string;
   username: string;
+  displayName?: string;
+  photoUrl?: string;
 };
 
 type ActiveUserRow = {
@@ -30,12 +36,7 @@ type ActiveUserRow = {
   displayName: string;
   channelId: string;
   channelName: string;
-  discordUrl: string | null;
 };
-
-function normalizeDiscordKey(value: string) {
-  return String(value || "").trim().toLowerCase();
-}
 
 function formatUserLabel(userId: string, localUserId?: string | null) {
   if (!userId) return "UNKNOWN";
@@ -49,52 +50,19 @@ function getMinutesAgo(createdAt: number) {
   return Math.floor(deltaMs / 60_000);
 }
 
-function parseDiscordChannelMap(raw: string | undefined) {
-  if (!raw) return {} as Record<string, string>;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {} as Record<string, string>;
-    }
-    const map: Record<string, string> = {};
-    Object.entries(parsed).forEach(([key, value]) => {
-      if (typeof value === "string" && value.trim()) {
-        map[normalizeDiscordKey(key)] = value.trim();
-      }
-    });
-    return map;
-  } catch (err) {
-    console.warn("[Dashboard] Invalid EXPO_PUBLIC_DISCORD_CHANNEL_MAP JSON:", err);
-    return {} as Record<string, string>;
-  }
+function formatLinkLabel(strength: "strong" | "weak" | "none") {
+  if (strength === "strong") return "Strong";
+  if (strength === "weak") return "Weak";
+  return "Offline";
 }
 
-function resolveDiscordUrl(
-  talkgroup: Talkgroup,
-  discordGuildId: string | undefined,
-  discordChannelMap: Record<string, string>,
-) {
-  const directUrl =
-    talkgroup.discordChannelUrl ||
-    talkgroup.discord_channel_url ||
-    null;
-  if (directUrl && /^https?:\/\//i.test(directUrl)) {
-    return directUrl;
-  }
-
-  const configuredChannel =
-    talkgroup.discordChannelId ||
-    talkgroup.discord_channel_id ||
-    discordChannelMap[normalizeDiscordKey(talkgroup.id)] ||
-    discordChannelMap[normalizeDiscordKey(talkgroup.name)] ||
-    null;
-
-  if (!configuredChannel) return null;
-  if (/^https?:\/\//i.test(configuredChannel)) return configuredChannel;
-  if (!discordGuildId) return null;
-
-  return `https://discord.com/channels/${discordGuildId}/${configuredChannel}`;
+function formatDataUsage(kb: number) {
+  const safe = Math.max(0, Number(kb) || 0);
+  if (safe >= 1024 * 1024) return `${(safe / (1024 * 1024)).toFixed(1)} GB`;
+  if (safe >= 1024) return `${(safe / 1024).toFixed(1)} MB`;
+  return `${Math.round(safe)} KB`;
 }
+
 
 function StatusCard({
   label,
@@ -164,20 +132,19 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const notificationFeed = notifications.slice(0, 8);
   const jwt = useStore((s) => s.jwt);
   const user = useStore((s) => s.user);
-  const preferredConnection = useStore((s) => s.preferredConnection);
+  const setActiveTalkgroup = useStore((s) => s.setActiveTalkgroup);
+  const signalStatus = useStore((s) => s.signalStatus);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
+  const { current, setCurrent } = useContext(ChannelContext as any) as {
+    current: { id: string; name: string } | null;
+    setCurrent: (channel: any) => void;
+  };
 
   const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([]);
   const [presenceByTalkgroup, setPresenceByTalkgroup] = useState<Record<string, string[]>>({});
   const [membersById, setMembersById] = useState<Record<string, TalkgroupMember>>({});
 
   const mountedRef = useRef(true);
-
-  const discordGuildId = CONFIG.DISCORD_GUILD_ID;
-  const discordChannelMap = useMemo(
-    () => parseDiscordChannelMap(CONFIG.DISCORD_CHANNEL_MAP),
-    [],
-  );
 
   const selectConnection = (mode: ConnectionMode) => {
     setPreferredConnection(mode);
@@ -216,7 +183,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
             ? data
             : [];
 
-        const mappedTalkgroups = rawTalkgroups
+        const mappedTalkgroups: Talkgroup[] = rawTalkgroups
           .filter((tg: any) => tg && tg.id && tg.name)
           .map((tg: any) => ({
             id: String(tg.id),
@@ -267,9 +234,20 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
         memberChunks.flat().forEach((member: any) => {
           if (!member?.id) return;
           const userId = String(member.id);
+          const profile = member?.profile && typeof member.profile === "object"
+            ? member.profile
+            : {};
           mergedMembers[userId] = {
             id: userId,
             username: typeof member.username === "string" ? member.username : userId,
+            displayName:
+              typeof profile.display_name === "string" && profile.display_name.trim()
+                ? profile.display_name.trim()
+                : undefined,
+            photoUrl:
+              typeof profile.photo_url === "string" && profile.photo_url.trim()
+                ? profile.photo_url.trim()
+                : undefined,
           };
         });
 
@@ -297,8 +275,14 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
       if (!msg.talkgroup) return;
 
       const talkgroupId = String(msg.talkgroup);
-      const online = Array.isArray(msg.online)
-        ? Array.from(new Set(msg.online.map((u: any) => String(u)).filter(Boolean)))
+      const online: string[] = Array.isArray(msg.online)
+        ? Array.from(
+            new Set<string>(
+              msg.online
+                .map((u: any) => String(u))
+                .filter((u: string) => u.length > 0),
+            ),
+          )
         : [];
 
       setPresenceByTalkgroup((prev) => ({
@@ -324,9 +308,9 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
       const onlineUsers = presenceByTalkgroup[tg.id] ?? [];
       if (!Array.isArray(onlineUsers) || onlineUsers.length === 0) return;
 
-      const discordUrl = resolveDiscordUrl(tg, discordGuildId, discordChannelMap);
-
       onlineUsers.forEach((userId) => {
+        const localUserId = user?.sub ? String(user.sub) : null;
+        if (localUserId && String(userId) === localUserId) return;
         const rowKey = `${tg.id}:${userId}`;
         if (seen.has(rowKey)) return;
         seen.add(rowKey);
@@ -336,11 +320,11 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           key: rowKey,
           userId,
           displayName:
+            member?.displayName ||
             member?.username ||
             formatUserLabel(userId, user?.sub ?? null),
           channelId: tg.id,
           channelName: tg.name,
-          discordUrl,
         });
       });
     });
@@ -358,21 +342,34 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     presenceByTalkgroup,
     membersById,
     user?.sub,
-    discordGuildId,
-    discordChannelMap,
   ]);
 
-  const handleUserPress = useCallback(async (activeUser: ActiveUserRow) => {
-    if (!activeUser.discordUrl) return;
-    try {
-      await Linking.openURL(activeUser.discordUrl);
-    } catch (err) {
-      console.warn(
-        `[Dashboard] Failed to open Discord channel for ${activeUser.channelName}:`,
-        err,
-      );
-    }
-  }, []);
+  const handleUserPress = useCallback((activeUser: ActiveUserRow) => {
+    const selectedChannel = {
+      id: activeUser.channelId,
+      name: activeUser.channelName,
+      status: "active",
+      users: null,
+      transmitting: false,
+    };
+
+    setCurrent(selectedChannel as any);
+    setActiveTalkgroup(activeUser.channelId);
+    joinChannel(activeUser.channelId);
+    navigation.navigate("PTT");
+  }, [navigation, setActiveTalkgroup, setCurrent]);
+
+  const satStrength = getSignalStrengthFromBars(signalStatus.certusDataBars, 5);
+  const cellStrength = getSignalStrengthFromPercent(signalStatus.cellularSignal);
+  const satBars = Math.max(
+    0,
+    Math.min(4, Math.round((Math.max(0, Number(signalStatus.certusDataBars) || 0) / 5) * 4)),
+  );
+  const cellBars = Math.max(0, Math.min(4, getBarsFromPercent(signalStatus.cellularSignal, 4)));
+  const satValue = formatLinkLabel(satStrength);
+  const cellValue = formatLinkLabel(cellStrength);
+  const satMetric = `${Math.max(0, Number(signalStatus.certusDataBars) || 0)}/5 bars · ${formatDataUsage(signalStatus.certusDataUsedKB)}`;
+  const cellMetric = `${Math.max(0, Number(signalStatus.cellularSignal) || 0)}% signal`;
 
   return (
     <View style={styles.container}>
@@ -411,17 +408,15 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               showsVerticalScrollIndicator
             >
               {activeUsers.length === 0 ? (
-                <Text style={styles.usersEmptyText}>No live users in joined talk groups</Text>
+                <Text style={styles.usersEmptyText}>No live users in your talk groups</Text>
               ) : (
                 activeUsers.map((activeUser) => (
                   <Pressable
                     key={activeUser.key}
                     onPress={() => handleUserPress(activeUser)}
-                    disabled={!activeUser.discordUrl}
                     style={({ pressed }) => [
                       styles.userRow,
-                      !activeUser.discordUrl && styles.userRowDisabled,
-                      pressed && activeUser.discordUrl && styles.userRowPressed,
+                      pressed && styles.userRowPressed,
                     ]}
                   >
                     <View style={styles.userRowLeft}>
@@ -432,12 +427,9 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
                       </View>
                     </View>
                     <Text
-                      style={[
-                        styles.userStatus,
-                        !activeUser.discordUrl && styles.userStatusUnavailable,
-                      ]}
+                      style={styles.userStatus}
                     >
-                      {activeUser.discordUrl ? "DISCORD" : "UNAVAILABLE"}
+                      {current?.id === activeUser.channelId ? "IN GROUP" : "JOIN"}
                     </Text>
                   </Pressable>
                 ))
@@ -448,23 +440,23 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           <View style={styles.signalStack}>
             <StatusCard
               label="Satellite"
-              value="Strong"
-              metric="+99% Latency Opt."
-              bars={4}
-              strength="strong"
+              value={satValue}
+              metric={satMetric}
+              bars={satBars}
+              strength={satStrength}
               colors={colors}
-              isActive={preferredConnection === "satellite"}
+              isActive={signalStatus.activeLink === "satellite"}
               onPress={() => selectConnection("satellite")}
               styles={styles}
             />
             <StatusCard
               label="Cellular"
-              value="Weak"
-              metric="+95% Signal"
-              bars={2}
-              strength="weak"
+              value={cellValue}
+              metric={cellMetric}
+              bars={cellBars}
+              strength={cellStrength}
               colors={colors}
-              isActive={preferredConnection === "cellular"}
+              isActive={signalStatus.activeLink === "cellular"}
               onPress={() => selectConnection("cellular")}
               styles={styles}
             />

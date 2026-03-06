@@ -2,7 +2,7 @@
 //   user === null   → LoginScreen
 //   role === admin  → Admin sidebar (web) or bottom tabs (native)
 //   role === user   → Annie's AppDrawer (Dashboard, Channels, PTT, Profile)
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -10,7 +10,10 @@ import { Text, Platform } from 'react-native';
 import { ChannelProvider } from './context/ChannelContext';
 import { useStore } from './store';
 import { setJwtGetter } from './lib/api';
+import { loadUserPreferences, saveUserPreferences } from './lib/userPreferences';
 import { useAppTheme } from './theme';
+import SystemEventBridge from './components/SystemEventBridge';
+import { CONFIG } from './config';
 
 // Screens
 import { LoginScreen } from './screens/LoginScreen';
@@ -20,6 +23,7 @@ import { AdminDevices } from './screens/admin/AdminDevices';
 import { AdminTalkgroups } from './screens/admin/AdminTalkgroups';
 import { AdminUsers } from './screens/admin/AdminUsers';
 import { AdminMap } from './screens/admin/AdminMap';
+import { AdminMonitoring } from './screens/admin/AdminMonitoring';
 import { AdminSidebar } from './components/AdminSidebar';
 
 const AdminTabs = createBottomTabNavigator();
@@ -58,18 +62,97 @@ function AdminNavigator() {
       />
       <AdminTabs.Screen name="Users" component={AdminUsers} options={{ tabBarLabel: 'Users' }} />
       <AdminTabs.Screen name="Map" component={AdminMap} options={{ tabBarLabel: 'Map' }} />
+      <AdminTabs.Screen name="Monitoring" component={AdminMonitoring} options={{ tabBarLabel: 'Monitoring' }} />
     </AdminTabs.Navigator>
   );
 }
 
 export default function App() {
+  const jwt = useStore(s => s.jwt);
   const user = useStore(s => s.user);
+  const setProfile = useStore((s) => s.setProfile);
+  const preferredConnection = useStore((s) => s.preferredConnection);
+  const setPreferredConnection = useStore((s) => s.setPreferredConnection);
   const { themeMode } = useAppTheme();
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+  const [profileHydrated, setProfileHydrated] = useState(false);
 
   // Wire the API helper's JWT getter to the store — runs once on mount.
   useEffect(() => {
     setJwtGetter(() => useStore.getState().jwt);
   }, []);
+
+  // Load persisted user profile/preferences on app boot.
+  useEffect(() => {
+    let mounted = true;
+
+    const hydrate = async () => {
+      const snapshot = await loadUserPreferences();
+      if (!mounted) return;
+
+      if (snapshot) {
+        setPreferredConnection(snapshot.preferredConnection);
+      }
+
+      setPrefsHydrated(true);
+    };
+
+    hydrate();
+
+    return () => {
+      mounted = false;
+    };
+  }, [setPreferredConnection]);
+
+  // Pull user-scoped profile from backend after authentication.
+  useEffect(() => {
+    if (!jwt || !user || user.role === 'admin') {
+      setProfileHydrated(user?.role === 'admin');
+      return;
+    }
+
+    let cancelled = false;
+    setProfileHydrated(false);
+
+    const hydrateRemoteProfile = async () => {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/users/me/profile`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+        const remote = data?.profile;
+        if (cancelled || !remote || typeof remote !== 'object') return;
+
+        setProfile({
+          displayName: typeof remote.display_name === 'string' ? remote.display_name : '',
+          callsign: typeof remote.callsign === 'string' ? remote.callsign : '',
+          photoUrl: typeof remote.photo_url === 'string' ? remote.photo_url : '',
+          statusMessage: typeof remote.status_message === 'string' ? remote.status_message : '',
+        });
+      } catch {
+        // Keep local defaults if backend profile hydration fails.
+      } finally {
+        if (!cancelled) setProfileHydrated(true);
+      }
+    };
+
+    hydrateRemoteProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jwt, user?.sub, user?.role, setProfile]);
+
+  // Persist device preference (not profile) whenever it changes after hydration.
+  useEffect(() => {
+    if (!prefsHydrated) return;
+
+    saveUserPreferences({
+      preferredConnection,
+    });
+  }, [prefsHydrated, preferredConnection]);
 
   // No user → login. Admin → admin tabs. User → Annie's drawer (Dashboard, Channels, PTT, Profile).
   if (!user) {
@@ -83,6 +166,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer key={themeMode}>
+        <SystemEventBridge profileHydrated={profileHydrated} />
         {user.role === 'admin' ? (
           <AdminNavigator />
         ) : (

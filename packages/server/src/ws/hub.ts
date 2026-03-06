@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import type { WebSocket } from 'ws';
 import dgram from 'dgram';
+import { recordMonitoringEvent } from '../services/monitoring.js';
 
 // talkgroup ID → set of connected raw WebSockets
 const rooms = new Map<string, Set<WebSocket>>();
@@ -17,6 +18,23 @@ const socketRooms = new Map<WebSocket, Set<string>>();
 const sessionTalkgroup = new Map<number, string>();
 // Reverse lookup: senderDeviceId → WebSocket (for matching UDP registrations to WS connections)
 const deviceIdToSocket = new Map<string, WebSocket>();
+
+export interface HubRoomMetrics {
+  talkgroup: string;
+  members: number;
+  floorHolder: string | null;
+}
+
+export interface HubMonitoringMetrics {
+  connectedSockets: number;
+  activeTalkgroups: number;
+  floorHolders: number;
+  udpClients: number;
+  udpAudioRelays: number;
+  activeSessionRoutes: number;
+  senderDeviceMappings: number;
+  rooms: HubRoomMetrics[];
+}
 
 /**
  * Force close all active WebSocket sessions for a given JWT user id.
@@ -35,6 +53,12 @@ export function disconnectUserSessions(userId: string, reason = 'user_removed') 
   }
   if (disconnected > 0) {
     console.log(`[hub] disconnected ${disconnected} socket(s) for removed user ${userId}`);
+    recordMonitoringEvent({
+      level: 'warn',
+      category: 'socket',
+      message: 'Disconnected websocket sessions for removed user',
+      metadata: { userId, disconnected, reason },
+    });
   }
   return disconnected;
 }
@@ -57,6 +81,11 @@ export function startUdpServer(options: { port: number }) {
         udpClients.set(parsed.userId, rinfo);
         if (isNew) {
           console.log(`[hub] UDP_REGISTER: userId=${parsed.userId} from ${rinfo.address}:${rinfo.port} (total: ${udpClients.size})`);
+          recordMonitoringEvent({
+            category: 'udp',
+            message: 'UDP client registered',
+            metadata: { userId: parsed.userId, address: rinfo.address, port: rinfo.port, totalClients: udpClients.size },
+          });
         }
         // Also register by the WS userId if we can resolve it
         // (senderDeviceId from PTT_START → WebSocket → JWT userId)
@@ -66,6 +95,11 @@ export function startUdpServer(options: { port: number }) {
           if (wsUser && wsUser.userId !== parsed.userId) {
             udpClients.set(wsUser.userId, rinfo);
             console.log(`[hub] UDP_REGISTER: also mapped JWT userId=${wsUser.userId} → ${rinfo.address}:${rinfo.port}`);
+            recordMonitoringEvent({
+              category: 'udp',
+              message: 'Mapped UDP endpoint to JWT user',
+              metadata: { sourceDeviceId: parsed.userId, userId: wsUser.userId, address: rinfo.address, port: rinfo.port },
+            });
           }
         }
       }
@@ -89,6 +123,12 @@ export function startUdpServer(options: { port: number }) {
           sessionTalkgroup.set(parsed.sessionId, tg);
         }
         console.warn(`[hub] UDP PTT_AUDIO: session 0x${((parsed.sessionId as number) || 0).toString(16)} not in map — recovered tg from message: ${tg}`);
+        recordMonitoringEvent({
+          level: 'warn',
+          category: 'udp',
+          message: 'Recovered talkgroup from UDP payload',
+          metadata: { sessionId: parsed.sessionId, talkgroup: tg },
+        });
       }
 
       if (!tg) {
@@ -171,6 +211,11 @@ export function startUdpServer(options: { port: number }) {
   udpServer.on('listening', () => {
     const address = udpServer.address();
     console.log(`[hub] UDP server listening on ${address.address}:${address.port}`);
+    recordMonitoringEvent({
+      category: 'udp',
+      message: 'UDP relay server listening',
+      metadata: { address: address.address, port: address.port },
+    });
   });
 
   udpServer.bind(options.port);
@@ -184,6 +229,7 @@ export function startUdpServer(options: { port: number }) {
 // The server GRANTS or DENIES PTT_START and drops audio from non-holders.
 interface FloorHolder {
   socket: WebSocket;
+  userId: string;
   senderId: string;
   sessionId: number;
   acquiredAt: number;
@@ -199,13 +245,13 @@ function startFloorWatchdog() {
     for (const [tg, holder] of talkgroupFloor) {
       if (now - holder.acquiredAt > FLOOR_WATCHDOG_MS) {
         console.log(`[hub] floor watchdog: auto-releasing ${tg} held by ${holder.senderId} for ${now - holder.acquiredAt}ms`);
-        releaseFloor(tg, holder.senderId);
+        releaseFloor(tg, holder.senderId, 'watchdog');
       }
     }
   }, 10_000); // check every 10s
 }
 
-function releaseFloor(talkgroup: string, senderId?: string) {
+function releaseFloor(talkgroup: string, senderId?: string, reason: 'ptt_end' | 'watchdog' | 'disconnect' | 'system' = 'system') {
   const holder = talkgroupFloor.get(talkgroup);
   if (!holder) return;
   // Only release if the requester is the actual holder (or force-release via watchdog/disconnect)
@@ -217,6 +263,7 @@ function releaseFloor(talkgroup: string, senderId?: string) {
     type: 'FLOOR_RELEASED',
     talkgroup,
     previousHolder: holder.senderId,
+    previousHolderUserId: holder.userId,
   });
   const room = rooms.get(talkgroup);
   if (room) {
@@ -224,6 +271,12 @@ function releaseFloor(talkgroup: string, senderId?: string) {
       if (peer.readyState === 1) peer.send(releaseMsg);
     }
   }
+
+  recordMonitoringEvent({
+    category: 'floor',
+    message: 'Floor released',
+    metadata: { talkgroup, previousHolder: holder.senderId, previousHolderUserId: holder.userId, reason },
+  });
 }
 
 function releaseAllFloors(socket: WebSocket) {
@@ -231,9 +284,34 @@ function releaseAllFloors(socket: WebSocket) {
   for (const [tg, holder] of talkgroupFloor) {
     if (holder.socket === socket) {
       console.log(`[hub] releasing floor for ${tg} (socket disconnected)`);
-      releaseFloor(tg);
+      releaseFloor(tg, undefined, 'disconnect');
     }
   }
+}
+
+export function getHubMonitoringMetrics(): HubMonitoringMetrics {
+  const roomsWithMembers: HubRoomMetrics[] = [];
+  for (const [talkgroup, sockets] of rooms.entries()) {
+    if (sockets.size === 0) continue;
+    roomsWithMembers.push({
+      talkgroup,
+      members: sockets.size,
+      floorHolder: talkgroupFloor.get(talkgroup)?.userId ?? null,
+    });
+  }
+
+  roomsWithMembers.sort((a, b) => a.talkgroup.localeCompare(b.talkgroup));
+
+  return {
+    connectedSockets: socketUser.size,
+    activeTalkgroups: roomsWithMembers.length,
+    floorHolders: talkgroupFloor.size,
+    udpClients: udpClients.size,
+    udpAudioRelays: udpAudioRelayCount,
+    activeSessionRoutes: sessionTalkgroup.size,
+    senderDeviceMappings: deviceIdToSocket.size,
+    rooms: roomsWithMembers,
+  };
 }
 // ── End Floor Control ─────────────────────────────────────────────────────────
 
@@ -285,11 +363,13 @@ export async function registerHub(app: FastifyInstance) {
     // Authenticate via query param: ws://host/ws?token=<jwt>
     const token = (req.query as any).token;
     let userId = '';
+    let userRole = 'user';
     let deviceId: string | null = null;
 
     try {
       const payload = app.jwt.verify(token) as any;
       userId = payload.sub;
+      userRole = payload.role === 'admin' ? 'admin' : 'user';
     } catch {
       socket.close(1008, 'unauthorized');
       return;
@@ -313,6 +393,11 @@ export async function registerHub(app: FastifyInstance) {
 
     socketUser.set(socket, { userId, deviceId, senderDeviceId: null });
     socketRooms.set(socket, new Set());
+    recordMonitoringEvent({
+      category: 'socket',
+      message: 'WebSocket connected',
+      metadata: { userId, activeSockets: socketUser.size },
+    });
 
     // Start the floor watchdog on first connection
     startFloorWatchdog();
@@ -337,8 +422,23 @@ export async function registerHub(app: FastifyInstance) {
           if (existingUdp && existingUser.userId !== msg.sender) {
             udpClients.set(existingUser.userId, existingUdp);
             console.log(`[hub] Bridged UDP endpoint: ${msg.sender} → JWT userId ${existingUser.userId} (addr: ${existingUdp.address}:${existingUdp.port})`);
+            recordMonitoringEvent({
+              category: 'udp',
+              message: 'Bridged existing UDP endpoint to JWT user',
+              metadata: {
+                sourceDeviceId: msg.sender,
+                userId: existingUser.userId,
+                address: existingUdp.address,
+                port: existingUdp.port,
+              },
+            });
           } else if (isNewSenderId) {
             console.log(`[hub] Sender device updated: ${msg.sender} for JWT userId ${existingUser.userId}`);
+            recordMonitoringEvent({
+              category: 'socket',
+              message: 'Sender device mapping updated',
+              metadata: { senderDeviceId: msg.sender, userId: existingUser.userId },
+            });
           }
         }
       }
@@ -359,10 +459,38 @@ export async function registerHub(app: FastifyInstance) {
         case 'JOIN_TALKGROUP': {
           const tg: string = msg.talkgroup;
           if (!tg) break;
+
+          if (userRole !== 'admin') {
+            const membership = await prisma.membership.findUnique({
+              where: { user_id_talkgroup_id: { user_id: userId, talkgroup_id: tg } },
+              select: { user_id: true },
+            });
+
+            if (!membership) {
+              recordMonitoringEvent({
+                level: 'warn',
+                category: 'talkgroup',
+                message: 'Socket denied talkgroup join',
+                metadata: { userId, talkgroup: tg },
+              });
+              socket.send(JSON.stringify({
+                type: 'ERROR',
+                error: 'forbidden_talkgroup',
+                talkgroup: tg,
+              }));
+              break;
+            }
+          }
+
           if (!rooms.has(tg)) rooms.set(tg, new Set());
           rooms.get(tg)!.add(socket);
           socketRooms.get(socket)!.add(tg);
           broadcastPresence(tg);
+          recordMonitoringEvent({
+            category: 'talkgroup',
+            message: 'Socket joined talkgroup',
+            metadata: { userId, talkgroup: tg, members: rooms.get(tg)?.size ?? 0 },
+          });
 
           // If someone is already transmitting on this talkgroup,
           // notify the new joiner so they know the channel is busy.
@@ -372,6 +500,7 @@ export async function registerHub(app: FastifyInstance) {
               type: 'FLOOR_GRANT',
               talkgroup: tg,
               winner: currentHolder.senderId,
+              winnerUserId: currentHolder.userId,
               timestamp: currentHolder.acquiredAt,
             }));
           }
@@ -384,6 +513,11 @@ export async function registerHub(app: FastifyInstance) {
           rooms.get(tg)?.delete(socket);
           socketRooms.get(socket)?.delete(tg);
           broadcastPresence(tg);
+          recordMonitoringEvent({
+            category: 'talkgroup',
+            message: 'Socket left talkgroup',
+            metadata: { userId, talkgroup: tg, members: rooms.get(tg)?.size ?? 0 },
+          });
           break;
         }
 
@@ -407,10 +541,17 @@ export async function registerHub(app: FastifyInstance) {
             }
             // Floor is taken by another device → DENY this request
             console.log(`[hub] FLOOR_DENY: ${userId} denied on ${tg} (held by ${existingHolder.senderId})`);
+            recordMonitoringEvent({
+              level: 'warn',
+              category: 'floor',
+              message: 'Floor request denied',
+              metadata: { requester: userId, talkgroup: tg, holder: existingHolder.senderId },
+            });
             socket.send(JSON.stringify({
               type: 'FLOOR_DENY',
               talkgroup: tg,
               holder: existingHolder.senderId,
+              holderUserId: existingHolder.userId,
             }));
             break;
           }
@@ -438,9 +579,15 @@ export async function registerHub(app: FastifyInstance) {
 
           talkgroupFloor.set(tg, {
             socket,
+            userId,
             senderId: senderDeviceId,
             sessionId: msg.sessionId,
             acquiredAt: Date.now(),
+          });
+          recordMonitoringEvent({
+            category: 'floor',
+            message: 'Floor granted',
+            metadata: { talkgroup: tg, winner: senderDeviceId, sessionId: msg.sessionId },
           });
 
           // Send FLOOR_GRANT to the requester
@@ -448,6 +595,7 @@ export async function registerHub(app: FastifyInstance) {
             type: 'FLOOR_GRANT',
             talkgroup: tg,
             winner: msg.sender || userId,
+            winnerUserId: userId,
             timestamp: Date.now(),
           }));
 
@@ -481,7 +629,7 @@ export async function registerHub(app: FastifyInstance) {
           // ── Floor Release ──────────────────────────────────────────
           const holder = talkgroupFloor.get(tg);
           if (holder && holder.socket === socket) {
-            releaseFloor(tg, holder.senderId);
+            releaseFloor(tg, holder.senderId, 'ptt_end');
             console.log(`[hub] floor released: ${tg} by ${holder.senderId}`);
           }
           // Clean up session routing entry (redundant safety — releaseFloor also does this)
@@ -505,6 +653,15 @@ export async function registerHub(app: FastifyInstance) {
       // Release any floors held by this socket before cleaning up
       releaseAllFloors(socket);
       const closingUser = socketUser.get(socket);
+      recordMonitoringEvent({
+        category: 'socket',
+        message: 'WebSocket disconnected',
+        metadata: {
+          userId: closingUser?.userId ?? 'unknown',
+          senderDeviceId: closingUser?.senderDeviceId ?? null,
+          activeSockets: Math.max(0, socketUser.size - 1),
+        },
+      });
       if (closingUser?.senderDeviceId) {
         deviceIdToSocket.delete(closingUser.senderDeviceId);
       }

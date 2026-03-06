@@ -1,7 +1,13 @@
 // Admin Dashboard — overview stats: total users, devices, talkgroups + device status list.
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, ActivityIndicator, ScrollView, StyleSheet, Switch } from 'react-native';
-import { api } from '../../lib/api';
+import {
+  listAdminDevices,
+  listAdminTalkgroups,
+  listAdminUsers,
+  getAdminErrorMessage,
+  type AdminDevice,
+} from '../../lib/adminApi';
 import { useAppTheme } from '../../theme';
 
 export function AdminDashboard() {
@@ -11,7 +17,7 @@ export function AdminDashboard() {
     [colors, spacing, radius, typography],
   );
   const [stats, setStats] = useState({ users: 0, devices: 0, activeDevices: 0, talkgroups: 0 });
-  const [devices, setDevices] = useState([]);
+  const [devices, setDevices] = useState<AdminDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -19,21 +25,37 @@ export function AdminDashboard() {
     setLoading(true);
     setError('');
     try {
-      const [devRes, tgRes, usrRes] = await Promise.all([
-        api.get('/devices'),
-        api.get('/talkgroups'),
-        api.get('/users'),
+      const [devicesResult, talkgroupsResult, usersResult] = await Promise.allSettled([
+        listAdminDevices(),
+        listAdminTalkgroups(),
+        listAdminUsers(),
       ]);
-      const devs = devRes.devices ?? [];
+
+      const devs = devicesResult.status === 'fulfilled' ? devicesResult.value : [];
+      const talkgroups = talkgroupsResult.status === 'fulfilled' ? talkgroupsResult.value : [];
+      const users = usersResult.status === 'fulfilled' ? usersResult.value : [];
+
       setDevices(devs);
       setStats({
-        users: (usrRes.users ?? []).length,
+        users: users.length,
         devices: devs.length,
         activeDevices: devs.filter(d => d.active).length,
-        talkgroups: (tgRes.talkgroups ?? []).length,
+        talkgroups: talkgroups.length,
       });
+
+      const failures: string[] = [];
+      for (const result of [devicesResult, talkgroupsResult, usersResult]) {
+        if (result.status === 'rejected') {
+          const message = getAdminErrorMessage(result.reason);
+          if (message) failures.push(message);
+        }
+      }
+
+      if (failures.length > 0) {
+        setError(failures[0]);
+      }
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -101,7 +123,7 @@ export function AdminDashboard() {
   );
 }
 
-function StatCard({ label, value, color, styles }) {
+function StatCard({ label, value, color, styles }: { label: string; value: number; color: string; styles: any }) {
   return (
     <View style={[styles.card, { borderLeftColor: color, borderLeftWidth: 3 }]}>
       <Text style={[styles.cardValue, { color }]}>{value}</Text>

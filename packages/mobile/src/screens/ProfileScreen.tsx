@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,10 @@ import {
   Switch,
   ScrollView,
   Pressable,
+  Alert,
+  Platform,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import BottomMenu from "../components/BottomMenu";
 import { useAppTheme } from "../theme";
 import { useStore } from "../store";
@@ -40,6 +43,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
   );
 
   const user = useStore((s) => s.user);
+  const jwt = useStore((s) => s.jwt);
   const clearAuth = useStore((s) => s.clearAuth);
   const profile = useStore((s) => s.profile);
   const setProfile = useStore((s) => s.setProfile);
@@ -50,6 +54,9 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
   const [form, setForm] = useState(profile);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [isPickingPhoto, setIsPickingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [profileSyncError, setProfileSyncError] = useState("");
 
   useEffect(() => {
     setForm(profile);
@@ -73,6 +80,61 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
     form.unit !== profile.unit ||
     form.statusMessage !== profile.statusMessage;
 
+  const applyRemoteProfile = useCallback((remote: any) => {
+    if (!remote || typeof remote !== "object") return;
+    const displayName =
+      typeof remote.display_name === "string" ? remote.display_name : "";
+    const callsign =
+      typeof remote.callsign === "string" ? remote.callsign : "";
+    const photoUrl =
+      typeof remote.photo_url === "string" ? remote.photo_url : "";
+    const statusMessage =
+      typeof remote.status_message === "string" ? remote.status_message : "";
+
+    setProfile({
+      displayName,
+      callsign,
+      photoUrl,
+      statusMessage,
+    });
+    setForm((prev) => ({
+      ...prev,
+      displayName,
+      callsign,
+      photoUrl,
+      statusMessage,
+    }));
+  }, [setProfile]);
+
+  useEffect(() => {
+    if (!jwt) return;
+    let cancelled = false;
+
+    const hydrateRemoteProfile = async () => {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/users/me/profile`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.profile) {
+          applyRemoteProfile(data.profile);
+          setProfileSyncError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[Profile] Failed to fetch remote profile:", err);
+          setProfileSyncError("Unable to sync profile from backend.");
+        }
+      }
+    };
+
+    hydrateRemoteProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [jwt, applyRemoteProfile]);
+
   const updateField = (
     key: "displayName" | "callsign" | "photoUrl" | "unit" | "statusMessage",
     value: string,
@@ -80,15 +142,135 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const saveProfile = () => {
-    setProfile({
+  const saveProfile = async () => {
+    const nextProfile = {
       displayName: form.displayName.trim(),
       callsign: form.callsign.trim().toUpperCase(),
       photoUrl: form.photoUrl.trim(),
       unit: form.unit.trim(),
       statusMessage: form.statusMessage.trim(),
-    });
+    };
+
+    setProfile(nextProfile);
+    setPhotoError("");
+    setProfileSyncError("");
+
+    if (jwt) {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/users/me/profile`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: JSON.stringify({
+            display_name: nextProfile.displayName,
+            callsign: nextProfile.callsign,
+            photo_url: nextProfile.photoUrl,
+            status_message: nextProfile.statusMessage,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Profile sync failed: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data?.profile) {
+          applyRemoteProfile(data.profile);
+        }
+      } catch (err) {
+        console.warn("[Profile] Failed to sync profile to backend:", err);
+        setProfileSyncError("Saved locally, but backend sync failed.");
+      }
+    }
+
     setSavedAt(Date.now());
+  };
+
+  const pickPhotoFromWeb = async (): Promise<string | null> => {
+    if (typeof document === "undefined") return null;
+
+    return new Promise((resolve, reject) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+
+        if (file.size > 2 * 1024 * 1024) {
+          reject(new Error("Please select an image under 2MB."));
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error("Unable to read selected image."));
+        };
+        reader.onerror = () => reject(new Error("Unable to read selected image."));
+        reader.readAsDataURL(file);
+      };
+
+      input.click();
+    });
+  };
+
+  const pickPhoto = async () => {
+    setPhotoError("");
+    setIsPickingPhoto(true);
+
+    try {
+      // Native path when expo-image-picker is available.
+      if (Platform.OS !== "web") {
+        try {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+          if (!permission.granted) {
+            throw new Error("Photo permission was denied.");
+          }
+
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            quality: 0.75,
+            base64: false,
+          });
+
+          if (!result.canceled) {
+            const uri = result.assets?.[0]?.uri;
+            if (uri) {
+              updateField("photoUrl", uri);
+              return;
+            }
+          }
+        } catch {
+          Alert.alert(
+            "Photo Upload Unavailable",
+            "Unable to access the photo library. You can still paste an image URL manually.",
+          );
+        }
+        return;
+      }
+
+      const dataUrl = await pickPhotoFromWeb();
+      if (dataUrl) {
+        updateField("photoUrl", dataUrl);
+      }
+    } catch (err: any) {
+      const message = err?.message ?? "Unable to upload photo.";
+      setPhotoError(message);
+    } finally {
+      setIsPickingPhoto(false);
+    }
   };
 
   return (
@@ -155,6 +337,31 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
             autoCapitalize="none"
             style={styles.input}
           />
+          <View style={styles.photoActionRow}>
+            <Pressable
+              onPress={pickPhoto}
+              disabled={isPickingPhoto}
+              style={[
+                styles.photoButton,
+                isPickingPhoto && styles.photoButtonDisabled,
+              ]}
+            >
+              <Text style={styles.photoButtonText}>
+                {isPickingPhoto ? "Selecting..." : "Upload Photo"}
+              </Text>
+            </Pressable>
+            {form.photoUrl ? (
+              <Pressable
+                onPress={() => updateField("photoUrl", "")}
+                style={[styles.photoButton, styles.clearPhotoButton]}
+              >
+                <Text style={styles.clearPhotoButtonText}>Remove</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <Text style={[styles.photoHelper, photoError ? styles.photoHelperError : null]}>
+            {photoError || "You can paste an image URL or upload a local image file."}
+          </Text>
         </View>
 
         <View style={styles.card}>
@@ -244,6 +451,9 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
 
         {savedAt ? (
           <Text style={styles.savedBanner}>Profile saved locally.</Text>
+        ) : null}
+        {profileSyncError ? (
+          <Text style={styles.syncErrorBanner}>{profileSyncError}</Text>
         ) : null}
 
         <View style={styles.actionRow}>
@@ -365,6 +575,49 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
       marginBottom: spacing.sm,
       fontSize: typography.size.md,
     },
+    photoActionRow: {
+      flexDirection: "row",
+      gap: spacing.sm,
+      marginTop: spacing.xs,
+      marginBottom: spacing.sm,
+    },
+    photoButton: {
+      flex: 1,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.subtle,
+      backgroundColor: colors.background.tertiary,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+    },
+    photoButtonDisabled: {
+      opacity: 0.55,
+    },
+    photoButtonText: {
+      color: colors.text.primary,
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.semibold,
+    },
+    clearPhotoButton: {
+      flex: 0.72,
+      backgroundColor: colors.status.dangerSubtle,
+      borderColor: colors.status.dangerSubtle,
+    },
+    clearPhotoButtonText: {
+      color: colors.status.danger,
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.semibold,
+    },
+    photoHelper: {
+      color: colors.text.muted,
+      fontSize: typography.size.xs,
+      marginBottom: spacing.xs,
+    },
+    photoHelperError: {
+      color: colors.status.danger,
+    },
     settingRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -439,6 +692,12 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
       color: colors.status.active,
       fontSize: typography.size.sm,
       fontWeight: typography.weight.semibold,
+      textAlign: "center",
+    },
+    syncErrorBanner: {
+      color: colors.status.warning,
+      fontSize: typography.size.sm,
+      fontWeight: typography.weight.medium,
       textAlign: "center",
     },
     actionRow: {

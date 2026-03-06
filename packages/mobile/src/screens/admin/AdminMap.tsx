@@ -1,11 +1,19 @@
 // Admin Map — GPS positions of all devices via Leaflet (web only).
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
-import { api } from '../../lib/api';
+import {
+  listAdminMapPositions,
+  getAdminErrorMessage,
+  type AdminMapPosition,
+} from '../../lib/adminApi';
 import { useAppTheme } from '../../theme';
 
 // Conditionally import Leaflet only on web to prevent native crashes
-let MapContainer, TileLayer, Marker, Popup, L;
+let MapContainer: any;
+let TileLayer: any;
+let Marker: any;
+let Popup: any;
+let L: any;
 if (Platform.OS === 'web') {
   const rl = require('react-leaflet');
   MapContainer = rl.MapContainer;
@@ -22,38 +30,16 @@ export function AdminMap() {
     () => createStyles(colors, spacing, typography),
     [colors, spacing, typography],
   );
-  const [positions, setPositions] = useState([]);
+  const [positions, setPositions] = useState<AdminMapPosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const fetchPositions = useCallback(async () => {
     try {
-      const devRes = await api.get('/devices');
-      const devices = devRes.devices ?? [];
-
-      // Fetch GPS for each device in parallel; allSettled so missing GPS doesn't block others
-      const gpsResults = await Promise.allSettled(
-        devices.map(async (d) => {
-          const gpsRes = await api.get(`/devices/${d.id}/gps`);
-          return {
-            deviceId: d.id,
-            deviceName: d.name ?? d.serial,
-            active: d.active,
-            lat: gpsRes.gps.lat,
-            lng: gpsRes.gps.lng,
-            alt: gpsRes.gps.alt ?? 0,
-            updated_at: gpsRes.gps.updated_at,
-          };
-        })
-      );
-
-      const valid = gpsResults
-        .filter((r) => r.status === 'fulfilled')
-        .map((r) => r.value);
-
-      setPositions(valid);
+      const nextPositions = await listAdminMapPositions();
+      setPositions(nextPositions);
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -84,7 +70,7 @@ export function AdminMap() {
     : [49.28, -123.12];
 
   // Custom marker icons: green = active, red = inactive
-  const makeIcon = (active) =>
+  const makeIcon = (active: boolean) =>
     L.divIcon({
       className: '',
       html: `<div style="
