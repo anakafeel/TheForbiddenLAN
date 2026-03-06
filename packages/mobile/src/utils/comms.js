@@ -450,15 +450,20 @@ export async function initComms(jwt) {
 
     // ── RX: Decode each incoming Opus frame to PCM and accumulate ──
     if (msg.type === "PTT_AUDIO" && msg.data) {
-      // Deduplicate: server sends via both UDP and WebSocket for reliability.
-      // Drop the second copy so the frame is only decoded once.
+      // Only process UDP audio — server also sends via WebSocket for reliability,
+      // but we want real-time streaming so ignore WS duplicates.
+      if (msg._transport !== 'udp') {
+        return;
+      }
+
+      // Deduplicate: session may restart between transmissions
       const chunkKey = `${msg.sessionId}:${msg.chunk}`;
       if (_seenChunks.has(chunkKey)) return;
       _seenChunks.add(chunkKey);
 
-      // Diagnostic: log every incoming audio chunk BEFORE any guard
+      // Diagnostic: log every incoming audio chunk
       console.log(
-        `[comms] RX PTT_AUDIO chunk arrived (isLocalTx=${_isLocalTx}, via=${msg._transport ?? 'ws'}, chunk=${msg.chunk ?? '?'})`,
+        `[comms] RX PTT_AUDIO chunk (isLocalTx=${_isLocalTx}, chunk=${msg.chunk ?? '?'})`,
       );
 
       // Half-duplex: drop incoming audio while we are transmitting

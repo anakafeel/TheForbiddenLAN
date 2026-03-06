@@ -1,4 +1,5 @@
 // useComms — wraps ForbiddenLANComms with mic capture, audio playback, and AES-GCM encryption.
+// Requires valid JWT from login. Connects to the configured relay server.
 import { useEffect, useRef } from 'react';
 import { ForbiddenLANComms, Encryption } from '@forbiddenlan/comms';
 import { useStore } from '../store';
@@ -72,7 +73,7 @@ export function useComms() {
 
   const startPTT = async () => {
     commsRef.current?.startPTT();
-    await startMic(); // start capturing mic — browser will prompt for permission
+    await startMic(); // start capturing mic
   };
 
   const stopPTT = () => {

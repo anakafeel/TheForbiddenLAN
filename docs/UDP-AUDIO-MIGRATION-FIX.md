@@ -279,6 +279,31 @@ npx expo prebuild --clean
 npx expo run:android --device
 ```
 
+### Release APK "Cannot reach server" / Network Request Failed
+
+**Symptom:** Login works in dev mode but release APK shows "Cannot reach server: network request failed"
+
+**Cause:** Android blocks HTTP (cleartext) traffic by default in release builds. Our server uses HTTP, not HTTPS.
+
+**Fix:** Add `android:usesCleartextTraffic="true"` to the main AndroidManifest.xml:
+
+Edit `packages/mobile/android/app/src/main/AndroidManifest.xml`:
+
+Find:
+```xml
+<application ... >
+```
+
+Change to:
+```xml
+<application android:usesCleartextTraffic="true" ... >
+```
+
+Then rebuild:
+```bash
+npx expo run:android --variant release
+```
+
 ---
 
 ## Local Testing

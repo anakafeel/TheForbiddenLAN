@@ -2,7 +2,7 @@
 // Navigation is handled by App.jsx via conditional rendering (no navigate() call).
 // Admin users skip comms connection; regular users connect to the relay.
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { useStore } from '../store';
 import { CONFIG } from '../config';
 import { useAppTheme } from '../theme';
@@ -31,15 +31,78 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [diagnosticText, setDiagnosticText] = useState('');
+
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const runDiagnostics = async () => {
+    if (isDiagnosing) {
+      setIsDiagnosing(false);
+      setDiagnosticText(prev => prev + '\n🛑 Diagnostics stopped.');
+      return;
+    }
+    setIsDiagnosing(true);
+    setDiagnosticText('Running SATCOM diagnostics...\n');
+    let log = 'Running SATCOM diagnostics...\n';
+    const addLog = (msg: string) => {
+      log += msg + '\n';
+      setDiagnosticText(log);
+    };
+
+    addLog('Note: High packet loss means TCP handshakes (fetch) may take 20s+ to establish.\n');
+
+    // 1. Internet Check
+    try {
+      const start = Date.now();
+      addLog('Pinging Google 204 (Reachability)...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
+      const url = `https://clients3.google.com/generate_204?t=${start}`;
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      clearTimeout(timeoutId);
+      addLog(`✅ Internet reached in ${Date.now() - start}ms (Status: ${res.status})`);
+    } catch (e: any) {
+        if (e.name === 'AbortError') addLog(`❌ Internet timeout (90s). TCP failed.`);
+      else addLog(`❌ Internet error: ${e.message}`);
+    }
+
+    // 2. API Check Continuous
+    addLog(`\nPinging API (${CONFIG.API_URL})... waiting for connection...`);
+    let connected = false;
+    while (!connected && isDiagnosing) {
+      try {
+        const start = Date.now();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // Longer timeout for SATCOM
+        const url = `${CONFIG.API_URL}/ping?t=${start}`;
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(timeoutId);
+        
+        if (res.ok) {
+           connected = true;
+           addLog(`✅ Connected to API in ${Date.now() - start}ms (Status: ${res.status})`);
+        } else {
+           addLog(`⚠️ API responded with ${res.status}, retrying...`);
+           await new Promise(r => setTimeout(r, 2000));
+        }
+      } catch (e: any) {
+         if (e.name === 'AbortError') addLog(`⚠️ API timeout (15s), retrying...`);
+         else addLog(`⚠️ API error: ${e.message}, retrying...`);
+         await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    setIsDiagnosing(false);
+  };
 
   const login = async () => {
     if (!username || !password) { setError('Enter username and password'); return; }
     setError('');
     setLoading(true);
     try {
-      // 30s timeout — required for SATCOM links with 800ms+ latency
+      // 90s timeout — SATCOM links have 800ms+ latency with significant packet loss
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 90000);
 
       const res = await fetch(`${CONFIG.API_URL}/auth/login`, {
         method: 'POST',
@@ -75,7 +138,7 @@ export function LoginScreen() {
       // App.jsx re-renders automatically when user is set in the store — no navigate() needed.
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        setError('Server did not respond in 30s. If on SATCOM, wait for satellite lock and try again.');
+        setError('Server did not respond in 90s. If on SATCOM, bad packet loss disrupts TCP handshakes. Ensure clear sky path and retry.');
       } else {
         setError(`Cannot reach server: ${e.message}`);
       }
@@ -116,6 +179,18 @@ export function LoginScreen() {
             : <Text style={styles.buttonText}>Connect</Text>
           }
         </Pressable>
+
+        <Pressable onPress={runDiagnostics} style={[styles.diagButton, isDiagnosing && { opacity: 0.6 }]} disabled={loading}>
+          <Text style={styles.diagButtonText}>{isDiagnosing ? 'Stop Diagnostics' : 'Run Connection Diagnostics'}</Text>
+        </Pressable>
+
+        {!!diagnosticText && (
+          <View style={styles.diagBox}>
+            <Text style={styles.diagText}>
+              {diagnosticText}
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.serverInfo}>{CONFIG.API_URL}</Text>
       </View>
@@ -182,6 +257,34 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     color: colors.text.primary,
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold as any,
+  },
+  diagButton: {
+    width: '100%',
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: radius.sm,
+    marginTop: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  diagButtonText: {
+    color: colors.text.primary,
+    fontSize: typography.size.md,
+  },
+  diagBox: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: radius.sm,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  diagText: {
+    color: colors.status.active,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: typography.size.xs,
   },
   serverInfo: {
     color: colors.text.muted,

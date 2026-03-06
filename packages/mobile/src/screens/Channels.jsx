@@ -12,6 +12,9 @@ import BottomMenu from '../components/BottomMenu';
 
 // Filter Tabs Component
 function FilterTabs({ activeFilter, onFilterChange, styles }) {
+  const { colors, spacing, radius, shadows, typography } = useAppTheme();
+  const { setCurrent, current } = useContext(ChannelContext);
+  const [channels, setChannels] = useState([]);
   const filters = ['ALL', 'ACTIVE'];
   return (
     <View style={styles.filterContainer}>
@@ -81,10 +84,19 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
           e.stopPropagation();
           onPTTEnd(channel);
         }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          onPTTStart(channel);
+        }}
+        onTouchEnd={(e) => {
+          e.stopPropagation();
+          onPTTEnd(channel);
+        }}
         style={({ pressed }) => [
           styles.inlinePttButton,
           (isTransmitting || pressed) && styles.inlinePttButtonActive,
           pressed && styles.inlinePttButtonPressed,
+          { zIndex: 999, position: 'relative' },
         ]}
       >
         {Platform.OS === 'web' ? (
@@ -108,7 +120,7 @@ export default function ChannelsScreen({ navigation }) {
   );
 
   const { setCurrent, current } = useContext(ChannelContext);
-  const [channels, setChannels] = useState([]);
+  const [channels, setChannels] = useState([]); // Initial state before fetch
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isTransmitting, setIsTransmitting] = useState(false);

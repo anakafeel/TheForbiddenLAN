@@ -55,6 +55,14 @@ export class DLS140Client {
     return res.json();
   }
 
+  async setFirewallProfile(profile: 'unrestricted' | 'locked'): Promise<void> {
+    await fetch(`${this.base}/network/firewall`, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify({ profile }),
+    });
+  }
+
   async ping(ip: string, iface: 'sat' | 'cell' | 'any' = 'any') {
     const res = await fetch(`${this.base}/diagnostics/ping`, {
       method: 'POST',

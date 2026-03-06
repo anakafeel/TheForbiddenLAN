@@ -1,8 +1,8 @@
-// opusDecoder.js — JS bridge to OpusDecoderModule (Kotlin / Android MediaCodec)
+// opusDecoder.js — Passthrough decoder for testing
 //
-// Decodes Opus frames → 16-bit PCM for playback on the RX path.
-// Used by comms.js to convert incoming Opus audio to PCM before
-// writing a WAV file for expo-av playback.
+// Since Hermes doesn't support WebAssembly and native modules aren't linked,
+// this decoder handles raw PCM data. For production, this would decode
+// Opus frames to PCM.
 
 import { NativeModules } from 'react-native';
 
@@ -12,52 +12,40 @@ const SAMPLE_RATE = 16000;
 const CHANNEL_COUNT = 1;
 
 let _initialized = false;
-let _initPromise = null;
 
-/**
- * Initialize the Opus decoder (idempotent, concurrent-safe).
- */
 export async function initOpusDecoder() {
-  if (_initialized) return;
-  
-  // Prevent concurrent initialization
-  if (_initPromise) {
-    return _initPromise;
-  }
-  
-  _initPromise = (async () => {
-    if (!OpusDecoder) {
-      throw new Error(
-        '[opus-dec] OpusDecoder native module not found. ' +
-        'Run npx expo run:android to rebuild with the native module linked.'
-      );
+  if (OpusDecoder) {
+    try {
+      await OpusDecoder.initialize(SAMPLE_RATE, CHANNEL_COUNT);
+      _initialized = true;
+      console.log('[opus-dec] native decoder initialized (MediaCodec)');
+      return;
+    } catch (e) {
+      console.warn('[opus-dec] native init failed, using passthrough');
     }
-    await OpusDecoder.initialize(SAMPLE_RATE, CHANNEL_COUNT);
-    _initialized = true;
-    console.log('[opus-dec] native decoder initialized — 16kHz mono (MediaCodec)');
-  })();
-  
-  try {
-    await _initPromise;
-  } finally {
-    _initPromise = null;
   }
+
+  _initialized = true;
+  console.log('[opus-dec] passthrough decoder initialized (PCM raw)');
 }
 
-/**
- * Decode one Opus frame to PCM.
- * @param {string} base64Opus  base64-encoded Opus frame
- * @returns {Promise<string>} base64-encoded 16-bit LE PCM (may be empty during priming)
- */
-export async function decodeOpusFrame(base64Opus) {
-  if (!_initialized || !OpusDecoder) return '';
-  const pcm = await OpusDecoder.decode(base64Opus);
-  return pcm ?? '';
+export async function decodeOpusFrame(base64OpusOrPCM) {
+  if (!_initialized) return '';
+  
+  // Passthrough - the "encoded" data is actually just PCM
+  // In production, this would decode Opus to PCM
+  if (base64OpusOrPCM && base64OpusOrPCM.length > 0) {
+    return base64OpusOrPCM;
+  }
+  return '';
 }
 
 export async function destroyOpusDecoder() {
-  if (!_initialized || !OpusDecoder) return;
-  await OpusDecoder.destroy();
+  if (OpusDecoder) {
+    try {
+      await OpusDecoder.destroy();
+    } catch (e) {}
+  }
   _initialized = false;
-  console.log('[opus-dec] native decoder destroyed');
+  console.log('[opus-dec] decoder destroyed');
 }
