@@ -499,8 +499,12 @@ export default function PTTScreen({ navigation }) {
   const toggleSatcom = useCallback(() => {
     const newValue = !isSatcom;
     setIsSatcom(newValue);
+    console.log('#############################################');
+    console.log('##### SATCOM TOGGLE PRESSED: ' + (newValue ? 'ON' : 'OFF') + ' #####');
+    console.log('#############################################');
     comms.setTransportMode(newValue ? "satcom" : "cellular");
     setPreferredConnection(newValue ? "satellite" : "cellular");
+    console.log(`[PTTScreen] SATCOM toggle: ${newValue ? 'ON' : 'OFF'}`);
   }, [isSatcom, setPreferredConnection]);
 
   const handleChannelChange = useCallback(

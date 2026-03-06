@@ -91,6 +91,130 @@ const RX_INACTIVITY_TIMEOUT_MS = 8000; // flush accumulated audio if no chunk ar
 let _streamPlayerActive = false; // true while AudioTrack is streaming
 let _useStreamPlayer = true; // set to false if native module is missing
 
+// FEC (Forward Error Correction) state
+// Groups 4 chunks + 1 parity, can recover 1 lost chunk per group
+const FEC_GROUP_SIZE = 4;
+const _fecBuffers = new Map(); // sessionId -> Map<fecGroup -> {chunks: [], parity: null, received: Set}>
+
+function _base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function _uint8ArrayToBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function _xorBuffers(a, b) {
+  const result = new Uint8Array(Math.max(a.length, b.length));
+  for (let i = 0; i < result.length; i++) {
+    result[i] = (i < a.length ? a[i] : 0) ^ (i < b.length ? b[i] : 0);
+  }
+  return result;
+}
+
+// Process FEC chunk - returns recovered chunk if possible, or null
+async function _processFecChunk(msg, decryptedData) {
+  const sessionId = msg.sessionId;
+  const fecGroup = msg.fecGroup;
+  const fecIndex = msg.fecIndex;
+
+  if (fecGroup === undefined || fecIndex === undefined) {
+    // Not an FEC chunk - process normally
+    return decryptedData;
+  }
+
+  if (!_fecBuffers.has(sessionId)) {
+    _fecBuffers.set(sessionId, new Map());
+  }
+  const sessionBuf = _fecBuffers.get(sessionId);
+
+  if (!sessionBuf.has(fecGroup)) {
+    sessionBuf.set(fecGroup, {
+      chunks: new Array(FEC_GROUP_SIZE).fill(null),
+      parity: null,
+      received: new Set(),
+      played: new Set(),
+      timer: null,
+    });
+  }
+  const group = sessionBuf.get(fecGroup);
+
+  // Store chunk
+  if (fecIndex < FEC_GROUP_SIZE) {
+    group.chunks[fecIndex] = decryptedData;
+    group.received.add(fecIndex);
+  } else if (fecIndex === 4) {
+    group.parity = decryptedData;
+    group.received.add(4);
+  }
+
+  // Try to recover and play missing chunks
+  await _fecTryPlayGroup(group, fecGroup);
+
+  // Return null since we handled playback in _fecTryPlayGroup
+  return null;
+}
+
+async function _fecTryPlayGroup(group, fecGroup) {
+  // First play any chunks we have in order
+  for (let i = 0; i < FEC_GROUP_SIZE; i++) {
+    if (group.chunks[i] && !group.played.has(i)) {
+      group.played.add(i);
+      await _decodeAndPlay(group.chunks[i]);
+      _resetRxTimer();
+      console.log(`[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`);
+    }
+  }
+
+  // If we have parity, try to recover missing chunks
+  if (group.parity && group.received.has(FEC_GROUP_SIZE)) {
+    for (let i = 0; i < FEC_GROUP_SIZE; i++) {
+      if (!group.chunks[i] && !group.played.has(i)) {
+        // Try to recover
+        let recovered = new Uint8Array(0);
+        let canRecover = true;
+        for (let j = 0; j < FEC_GROUP_SIZE; j++) {
+          if (j !== i && group.chunks[j]) {
+            recovered = _xorBuffers(recovered, _base64ToUint8Array(group.chunks[j]));
+          } else if (j === i) {
+            // skip missing one
+          } else {
+            canRecover = false;
+            break;
+          }
+        }
+        if (canRecover) {
+          recovered = _xorBuffers(recovered, _base64ToUint8Array(group.parity));
+          group.chunks[i] = _uint8ArrayToBase64(recovered);
+          group.played.add(i);
+          await _decodeAndPlay(group.chunks[i]);
+          _resetRxTimer();
+          console.log(`[comms] ★★★ FEC recovered chunk ${i} in group ${fecGroup} ★★★`);
+        }
+      }
+    }
+  }
+
+  // If all chunks played, clear buffer
+  if (group.played.size >= FEC_GROUP_SIZE) {
+    if (group.timer) clearTimeout(group.timer);
+    group.timer = null;
+  }
+}
+
+function _clearFecBuffer(sessionId) {
+  _fecBuffers.delete(sessionId);
+}
+
 /**
  * Ensure the audio subsystem is configured for SPEAKER playback.
  *
@@ -169,9 +293,12 @@ async function _ensureDecoderReady() {
 async function _startStreaming() {
   if (!_useStreamPlayer || _streamPlayerActive) return;
   try {
+    console.log('###############################################');
+    console.log('##### STARTING NATIVE AUDIOSTREAMPLAYER #####');
+    console.log('###############################################');
     await startStreamPlayer();
     _streamPlayerActive = true;
-    console.log("[comms] AudioTrack streaming started");
+    console.log("[comms] ★★★ AudioTrack streaming started ★★★");
   } catch (e) {
     console.warn(
       "[comms] AudioStreamPlayer unavailable, using legacy WAV fallback:",
@@ -463,7 +590,7 @@ export async function initComms(jwt) {
 
       // Diagnostic: log every incoming audio chunk
       console.log(
-        `[comms] RX PTT_AUDIO chunk (isLocalTx=${_isLocalTx}, chunk=${msg.chunk ?? '?'})`,
+        `[comms] RX PTT_AUDIO chunk (isLocalTx=${_isLocalTx}, chunk=${msg.chunk ?? '?'}, fecGroup=${msg.fecGroup ?? 'none'})`,
       );
 
       // Half-duplex: drop incoming audio while we are transmitting
@@ -471,11 +598,17 @@ export async function initComms(jwt) {
 
       try {
         const decrypted = await encryption.decrypt(msg.data);
-        await _decodeAndPlay(decrypted);
-        _resetRxTimer();
-        console.log(
-          `[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`,
-        );
+
+        // Process FEC - may recover lost chunks
+        const processedData = await _processFecChunk(msg, decrypted);
+
+        if (processedData) {
+          await _decodeAndPlay(processedData);
+          _resetRxTimer();
+          console.log(
+            `[comms] RX chunk decoded & playing (stream=${_streamPlayerActive})`,
+          );
+        }
       } catch (e) {
         console.warn("[comms] audio decrypt/decode error:", e.message);
       }
@@ -485,6 +618,7 @@ export async function initComms(jwt) {
     if (msg.type === "PTT_END") {
       console.log(`[comms] PTT_END received — flushing (stream=${_streamPlayerActive}, frames=${_pcmAccumulator.length})`);
       _seenChunks.clear();
+      _clearFecBuffer(msg.sessionId);
       await _flushAudio();
     }
   });

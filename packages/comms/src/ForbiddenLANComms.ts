@@ -31,6 +31,7 @@ export class ForbiddenLANComms {
 
   // Half-Duplex Fix
   private isTransmitting = false;
+  private transportMode: "cellular" | "satcom" = "cellular";
 
   // PTT Watchdog
   private currentSessionId = 0;
@@ -227,6 +228,15 @@ export class ForbiddenLANComms {
       );
       return;
     }
+    // On SATCOM (high latency), wait for floor grant before sending audio.
+    // On cellular (low latency), send immediately — server will relay before grant arrives.
+    if (this.transportMode === "satcom" && !this.floorGranted) {
+      // Silently drop — audio will be sent once floor is granted
+      return;
+    }
+    if (this.transportMode === "satcom" && this.floorGranted) {
+      console.log(`[AudioPipeline] ★★★ TX chunk via UDP (SATCOM + floorGranted=true) ★★★`);
+    }
     await this.audio?.enqueueChunk(base64OpusData);
   }
 
@@ -307,12 +317,14 @@ export class ForbiddenLANComms {
   }
 
   setTransportMode(mode: "cellular" | "satcom"): void {
+    this.transportMode = mode;
+    console.log(`[ForbiddenLANComms] ★★★ setTransportMode called with: ${mode} ★★★`);
     // UDP is always enabled for audio — the mode flag now only controls
     // whether satellite visibility prediction is active (for NORAD UI).
     // Audio always goes over UDP on both cellular and SATCOM.
     AudioPipeline.useUdp = true;
     console.log(
-      `[ForbiddenLANComms] Network mode set to ${mode.toUpperCase()} — audio always routes via UDP`,
+      `[ForbiddenLANComms] Network mode set to ${mode.toUpperCase()} — audio always routes via UDP (transportMode=${this.transportMode})`,
     );
   }
 

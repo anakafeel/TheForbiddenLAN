@@ -56,6 +56,20 @@ Welcome to The Forbidden LAN project documentation! This index helps you find wh
 - **[BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md)** — Server integration points
 - **[api-contracts.md](api-contracts.md)** — API specifications
 
+## 🛰️ SATCOM Audio System
+
+**Technical deep-dive into the satellite communication system:**
+
+- **[SATCOM_AUDIO_SYSTEM.md](SATCOM_AUDIO_SYSTEM.md)** — Complete technical documentation
+  - Network protocols (UDP vs TCP vs WebSocket)
+  - SATCOM challenges (latency, packet loss, bandwidth)
+  - Forward Error Correction (FEC) explained
+  - Audio pipeline architecture
+  - Native streaming implementation
+  - Floor control & PTT
+  - Tradeoffs & design decisions
+  - Future improvements
+
 ## 🔧 Infrastructure & Deployment
 
 **Running and deploying the system:**
@@ -135,6 +149,7 @@ TheForbiddenLAN/
 | "My Metro bundler is failing" | [MOBILE_SETUP_TROUBLESHOOTING.md](MOBILE_SETUP_TROUBLESHOOTING.md) |
 | "How do I build React Native UI?" | [UI_DEVELOPMENT_GUIDE.md](UI_DEVELOPMENT_GUIDE.md) |
 | "How does the system work?" | [architecture.md](architecture.md) |
+| "How does SATCOM audio work?" | [SATCOM_AUDIO_SYSTEM.md](SATCOM_AUDIO_SYSTEM.md) |
 | "What's the API spec?" | [api-contracts.md](api-contracts.md) |
 | "How do I deploy?" | [MASTER_GUIDE_v4.md](MASTER_GUIDE_v4.md) |
 | "How do I add a new dependency?" | [DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md) |
