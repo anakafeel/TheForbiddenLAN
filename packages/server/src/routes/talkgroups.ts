@@ -21,15 +21,10 @@ export async function talkgroupRoutes(app: FastifyInstance) {
     try { await req.jwtVerify(); } catch { reply.code(401).send({ error: 'unauthorized' }); }
   });
 
-  // GET /talkgroups — admins see all talkgroups; users see only their own
+  // GET /talkgroups — list talkgroups the authenticated user belongs to
   app.get('/', async (req) => {
     const userId = (req.user as any).sub;
-    const role = (req.user as any).role;
     const state = await materializeState();
-
-    if (role === 'admin') {
-      return { talkgroups: Array.from(state.talkgroups.values()) };
-    }
 
     const talkgroups: any[] = [];
     for (const [tgId, members] of state.memberships) {
@@ -60,8 +55,6 @@ export async function talkgroupRoutes(app: FastifyInstance) {
     const masterSecret = randomBytes(32).toString('base64');
 
     const op = await appendOp('ADMIN_CREATE_TALKGROUP', { talkgroupId, name, masterSecret }, userId, 'auto');
-    // Auto-add the creator as a member
-    await appendOp('ADMIN_ADD_MEMBER', { talkgroupId, userId, site: 'HQ' }, userId, 'auto');
 
     return {
       talkgroup: {
