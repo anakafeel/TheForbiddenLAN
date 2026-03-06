@@ -16,6 +16,7 @@ import {
   Animated,
   Easing,
   Platform,
+  Image,
 } from "react-native";
 import { Mic } from "lucide-react";
 import { ChannelContext } from "../context/ChannelContext";
@@ -51,18 +52,18 @@ function formatDuration(totalSeconds) {
   return `${mins}:${secs}`;
 }
 
-function formatUser(user, localDeviceId) {
+function formatUser(user, localUserIds = []) {
   const normalized = String(user || "").trim();
   if (!normalized) return "UNKNOWN";
-  if (normalized === localDeviceId || normalized === LOCAL_USER_LABEL) {
+  if (localUserIds.includes(normalized) || normalized === LOCAL_USER_LABEL) {
     return LOCAL_USER_LABEL;
   }
   if (normalized.length <= 14) return normalized;
   return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
 }
 
-function getUserInitials(user, localDeviceId) {
-  const label = formatUser(user, localDeviceId);
+function getUserInitials(user, localUserIds = []) {
+  const label = formatUser(user, localUserIds);
   if (label === LOCAL_USER_LABEL) return LOCAL_USER_LABEL;
 
   const words = label
@@ -81,9 +82,6 @@ function getUserInitials(user, localDeviceId) {
 
 function ParticipantOrbit({
   participants,
-  localDeviceId,
-  currentSpeaker,
-  isTransmitting,
   styles,
 }) {
   const spin = useRef(new Animated.Value(0)).current;
@@ -127,21 +125,20 @@ function ParticipantOrbit({
           participants.length > 0 && { transform: [{ rotate }] },
         ]}
       >
-        {participants.map((user, index) => {
+        {participants.map((participant, index) => {
           const count = Math.max(1, participants.length);
           const angle = (Math.PI * 2 * index) / count;
           const translateX = Math.cos(angle) * ORBIT_RADIUS_X;
           const translateY = Math.sin(angle) * ORBIT_RADIUS_Y;
-          const highlighted =
-            (String(user) === String(localDeviceId) && isTransmitting) ||
-            String(user) === String(currentSpeaker);
+          const highlighted = participant.isTalking;
 
           return (
             <View
-              key={`${user}-${index}`}
+              key={`${participant.id}-${index}`}
               style={[
                 styles.orbitBubble,
                 highlighted && styles.orbitBubbleActive,
+                highlighted && styles.orbitBubbleTalking,
                 {
                   width: bubbleSize,
                   height: bubbleSize,
@@ -152,14 +149,18 @@ function ParticipantOrbit({
                 },
               ]}
             >
-              <Text
-                style={[
-                  styles.orbitBubbleText,
-                  highlighted && styles.orbitBubbleTextActive,
-                ]}
-              >
-                {getUserInitials(user, localDeviceId)}
-              </Text>
+              {participant.photoUrl ? (
+                <Image source={{ uri: participant.photoUrl }} style={styles.orbitAvatarImage} />
+              ) : (
+                <Text
+                  style={[
+                    styles.orbitBubbleText,
+                    highlighted && styles.orbitBubbleTextActive,
+                  ]}
+                >
+                  {getUserInitials(participant.displayName)}
+                </Text>
+              )}
             </View>
           );
         })}
@@ -177,6 +178,8 @@ export default function PTTScreen({ navigation }) {
 
   const { current, setCurrent } = useContext(ChannelContext);
   const jwt = useStore((s) => s.jwt);
+  const authUser = useStore((s) => s.user);
+  const profile = useStore((s) => s.profile);
   const soundsEnabled = useStore((s) => s.soundsEnabled);
   const signalStatus = useStore((s) => s.signalStatus);
   const preferredConnection = useStore((s) => s.preferredConnection);
@@ -197,6 +200,7 @@ export default function PTTScreen({ navigation }) {
 
   const [presenceUsers, setPresenceUsers] = useState([]);
   const [hasPresenceSnapshot, setHasPresenceSnapshot] = useState(false);
+  const [memberDetailsById, setMemberDetailsById] = useState({});
 
   const [joinedAt, setJoinedAt] = useState(null);
   const [callDurationSec, setCallDurationSec] = useState(0);
@@ -206,6 +210,12 @@ export default function PTTScreen({ navigation }) {
   const currentChannelIdRef = useRef(null);
 
   const localDeviceId = CONFIG.DEVICE_ID;
+  const localUserId = authUser?.sub ? String(authUser.sub) : null;
+  const localParticipantId = localUserId || localDeviceId;
+  const localUserIds = useMemo(() => {
+    const ids = [localParticipantId, localDeviceId].filter(Boolean);
+    return Array.from(new Set(ids.map((id) => String(id))));
+  }, [localDeviceId, localParticipantId]);
 
   useEffect(() => {
     isTransmittingRef.current = isTransmitting;
@@ -310,6 +320,58 @@ export default function PTTScreen({ navigation }) {
   }, [jwt, current]);
 
   useEffect(() => {
+    if (!jwt || !current?.id) {
+      setMemberDetailsById({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchMemberDetails = async () => {
+      try {
+        const res = await fetch(`${CONFIG.API_URL}/talkgroups/${current.id}/members`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) throw new Error(`Failed to fetch talkgroup members: ${res.status}`);
+
+        const data = await res.json();
+        const members = Array.isArray(data?.members) ? data.members : [];
+        const next = {};
+
+        members.forEach((member) => {
+          if (!member?.id) return;
+          const userId = String(member.id);
+          const profilePayload =
+            member?.profile && typeof member.profile === "object"
+              ? member.profile
+              : {};
+
+          next[userId] = {
+            displayName:
+              (typeof profilePayload.display_name === "string" && profilePayload.display_name.trim()) ||
+              (typeof member.username === "string" && member.username.trim()) ||
+              userId,
+            photoUrl:
+              (typeof profilePayload.photo_url === "string" && profilePayload.photo_url.trim()) ||
+              "",
+          };
+        });
+
+        if (!cancelled) setMemberDetailsById(next);
+      } catch (err) {
+        console.warn("[PTTScreen] Failed to fetch member details:", err);
+        if (!cancelled) setMemberDetailsById({});
+      }
+    };
+
+    fetchMemberDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jwt, current?.id]);
+
+  useEffect(() => {
     setChannelMenuOpen(false);
     setCurrentSpeaker(null);
     setChannelBusy(false);
@@ -363,10 +425,14 @@ export default function PTTScreen({ navigation }) {
       }
 
       if (msg.type === "FLOOR_GRANT") {
-        const winner = msg.winner ? String(msg.winner) : null;
+        const winner = msg.winnerUserId
+          ? String(msg.winnerUserId)
+          : msg.winner
+            ? String(msg.winner)
+            : null;
         setCurrentSpeaker(winner);
 
-        if (!winner || winner === localDeviceId) {
+        if (!winner || localUserIds.includes(String(winner))) {
           setChannelBusy(false);
           setBusyHolder(null);
           setWaitingForFloor(false);
@@ -375,6 +441,20 @@ export default function PTTScreen({ navigation }) {
           setBusyHolder(winner);
         }
 
+        return;
+      }
+
+      if (msg.type === "FLOOR_DENY") {
+        const holder = msg.holderUserId
+          ? String(msg.holderUserId)
+          : msg.holder
+            ? String(msg.holder)
+            : null;
+
+        setWaitingForFloor(true);
+        setChannelBusy(true);
+        setBusyHolder(holder);
+        if (holder) setCurrentSpeaker(holder);
         return;
       }
 
@@ -394,7 +474,7 @@ export default function PTTScreen({ navigation }) {
     } catch (err) {
       console.warn("[PTTScreen] onMessage listener unavailable:", err);
     }
-  }, [localDeviceId]);
+  }, [localUserIds]);
 
   useEffect(() => {
     onFloorDenied((talkgroup, holder) => {
@@ -410,8 +490,11 @@ export default function PTTScreen({ navigation }) {
       setIsPressingPTT(false);
       setWaitingForFloor(true);
       setChannelBusy(true);
-      setBusyHolder(floorHolder);
-      if (floorHolder) setCurrentSpeaker(floorHolder);
+      if (floorHolder) {
+        // Keep any authoritative user-id value already set by FLOOR_DENY message payload.
+        setBusyHolder((prev) => prev || floorHolder);
+        setCurrentSpeaker((prev) => prev || floorHolder);
+      }
 
       stopAudioStream().catch((err) => {
         console.warn("[PTTScreen] stopAudioStream after floor deny failed:", err);
@@ -451,7 +534,7 @@ export default function PTTScreen({ navigation }) {
     setChannelBusy(false);
     setBusyHolder(null);
     setIsTransmitting(true);
-    setCurrentSpeaker(localDeviceId);
+    setCurrentSpeaker(localParticipantId);
 
     try {
       await startAudioStream();
@@ -466,6 +549,7 @@ export default function PTTScreen({ navigation }) {
     isTransmitting,
     soundsEnabled,
     localDeviceId,
+    localParticipantId,
   ]);
 
   const stopTransmit = useCallback(async () => {
@@ -481,10 +565,10 @@ export default function PTTScreen({ navigation }) {
 
     emitStopTalking(localDeviceId, current.id);
 
-    if (currentSpeaker === localDeviceId) {
+    if (currentSpeaker && localUserIds.includes(String(currentSpeaker))) {
       setCurrentSpeaker(null);
     }
-  }, [current, isTransmitting, currentSpeaker, localDeviceId]);
+  }, [current, isTransmitting, currentSpeaker, localDeviceId, localUserIds]);
 
   const handlePttPressIn = useCallback(() => {
     setIsPressingPTT(true);
@@ -533,8 +617,8 @@ export default function PTTScreen({ navigation }) {
       normalized.unshift(String(currentSpeaker));
     }
 
-    if (isTransmitting && !normalized.includes(localDeviceId)) {
-      normalized.unshift(localDeviceId);
+    if (isTransmitting && !normalized.includes(String(localParticipantId))) {
+      normalized.unshift(String(localParticipantId));
     }
 
     return normalized;
@@ -543,14 +627,55 @@ export default function PTTScreen({ navigation }) {
     presenceUsers,
     currentSpeaker,
     isTransmitting,
-    localDeviceId,
+    localParticipantId,
   ]);
+
+  const participantDetailsById = useMemo(() => {
+    const merged = { ...memberDetailsById };
+    if (!localParticipantId) return merged;
+
+    const existing = merged[localParticipantId] ?? {};
+    merged[localParticipantId] = {
+      displayName:
+        (profile.displayName && profile.displayName.trim()) ||
+        existing.displayName ||
+        authUser?.username ||
+        localParticipantId,
+      photoUrl:
+        (profile.photoUrl && profile.photoUrl.trim()) ||
+        existing.photoUrl ||
+        "",
+    };
+    return merged;
+  }, [memberDetailsById, localParticipantId, profile.displayName, profile.photoUrl, authUser?.username]);
+
+  const orbitParticipants = useMemo(() => {
+    return channelUsers.map((userId) => {
+      const details = participantDetailsById[userId] ?? {};
+      const displayName =
+        (typeof details.displayName === "string" && details.displayName) ||
+        formatUser(userId, localUserIds);
+      const isTalking =
+        (currentSpeaker && String(currentSpeaker) === String(userId)) ||
+        (isTransmitting && localUserIds.includes(String(userId)));
+
+      return {
+        id: userId,
+        displayName,
+        photoUrl:
+          typeof details.photoUrl === "string" && details.photoUrl.trim()
+            ? details.photoUrl.trim()
+            : null,
+        isTalking,
+      };
+    });
+  }, [channelUsers, participantDetailsById, currentSpeaker, isTransmitting, localUserIds]);
 
   const participantCount = hasPresenceSnapshot ? channelUsers.length : null;
   const callDurationLabel = joinedAt ? formatDuration(callDurationSec) : "--:--";
 
   const remoteSpeakerActive =
-    !!currentSpeaker && String(currentSpeaker) !== String(localDeviceId);
+    !!currentSpeaker && !localUserIds.includes(String(currentSpeaker));
 
   const hasSignalTelemetry =
     signalStatus.activeLink !== "none" ||
@@ -689,11 +814,11 @@ export default function PTTScreen({ navigation }) {
             : waitingForFloor
               ? "⌛ WAITING FOR FLOOR"
               : channelBusy
-                ? `🚫 TALK GROUP BUSY — ${busyHolder ? formatUser(busyHolder, localDeviceId) : "another device"} is transmitting`
+                ? `🚫 TALK GROUP BUSY — ${busyHolder ? formatUser(busyHolder, localUserIds) : "another device"} is transmitting`
                 : isTransmitting
                   ? "📡 YOU ARE TRANSMITTING"
                   : remoteSpeakerActive
-                    ? `🎙️ NOW SPEAKING: ${formatUser(currentSpeaker, localDeviceId)}`
+                    ? `🎙️ NOW SPEAKING: ${formatUser(currentSpeaker, localUserIds)}`
                     : satLineOfSightMissing
                       ? "🛰️ SATELLITE OUT OF VIEW — CELLULAR FALLBACK READY"
                       : "— Talk group idle —"}
@@ -703,10 +828,7 @@ export default function PTTScreen({ navigation }) {
       <View style={styles.pttArea}>
         {hasPresenceSnapshot && channelUsers.length > 0 && (
           <ParticipantOrbit
-            participants={channelUsers}
-            localDeviceId={localDeviceId}
-            currentSpeaker={currentSpeaker}
-            isTransmitting={isTransmitting}
+            participants={orbitParticipants}
             styles={styles}
           />
         )}
@@ -1056,6 +1178,19 @@ function createStyles(colors, spacing, radius, typography) {
       shadowColor: colors.accent.primary,
       shadowOpacity: 0.45,
       shadowRadius: 9,
+    },
+    orbitBubbleTalking: {
+      borderColor: colors.status.active,
+      shadowColor: colors.status.active,
+      shadowOpacity: 0.85,
+      shadowRadius: 14,
+      elevation: 8,
+    },
+    orbitAvatarImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: 999,
+      backgroundColor: colors.background.tertiary,
     },
     orbitBubbleText: {
       color: colors.text.secondary,

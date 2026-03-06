@@ -2,6 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import { disconnectUserSessions } from '../ws/hub.js';
+import { getUserProfile, upsertUserProfile } from '../services/userProfiles.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (req, reply) => {
@@ -21,14 +22,50 @@ export async function userRoutes(app: FastifyInstance) {
     if (!activeUser) return reply.code(401).send({ error: 'user_not_found' });
   });
 
+  // GET /users/me/profile — current user's profile details used by user panel
+  app.get('/me/profile', async (req, reply) => {
+    const userId = (req.user as any).sub;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true },
+    });
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+
+    return { profile: getUserProfile(user.id, user.username) };
+  });
+
+  // PUT /users/me/profile — update profile details (display name, callsign, photo, status)
+  app.put('/me/profile', async (req, reply) => {
+    const userId = (req.user as any).sub;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true },
+    });
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+
+    const body = (req.body ?? {}) as any;
+    const profile = upsertUserProfile(user.id, user.username, {
+      display_name: body.display_name,
+      callsign: body.callsign,
+      photo_url: body.photo_url,
+      status_message: body.status_message,
+    });
+
+    return { profile };
+  });
+
   // GET /users — list all users (admin only, never returns password_hash)
   app.get('/', async (req, reply) => {
     const role = (req.user as any).role;
     if (role !== 'admin') return reply.code(403).send({ error: 'forbidden' });
 
-    const users = await prisma.user.findMany({
+    const rawUsers = await prisma.user.findMany({
       select: { id: true, username: true, role: true, created_at: true, device_id: true },
     });
+    const users = rawUsers.map((user) => ({
+      ...user,
+      profile: getUserProfile(user.id, user.username),
+    }));
     return { users };
   });
 

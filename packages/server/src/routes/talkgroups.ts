@@ -2,6 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import { randomBytes } from 'crypto';
+import { getUserProfile } from '../services/userProfiles.js';
 
 export async function talkgroupRoutes(app: FastifyInstance) {
   // All routes require JWT
@@ -25,6 +26,13 @@ export async function talkgroupRoutes(app: FastifyInstance) {
   // GET /talkgroups — list talkgroups the authenticated user belongs to
   app.get('/', async (req) => {
     const userId = (req.user as any).sub;
+    const role = (req.user as any).role;
+
+    if (role === 'admin') {
+      const talkgroups = await prisma.talkgroup.findMany();
+      return { talkgroups };
+    }
+
     const memberships = await prisma.membership.findMany({
       where: { user_id: userId },
       include: { talkgroup: true },
@@ -85,16 +93,31 @@ export async function talkgroupRoutes(app: FastifyInstance) {
 
   // GET /talkgroups/:id/members — list members of a talkgroup
   app.get('/:id/members', async (req, reply) => {
+    const requesterId = (req.user as any).sub;
+    const requesterRole = (req.user as any).role;
     const { id } = req.params as any;
 
     const talkgroup = await prisma.talkgroup.findUnique({ where: { id } });
     if (!talkgroup) return reply.code(404).send({ error: 'talkgroup_not_found' });
 
+    if (requesterRole !== 'admin') {
+      const membership = await prisma.membership.findUnique({
+        where: { user_id_talkgroup_id: { user_id: requesterId, talkgroup_id: id } },
+        select: { user_id: true },
+      });
+      if (!membership) return reply.code(403).send({ error: 'forbidden' });
+    }
+
     const memberships = await prisma.membership.findMany({
       where: { talkgroup_id: id },
       include: { user: { select: { id: true, username: true, role: true } } },
     });
-    return { members: memberships.map(m => m.user) };
+    return {
+      members: memberships.map((membership) => ({
+        ...membership.user,
+        profile: getUserProfile(membership.user.id, membership.user.username),
+      })),
+    };
   });
 
   // POST /talkgroups/:id/members — admin adds a user to a talkgroup

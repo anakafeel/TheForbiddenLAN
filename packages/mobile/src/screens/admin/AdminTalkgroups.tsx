@@ -1,7 +1,20 @@
 // Admin Talkgroups — CRUD for talkgroups + expand to see members.
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
-import { api } from '../../lib/api';
+import {
+  listAdminTalkgroups,
+  createAdminTalkgroup,
+  joinAdminTalkgroup,
+  deleteAdminTalkgroup,
+  rotateAdminTalkgroupKey,
+  listAdminTalkgroupMembers,
+  addAdminTalkgroupMember,
+  removeAdminTalkgroupMember,
+  listAdminUsers,
+  getAdminErrorMessage,
+  type AdminTalkgroup,
+  type AdminUser,
+} from '../../lib/adminApi';
 import { useAppTheme } from '../../theme';
 
 export function AdminTalkgroups() {
@@ -10,23 +23,23 @@ export function AdminTalkgroups() {
     () => createStyles(colors, spacing, radius, typography),
     [colors, spacing, radius, typography],
   );
-  const [talkgroups, setTalkgroups] = useState([]);
+  const [talkgroups, setTalkgroups] = useState<AdminTalkgroup[]>([]);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
-  const [members, setMembers] = useState([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [members, setMembers] = useState<AdminUser[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
-  const [allUsers, setAllUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/talkgroups');
-      setTalkgroups(res.talkgroups ?? []);
+      const talkgroupRows = await listAdminTalkgroups();
+      setTalkgroups(talkgroupRows);
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -37,24 +50,22 @@ export function AdminTalkgroups() {
   const create = async () => {
     if (!newName.trim()) return;
     try {
-      const res = await api.post('/talkgroups', { name: newName.trim() });
-      if (res.talkgroup?.id) {
-        await api.post(`/talkgroups/${res.talkgroup.id}/join`).catch(() => {});
-      }
+      const talkgroup = await createAdminTalkgroup(newName.trim());
+      await joinAdminTalkgroup(talkgroup.id).catch(() => {});
       setNewName('');
-      load();
+      await load();
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     }
   };
 
-  const remove = (tg) => {
+  const remove = (tg: AdminTalkgroup) => {
     const doDelete = async () => {
       try {
-        await api.delete(`/talkgroups/${tg.id}`);
+        await deleteAdminTalkgroup(tg.id);
         setTalkgroups(prev => prev.filter(t => t.id !== tg.id));
       } catch (e) {
-        setError(e.message);
+        setError(getAdminErrorMessage(e));
       }
     };
     if (typeof window !== 'undefined' && window.confirm) {
@@ -67,15 +78,17 @@ export function AdminTalkgroups() {
     }
   };
 
-  const rotateKey = async (tg) => {
+  const rotateKey = async (tg: AdminTalkgroup) => {
     const doRotate = async () => {
       try {
-        const res = await api.post('/keys/rotate', { talkgroupId: tg.id });
-        setTalkgroups(prev =>
-          prev.map(t => t.id === tg.id ? { ...t, rotation_counter: res.counter } : t)
-        );
+        const nextCounter = await rotateAdminTalkgroupKey(tg.id);
+        if (typeof nextCounter === 'number') {
+          setTalkgroups(prev =>
+            prev.map(t => t.id === tg.id ? { ...t, rotation_counter: nextCounter } : t)
+          );
+        }
       } catch (e) {
-        setError(e.message);
+        setError(getAdminErrorMessage(e));
       }
     };
     if (typeof window !== 'undefined' && window.confirm) {
@@ -88,17 +101,17 @@ export function AdminTalkgroups() {
     }
   };
 
-  const toggleExpand = async (tgId) => {
+  const toggleExpand = async (tgId: string) => {
     if (expandedId === tgId) { setExpandedId(null); return; }
     setExpandedId(tgId);
     setMembersLoading(true);
     try {
-      const [membersRes, usersRes] = await Promise.all([
-        api.get(`/talkgroups/${tgId}/members`),
-        api.get('/users'),
+      const [memberRows, userRows] = await Promise.all([
+        listAdminTalkgroupMembers(tgId),
+        listAdminUsers(),
       ]);
-      setMembers(membersRes.members ?? []);
-      setAllUsers(usersRes.users ?? []);
+      setMembers(memberRows);
+      setAllUsers(userRows);
     } catch (e) {
       setMembers([]);
       setAllUsers([]);
@@ -107,23 +120,23 @@ export function AdminTalkgroups() {
     }
   };
 
-  const addMember = async (tgId, userId) => {
+  const addMember = async (tgId: string, userId: string) => {
     try {
-      await api.post(`/talkgroups/${tgId}/members`, { userId });
-      const res = await api.get(`/talkgroups/${tgId}/members`);
-      setMembers(res.members ?? []);
+      await addAdminTalkgroupMember(tgId, userId);
+      const memberRows = await listAdminTalkgroupMembers(tgId);
+      setMembers(memberRows);
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     }
   };
 
-  const removeMember = async (tgId, userId, username) => {
+  const removeMember = async (tgId: string, userId: string, username: string) => {
     const doRemove = async () => {
       try {
-        await api.delete(`/talkgroups/${tgId}/members/${userId}`);
+        await removeAdminTalkgroupMember(tgId, userId);
         setMembers(prev => prev.filter(m => m.id !== userId));
       } catch (e) {
-        setError(e.message);
+        setError(getAdminErrorMessage(e));
       }
     };
     if (typeof window !== 'undefined' && window.confirm) {

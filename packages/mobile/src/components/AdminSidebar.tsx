@@ -2,7 +2,7 @@
 // Manages its own active tab state and renders admin screens directly.
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Mic, TvMinimalPlay, House, User, MapPin } from 'lucide-react';
+import { Mic, TvMinimalPlay, House, User, MapPin, ClipboardList as ClipboardClock } from 'lucide-react';
 import { useAppTheme } from '../theme';
 import { useStore } from '../store';
 
@@ -11,6 +11,7 @@ import { AdminDevices } from '../screens/admin/AdminDevices';
 import { AdminTalkgroups } from '../screens/admin/AdminTalkgroups';
 import { AdminUsers } from '../screens/admin/AdminUsers';
 import { AdminMap } from '../screens/admin/AdminMap';
+import { AdminMonitoring } from '../screens/admin/AdminMonitoring';
 
 const TAB_CONFIG = [
   { key: 'Dashboard',  label: 'Dashboard',  Icon: House },
@@ -18,6 +19,7 @@ const TAB_CONFIG = [
   { key: 'Talkgroups', label: 'Talk Groups', Icon: Mic },
   { key: 'Users',      label: 'Users',      Icon: User },
   { key: 'Map',        label: 'Map',        Icon: MapPin },
+  { key: 'Monitoring', label: 'Monitoring', Icon: ClipboardClock },
 ] as const;
 
 const SCREEN_MAP = {
@@ -26,6 +28,7 @@ const SCREEN_MAP = {
   Talkgroups: AdminTalkgroups,
   Users: AdminUsers,
   Map: AdminMap,
+  Monitoring: AdminMonitoring,
 };
 type AdminTabKey = keyof typeof SCREEN_MAP;
 

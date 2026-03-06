@@ -55,6 +55,7 @@ export interface AppState {
   setJwt: (jwt: string | null) => void;
   setUser: (u: User | null) => void;
   setProfile: (profile: Partial<UserProfile>) => void;
+  resetProfile: () => void;
   clearAuth: () => void;
   setActiveTalkgroup: (id: string) => void;
   setPreferredConnection: (mode: ConnectionMode) => void;
@@ -82,7 +83,7 @@ export const useStore = create<AppState>((set) => ({
   },
   activeTalkgroup: '',
   talkgroups: [],
-  preferredConnection: 'satellite',
+  preferredConnection: 'cellular',
   themeMode: 'dark',
   soundsEnabled: true,
   notifications: [],
@@ -95,7 +96,29 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       profile: { ...state.profile, ...profile },
     })),
-  clearAuth: () => set({ jwt: null, user: null, notifications: [] }),
+  resetProfile: () =>
+    set({
+      profile: {
+        displayName: "",
+        callsign: "",
+        photoUrl: "",
+        unit: "",
+        statusMessage: "",
+      },
+    }),
+  clearAuth: () =>
+    set({
+      jwt: null,
+      user: null,
+      notifications: [],
+      profile: {
+        displayName: "",
+        callsign: "",
+        photoUrl: "",
+        unit: "",
+        statusMessage: "",
+      },
+    }),
   setActiveTalkgroup: (id) => set({ activeTalkgroup: id }),
   setPreferredConnection: (preferredConnection) => set({ preferredConnection }),
   setThemeMode: (themeMode) => set({ themeMode }),

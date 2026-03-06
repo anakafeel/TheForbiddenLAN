@@ -1,7 +1,12 @@
 // Admin Devices — list all devices + enable/disable toggle per device.
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, Pressable, ActivityIndicator, Alert, StyleSheet } from 'react-native';
-import { api } from '../../lib/api';
+import { View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  listAdminDevices,
+  setAdminDeviceActive,
+  getAdminErrorMessage,
+  type AdminDevice,
+} from '../../lib/adminApi';
 import { useAppTheme } from '../../theme';
 
 export function AdminDevices() {
@@ -10,7 +15,7 @@ export function AdminDevices() {
     () => createStyles(colors, spacing, radius, typography),
     [colors, spacing, radius, typography],
   );
-  const [devices, setDevices] = useState([]);
+  const [devices, setDevices] = useState<AdminDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -18,10 +23,10 @@ export function AdminDevices() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/devices');
-      setDevices(res.devices ?? []);
+      const nextDevices = await listAdminDevices();
+      setDevices(nextDevices);
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -29,12 +34,12 @@ export function AdminDevices() {
 
   useEffect(() => { load(); }, [load]);
 
-  const toggle = async (device) => {
+  const toggle = async (device: AdminDevice) => {
     try {
-      await api.patch(`/devices/${device.id}/status`, { active: !device.active });
+      await setAdminDeviceActive(device, !device.active);
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, active: !d.active } : d));
     } catch (e) {
-      setError(e.message);
+      setError(getAdminErrorMessage(e));
     }
   };
 

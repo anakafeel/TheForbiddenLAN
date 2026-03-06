@@ -10,6 +10,7 @@ import { deviceRoutes } from './routes/devices.js';
 import { keyRoutes } from './routes/keys.js';
 import { userRoutes } from './routes/users.js';
 import { tleRoutes } from './routes/tle.js';
+import { monitoringRoutes } from './routes/monitoring.js';
 import { registerHub, startUdpServer } from './ws/hub.js';
 
 const app = Fastify({ logger: true });
@@ -27,6 +28,7 @@ await app.register(deviceRoutes,     { prefix: '/devices' });
 await app.register(keyRoutes,        { prefix: '/keys' });
 await app.register(userRoutes,       { prefix: '/users' });
 await app.register(tleRoutes,        { prefix: '/tle' });
+await app.register(monitoringRoutes, { prefix: '/monitoring' });
 
 // WebSocket hub
 await registerHub(app);
