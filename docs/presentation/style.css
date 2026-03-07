@@ -498,7 +498,7 @@
    Mermaid
    ───────────────────────────────────────────── */
 .mermaid {
-  height: 280px;
+  min-height: 120px;
   width: 100%;
 }
 
@@ -508,7 +508,7 @@
 }
 
 .mermaid svg {
-  height: 100%;
+  height: auto;
   width: 100%;
 }
 

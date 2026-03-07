@@ -154,34 +154,54 @@ flowchart LR
 layout: default
 ---
 
-<!-- SLIDE 6 — The Relay: Four Roles -->
+<!-- SLIDE 6 — The Relay: Fan-Out -->
 
-# The Relay — Four Roles
+# The Relay — Fan-Out
 
-<div class="callout" style="margin-bottom: 0.6rem;">
-  DLS-140 is outbound-only (CGN). All traffic flows through the relay — no device-to-device possible.
+<p style="color: #8FA3C7; font-size: 0.9rem; margin-bottom: 0.5rem;">Every PTT_AUDIO packet is relayed to all talkgroup members — no device-to-device path exists</p>
+
+```mermaid
+flowchart TB
+  Sender["📱 Sender"] -->|PTT_AUDIO| Relay["Relay"]
+  Relay -->|WS + UDP| RxA["📱 Member A"]
+  Relay -->|WS + UDP| RxB["📱 Member B"]
+  Relay -->|WS + UDP| RxC["📱 Member C"]
+```
+
+<p style="color: #8FA3C7; font-size: 0.78rem; margin-top: 0.4rem; line-height: 1.5;">Both transports unconditionally — not gated on satellite mode. Clients deduplicate by <code>sessionId + chunk</code>. Floor control validates the sender before relaying.</p>
+
+---
+layout: default
+---
+
+<!-- SLIDE 6b — Key Rotation -->
+
+# Key Rotation — Designed Architecture
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.5rem;">
+<div class="card" style="min-width: 0;">
+<p style="color: var(--success); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.2rem;">Implemented today</p>
+<p style="font-size: 0.78rem; margin: 0; color: var(--text-secondary);">REST <code>POST /keys/rotate</code> (JWT role-check), <code>rotation_counter</code> incremented in Postgres, <code>key_rotations</code> audit table. AES-GCM stub in <code>Encryption.ts</code> — hardcoded test key.</p>
+</div>
+<div class="card" style="min-width: 0;">
+<p style="color: #FFAA00; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.2rem;">Designed — post-hackathon</p>
+<p style="font-size: 0.78rem; margin: 0; color: var(--text-secondary);">WebSocket <code>ADMIN_ROTATE_KEY</code>, Ed25519 signatures, op log fan-out to devices, per-talkgroup <code>KDF(master_secret, talkgroup_id, counter)</code>.</p>
+</div>
 </div>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; min-width: 0;">
-<div class="card" style="min-width: 0;">
-<p style="color: var(--accent); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.25rem;">Real-Time Relay</p>
-<p style="font-size: 0.85rem; margin: 0; color: var(--text-secondary);">Fan out PTT audio + control to talkgroup members via WebSocket + UDP simultaneously. In-memory only — no DB on the critical audio path.</p>
-</div>
-<div class="card" style="min-width: 0;">
-<p style="color: var(--accent); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.25rem;">Floor Control</p>
-<p style="font-size: 0.85rem; margin: 0; color: var(--text-secondary);">Server-authoritative half-duplex. Validates the floor holder, drops frames from non-holders, 65s watchdog auto-releases on crash or disconnect.</p>
-</div>
-<div class="card" style="min-width: 0;">
-<p style="color: var(--accent); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.25rem;">Auth & Provisioning</p>
-<p style="font-size: 0.85rem; margin: 0; color: var(--text-secondary);">JWT issued via REST (register / login). Role-based enforcement on every WebSocket message. Admin ops require signed messages — relay can't forge them.</p>
-</div>
-<div class="card" style="min-width: 0;">
-<p style="color: var(--accent); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.25rem;">Op Log + Sync Broker</p>
-<p style="font-size: 0.85rem; margin: 0; color: var(--text-secondary);">Append-only admin op log with monotonic sequence numbers. Cursor-based catch-up delivers missed ops to devices reconnecting after a handoff dropout.</p>
-</div>
-</div>
+```mermaid
+flowchart LR
+  Admin["👤 Admin"] -->|"ADMIN_ROTATE_KEY"| Relay["Relay"]
+  Relay -->|"append to Op Log"| OpLog["Op Log"]
+  Relay -->|"fan-out seq op"| DevA["📱 Device A"]
+  Relay -->|"fan-out seq op"| DevB["📱 Device B"]
+  DevA -->|"KDF(secret, id, counter)"| KeyA["session key"]
+  DevB -->|"KDF(secret, id, counter)"| KeyB["session key"]
+```
 
-<!-- This answers "what does the relay actually do?" — 4 distinct roles, not just a dumb forwarder. Judges scoring Architecture (15%) will want to see this decomposition. -->
+- **Master secret never leaves the device** — relay stores only `rotation_counter`, never key material
+- **Ratchet-style invalidation** — incrementing counter makes all prior derived keys unreachable
+- **`master_secret` already seeded** — generated at talkgroup creation (`randomBytes(32)`), ready for KDF wiring
 
 ---
 layout: default
@@ -197,29 +217,44 @@ layout: default
 
 <div class="compare-row">
   <div class="compare-card danger">
-    <p class="compare-card-label">What we did NOT do</p>
-    <p>Server-grant model → 1–3 s dead air → broken UX</p>
+    <p class="compare-card-label">Server-only grant (rejected)</p>
+    <p>Wait for round-trip before transmitting → 1–3 s dead air → broken UX</p>
   </div>
   <div class="compare-card success">
-    <p class="compare-card-label">What we did</p>
-    <p>Optimistic transmission + client-side deterministic arbitration</p>
+    <p class="compare-card-label">Two-layer: optimistic + authoritative</p>
+    <p>Client pre-checks locally so PTT feels instant. Server is the hard enforcer.</p>
   </div>
 </div>
 
-**Algorithm:**
-
-1. User presses PTT → audio starts **immediately**
-2. `PTT_START` broadcast to all talkgroup members
-3. Each client runs the same algorithm independently:
-   - Single `PTT_START` within window → that sender has floor
-   - Two `PTT_START` within 50 ms → **lower GPS timestamp wins**; UUID as tiebreaker
-4. Loser UI shows "floor taken", mic stops
+- **Layer 1 — `FloorControl.ts` (client):** PTT pressed → optimistic check → start transmitting immediately. 50 ms collision window; lowest GPS timestamp wins, UUID as tiebreaker.
+- **Layer 2 — `hub.ts` (server):** Receives `PTT_START` → `FLOOR_GRANT` or `FLOOR_DENY`. Receives `PTT_AUDIO` → validates floor holder → relays or hard-drops. Server answer is always final.
 
 <div class="callout">
-  GNSS on DLS-140 is nanosecond-accurate + globally synced. Every receiver reaches the same conclusion independently. <span class="warn">Tradeoff: ~50 ms collision window. Instant PTT feel preserved.</span>
+  Server watchdog: if <code>PTT_END</code> never arrives (crash / disconnect), floor auto-releases after 65 s. Client MAX_TX is 60 s.
 </div>
 
-<!-- Server's watchdog role: if PTT_END never arrives (crash / disconnect), server forcibly releases the floor after a timeout so the channel doesn't stay locked. -->
+---
+layout: default
+---
+
+<!-- SLIDE 6b — Floor Control: Message Flow -->
+
+# Floor Control — Message Flow
+
+```mermaid
+sequenceDiagram
+  participant App as 📱 App
+  participant Srv as Server
+  Note over App: FloorControl.ts — optimistic check (50ms window, lowest timestamp wins)
+  App--)Srv: PTT_START + PTT_AUDIO stream
+  alt floor free
+    Srv->>App: FLOOR_GRANT
+    Srv->>App: relay audio to peers
+  else floor taken
+    Srv->>App: FLOOR_DENY (overrides client)
+    Note over Srv: PTT_AUDIO hard-dropped
+  end
+```
 
 ---
 layout: default
