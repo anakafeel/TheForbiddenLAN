@@ -311,7 +311,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
           <Text style={styles.headerSubtitle}>
-            Local settings and operator identity
+            Operator identity and settings
           </Text>
         </View>
 
@@ -482,7 +482,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
         </View>
 
         {savedAt ? (
-          <Text style={styles.savedBanner}>Profile saved locally.</Text>
+          <Text style={styles.savedBanner}>Profile saved.</Text>
         ) : null}
         {profileSyncError ? (
           <Text style={styles.syncErrorBanner}>{profileSyncError}</Text>

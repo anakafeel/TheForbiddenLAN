@@ -41,8 +41,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+async function requestText(path: string, options: RequestInit = {}): Promise<string> {
+  const jwt = _getJwt();
+  const headers: Record<string, string> = {};
+  if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
+
+  const res = await fetch(`${CONFIG.API_URL}${path}`, { ...options, headers });
+  const text = await res.text();
+  if (!res.ok) throw new ApiError(res.status, text ? { error: text } : null);
+  return text;
+}
+
 export const api = {
   get:    <T>(path: string)                 => request<T>(path),
+  getText:(path: string)                    => requestText(path),
   post:   <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST',   body: body ? JSON.stringify(body) : undefined }),
   put:    <T>(path: string, body: unknown)  => request<T>(path, { method: 'PUT',    body: JSON.stringify(body) }),
   patch:  <T>(path: string, body: unknown)  => request<T>(path, { method: 'PATCH',  body: JSON.stringify(body) }),

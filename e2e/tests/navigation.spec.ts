@@ -15,10 +15,6 @@ test.describe('Navigation', () => {
     await expect(page.getByText('ForbiddenLAN Admin')).toBeVisible();
 
     // Navigate via sidebar links
-    await page.locator('nav a[href="/devices"]').click();
-    await page.waitForURL('**/devices');
-    await expect(page.locator('h1')).toContainText('Devices');
-
     await page.locator('nav a[href="/talkgroups"]').click();
     await page.waitForURL('**/talkgroups');
     await expect(page.locator('h1')).toContainText('Talkgroups');
@@ -32,8 +28,14 @@ test.describe('Navigation', () => {
     await expect(page.locator('h1')).toContainText('Dashboard');
   });
 
+  test('Removed /devices route redirects to /dashboard', async ({ authedPage: page }) => {
+    await page.goto('/devices');
+    await page.waitForURL('**/dashboard');
+    await expect(page.locator('h1')).toContainText('Dashboard');
+  });
+
   test('Sidebar is present on all pages', async ({ authedPage: page }) => {
-    for (const path of ['/dashboard', '/devices', '/talkgroups', '/users']) {
+    for (const path of ['/dashboard', '/talkgroups', '/users']) {
       await page.goto(path);
       await expect(page.locator('nav')).toBeVisible();
       await expect(page.getByText('ForbiddenLAN Admin')).toBeVisible();

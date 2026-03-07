@@ -115,6 +115,9 @@ export function LoginScreen() {
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Login failed'); setLoading(false); return; }
 
+      // DLS-140 credentials come from EXPO_PUBLIC_DLS140_USERNAME/PASSWORD env vars.
+      // SkyTalk relay and DLS-140 router have separate auth systems.
+
       const payload = decodeJwtPayload(data.jwt);
 
       // Use getState() directly — avoids stale closure / cache issues with selectors

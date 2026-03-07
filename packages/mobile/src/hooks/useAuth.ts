@@ -2,6 +2,7 @@
 import { useState, useCallback } from 'react';
 import { CONFIG } from '../config';
 import { useStore, type AppState } from '../store';
+import { clearDlsSession } from '../lib/dlsAuth';
 
 interface AuthResponse {
   jwt?: string;
@@ -39,6 +40,8 @@ export function useLogin() {
         return { error: data.error ?? 'Login failed' };
       }
 
+      // DLS-140 credentials come from EXPO_PUBLIC_DLS140_USERNAME/PASSWORD env vars,
+      // NOT from the SkyTalk user login (they are separate auth systems).
       setJwt(data.jwt);
       setState({ loading: false, error: null });
       return { jwt: data.jwt };
@@ -150,6 +153,7 @@ export function useLogout() {
 
   const logout = useCallback(() => {
     // Clear the JWT (set to empty string or null depending on store implementation)
+    clearDlsSession();
     setJwt('');
   }, [setJwt]);
 

@@ -1,4 +1,5 @@
 import { api, ApiError } from './api';
+import { getDlsGpsPayload } from './dlsAuth';
 
 export type AdminApiSource = 'skytalk' | 'dls';
 
@@ -34,6 +35,14 @@ export interface AdminMapPosition {
   deviceId: string;
   deviceName: string;
   active: boolean;
+  lat: number;
+  lng: number;
+  alt: number;
+  updated_at: string;
+  source: AdminApiSource;
+}
+
+export interface AdminRouterPosition {
   lat: number;
   lng: number;
   alt: number;
@@ -129,6 +138,31 @@ function asNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+interface NormalizedGpsPoint {
+  lat: number;
+  lng: number;
+  alt: number;
+  updated_at: string;
+}
+
+function normalizeGpsPoint(raw: any): NormalizedGpsPoint | null {
+  const gps = raw?.gps ?? raw;
+  const lat = asNumber(gps?.lat ?? gps?.latitude);
+  const lng = asNumber(gps?.lng ?? gps?.longitude);
+  if (lat == null || lng == null) return null;
+
+  return {
+    lat,
+    lng,
+    alt: asNumber(gps?.alt ?? gps?.altitude) ?? 0,
+    updated_at:
+      asString(gps?.updated_at) ||
+      asString(gps?.created_at) ||
+      asString(gps?.timestamp) ||
+      new Date().toISOString(),
+  };
 }
 
 function normalizeDevice(raw: any, source: AdminApiSource): AdminDevice | null {
@@ -437,19 +471,17 @@ export async function listAdminMapPositions(): Promise<AdminMapPosition[]> {
     const gpsResults = await Promise.allSettled(
       skytalkDevices.map(async (device): Promise<AdminMapPosition> => {
         const response = await api.get<any>(`/devices/${encodeURIComponent(device.id)}/gps`);
-        const gps = response?.gps ?? response;
-        const lat = asNumber(gps?.lat);
-        const lng = asNumber(gps?.lng);
-        if (lat == null || lng == null) throw new Error('missing_gps_coordinates');
+        const gps = normalizeGpsPoint(response);
+        if (!gps) throw new Error('missing_gps_coordinates');
 
         return {
           deviceId: device.id,
           deviceName: device.name || device.serial,
           active: device.active,
-          lat,
-          lng,
-          alt: asNumber(gps?.alt) ?? 0,
-          updated_at: asString(gps?.updated_at) || new Date().toISOString(),
+          lat: gps.lat,
+          lng: gps.lng,
+          alt: gps.alt,
+          updated_at: gps.updated_at,
           source: 'skytalk',
         };
       }),
@@ -464,27 +496,22 @@ export async function listAdminMapPositions(): Promise<AdminMapPosition[]> {
 
     if (positions.length > 0) return positions;
   }
+  return [];
+}
 
-  const fallbackGps = await requestOptional(() => api.get<any>('/location/gps'));
-  if (!fallbackGps) return [];
+export async function getAdminRouterPosition(): Promise<AdminRouterPosition | null> {
+  const response = await getDlsGpsPayload();
 
-  const lat = asNumber((fallbackGps as any)?.lat);
-  const lng = asNumber((fallbackGps as any)?.lng);
-  if (lat == null || lng == null) return [];
+  const gps = normalizeGpsPoint(response);
+  if (!gps) return null;
 
-  const device = devices[0];
-  return [
-    {
-      deviceId: device?.id ?? 'local-device',
-      deviceName: device?.name ?? 'DLS-140',
-      active: device?.active ?? true,
-      lat,
-      lng,
-      alt: asNumber((fallbackGps as any)?.alt) ?? 0,
-      updated_at: new Date().toISOString(),
-      source: 'dls',
-    },
-  ];
+  return {
+    lat: gps.lat,
+    lng: gps.lng,
+    alt: gps.alt,
+    updated_at: gps.updated_at,
+    source: 'dls',
+  };
 }
 
 export async function getAdminMonitoringSnapshot(limit = 150): Promise<AdminMonitoringSnapshot> {

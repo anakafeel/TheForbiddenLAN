@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
+import { clearDlsSession } from '../lib/dlsAuth';
 
 const JWT_KEY = 'skytalk_jwt';
 const SERVER_URL_KEY = 'skytalk_server_url';
