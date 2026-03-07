@@ -365,9 +365,11 @@ export default function PTTScreen({ navigation }) {
     };
 
     fetchMemberDetails();
+    const refreshInterval = setInterval(fetchMemberDetails, 30_000);
 
     return () => {
       cancelled = true;
+      clearInterval(refreshInterval);
     };
   }, [jwt, current?.id]);
 
