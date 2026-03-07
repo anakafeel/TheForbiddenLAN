@@ -1,13 +1,14 @@
 import React, { useMemo } from "react";
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useAppTheme } from "../theme";
-import { Mic, TvMinimalPlay, House, UserPen } from "lucide-react";
+import { s } from '../utils/responsive';
+import { Mic, TvMinimalPlay, House, UserPen } from "lucide-react-native";
 
 const ITEMS = [
-  { key: "Dashboard", Icon: House, fallback: "⌂" },
-  { key: "Channels", label: "Talk Groups", Icon: TvMinimalPlay, fallback: "📡" },
-  { key: "PTT", Icon: Mic, fallback: "🎙️" },
-  { key: "Profile", Icon: UserPen, fallback: "👤" },
+  { key: "Dashboard", Icon: House },
+  { key: "Channels", label: "Talk Groups", Icon: TvMinimalPlay },
+  { key: "PTT", Icon: Mic },
+  { key: "Profile", Icon: UserPen },
 ];
 
 export default function BottomMenu({ navigation, active }) {
@@ -29,11 +30,7 @@ export default function BottomMenu({ navigation, active }) {
             onPress={() => navigation.navigate(item.key)}
           >
             <View style={styles.iconWrap}>
-              {Platform.OS === "web" ? (
-                <item.Icon size={16} color={iconColor} strokeWidth={2.2} />
-              ) : (
-                <Text style={styles.icon}>{item.fallback}</Text>
-              )}
+              <item.Icon size={s(16)} color={iconColor} strokeWidth={2.2} />
             </View>
             <Text style={[styles.label, isActive && styles.labelActive]}>
               {item.label ?? item.key}
@@ -74,11 +71,11 @@ function createStyles(colors, spacing, radius, typography) {
     opacity: 0.85,
   },
   icon: {
-    fontSize: 16,
+    fontSize: typography.size.lg,
     marginBottom: 2,
   },
   iconWrap: {
-    height: 18,
+    height: typography.size.lg + 2,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 2,

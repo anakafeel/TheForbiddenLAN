@@ -1,7 +1,30 @@
 // Zustand global store — auth token, user info, active talkgroup, signal status
 import { create } from 'zustand';
+import * as SecureStore from 'expo-secure-store';
 import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
 import { clearDlsSession } from '../lib/dlsAuth';
+
+const JWT_KEY = 'skytalk_jwt';
+const SERVER_URL_KEY = 'skytalk_server_url';
+
+function decodeJwtPayload(jwt: string): any | null {
+  try {
+    const base64 = jwt.split('.')[1];
+    const padded = base64.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = typeof atob === 'function'
+      ? atob(padded)
+      : Buffer.from(padded, 'base64').toString('utf-8');
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(jwt: string): boolean {
+  const payload = decodeJwtPayload(jwt);
+  if (!payload?.exp) return false;
+  return payload.exp * 1000 < Date.now();
+}
 
 export type ConnectionMode = 'satellite' | 'cellular';
 export type ThemeMode = 'dark' | 'light';
@@ -41,8 +64,10 @@ export interface UserProfile {
 }
 
 export interface AppState {
+  hydrating: boolean;
   jwt: string | null;
   user: User | null;
+  customServerUrl: string | null;
   profile: UserProfile;
   activeTalkgroup: string;
   talkgroups: string[];
@@ -53,7 +78,9 @@ export interface AppState {
   signalStatus: SignalStatus;
   floorStatus: FloorStatus;
   gps: GPS | null;
+  hydrateAuth: () => Promise<void>;
   setJwt: (jwt: string | null) => void;
+  setCustomServerUrl: (url: string | null) => void;
   setUser: (u: User | null) => void;
   setProfile: (profile: Partial<UserProfile>) => void;
   resetProfile: () => void;
@@ -73,8 +100,10 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
+  hydrating: true,
   jwt: null,
   user: null,
+  customServerUrl: null,
   profile: {
     displayName: "",
     callsign: "",
@@ -91,7 +120,35 @@ export const useStore = create<AppState>((set) => ({
   signalStatus: { certusDataBars: 0, cellularSignal: 0, activeLink: 'none', certusDataUsedKB: 0 },
   floorStatus: { holder: null, talkgroup: '', timestamp: 0 },
   gps: null,
-  setJwt: (jwt) => set({ jwt }),
+  hydrateAuth: async () => {
+    try {
+      const [stored, storedUrl] = await Promise.all([
+        SecureStore.getItemAsync(JWT_KEY),
+        SecureStore.getItemAsync(SERVER_URL_KEY),
+      ]);
+      const patch: Partial<AppState> = { hydrating: false, customServerUrl: storedUrl ?? null };
+      if (stored && !isJwtExpired(stored)) {
+        const payload = decodeJwtPayload(stored);
+        const user = payload ? { sub: payload.sub, username: payload.username, role: payload.role } : null;
+        Object.assign(patch, { jwt: stored, user });
+      } else {
+        if (stored) await SecureStore.deleteItemAsync(JWT_KEY);
+      }
+      set(patch);
+    } catch {
+      set({ hydrating: false });
+    }
+  },
+  setJwt: (jwt) => {
+    if (jwt) SecureStore.setItemAsync(JWT_KEY, jwt).catch(() => {});
+    else SecureStore.deleteItemAsync(JWT_KEY).catch(() => {});
+    set({ jwt });
+  },
+  setCustomServerUrl: (url) => {
+    if (url) SecureStore.setItemAsync(SERVER_URL_KEY, url).catch(() => {});
+    else SecureStore.deleteItemAsync(SERVER_URL_KEY).catch(() => {});
+    set({ customServerUrl: url });
+  },
   setUser: (user) => set({ user }),
   setProfile: (profile) =>
     set((state) => ({
@@ -107,22 +164,21 @@ export const useStore = create<AppState>((set) => ({
         statusMessage: "",
       },
     }),
-  clearAuth: () =>
-    set(() => {
-      clearDlsSession();
-      return {
-        jwt: null,
-        user: null,
-        notifications: [],
-        profile: {
-          displayName: "",
-          callsign: "",
-          photoUrl: "",
-          unit: "",
-          statusMessage: "",
-        },
-      };
-    }),
+  clearAuth: () => {
+    SecureStore.deleteItemAsync(JWT_KEY).catch(() => {});
+    set({
+      jwt: null,
+      user: null,
+      notifications: [],
+      profile: {
+        displayName: "",
+        callsign: "",
+        photoUrl: "",
+        unit: "",
+        statusMessage: "",
+      },
+    });
+  },
   setActiveTalkgroup: (id) => set({ activeTalkgroup: id }),
   setPreferredConnection: (preferredConnection) => set({ preferredConnection }),
   setThemeMode: (themeMode) => set({ themeMode }),

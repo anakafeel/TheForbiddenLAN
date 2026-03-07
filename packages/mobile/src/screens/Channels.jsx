@@ -1,12 +1,13 @@
 import React, { useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Pressable, Platform } from 'react-native';
-import { Mic } from 'lucide-react';
+import { Mic } from 'lucide-react-native';
 import { ChannelContext } from '../context/ChannelContext';
 import { emitStartTalking, emitStopTalking, joinChannel, connectComms } from '../utils/socket';
 import { startAudioStream, stopAudioStream } from '../utils/audio';
 import { CONFIG } from '../config';
 import { useStore } from '../store';
 import { useAppTheme } from '../theme';
+import { s } from '../utils/responsive';
 import { playPTTPressBeep } from '../utils/pttSounds';
 import BottomMenu from '../components/BottomMenu';
 
@@ -100,7 +101,7 @@ function ChannelCard({ channel, onPress, isActive, isTransmitting, currentSpeake
         ]}
       >
         {Platform.OS === 'web' ? (
-          <Mic size={22} strokeWidth={2.2} color="#FFFFFF" />
+          <Mic size={s(22)} strokeWidth={2.2} color="#FFFFFF" />
         ) : (
           <Text style={styles.inlinePttIcon}>{isTransmitting ? '🔴' : '🎙️'}</Text>
         )}
@@ -334,7 +335,7 @@ function createStyles(colors, spacing, radius, shadows, typography) {
   },
   menuIcon: {
     color: colors.text.primary,
-    fontSize: 20,
+    fontSize: s(20),
   },
   title: {
     color: colors.text.primary,
@@ -343,7 +344,7 @@ function createStyles(colors, spacing, radius, shadows, typography) {
     letterSpacing: typography.letterSpacing.wider,
   },
   settingsIcon: {
-    fontSize: 20,
+    fontSize: s(20),
   },
   searchContainer: {
     flexDirection: 'row',
@@ -392,7 +393,7 @@ function createStyles(colors, spacing, radius, shadows, typography) {
   },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 88,
+    paddingBottom: spacing.xxl + s(88),
   },
   channelCard: {
     backgroundColor: colors.background.card,
@@ -446,9 +447,9 @@ function createStyles(colors, spacing, radius, shadows, typography) {
     backgroundColor: colors.status.active,
   },
   inlinePttButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: s(60),
+    height: s(60),
+    borderRadius: s(30),
     backgroundColor: colors.accent.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -472,7 +473,7 @@ function createStyles(colors, spacing, radius, shadows, typography) {
     transform: [{ scale: 0.95 }],
   },
   inlinePttIcon: {
-    fontSize: 24,
+    fontSize: s(22),
   },
   inlinePttLabel: {
     color: colors.text.primary,
@@ -822,7 +823,7 @@ function createStyles(colors, spacing, radius, shadows, typography) {
     transform: [{ scale: 0.95 }],
   },
   channelPttIcon: {
-    fontSize: 28,
+    fontSize: s(26),
     marginBottom: spacing.xs,
   },
   channelPttHint: {

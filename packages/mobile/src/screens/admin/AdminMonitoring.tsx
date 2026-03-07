@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet, Switch } from 'react-native';
-import { ClipboardList as ClipboardClock } from 'lucide-react';
+import { ClipboardList as ClipboardClock } from 'lucide-react-native';
 import {
   getAdminMonitoringSnapshot,
   getAdminErrorMessage,

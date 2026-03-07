@@ -2,7 +2,24 @@
 // circular imports with the store (which imports from @forbiddenlan/comms).
 import { CONFIG } from '../config';
 
-class ApiError extends Error {
+// Injected getters to avoid circular imports
+let _getJwt: () => string | null = () => null;
+let _getServerUrl: () => string | null = () => null;
+
+export function setJwtGetter(fn: () => string | null) { _getJwt = fn; }
+export function setServerUrlGetter(fn: () => string | null) { _getServerUrl = fn; }
+
+export function getEffectiveApiUrl(): string {
+  return _getServerUrl() ?? CONFIG.API_URL;
+}
+
+export function getEffectiveWsUrl(): string {
+  const base = _getServerUrl();
+  if (base) return base.replace(/^http/, 'ws') + '/ws';
+  return CONFIG.WS_URL;
+}
+
+export class ApiError extends Error {
   status: number;
   body: any;
   constructor(status: number, body: any) {
@@ -12,18 +29,13 @@ class ApiError extends Error {
   }
 }
 
-let _getJwt: () => string | null = () => null;
-export function setJwtGetter(fn: () => string | null) {
-  _getJwt = fn;
-}
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const jwt = _getJwt();
   const headers: Record<string, string> = {};
   if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
   if (options.body) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${CONFIG.API_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${getEffectiveApiUrl()}${path}`, { ...options, headers });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data);
   return data as T;
@@ -48,5 +60,3 @@ export const api = {
   patch:  <T>(path: string, body: unknown)  => request<T>(path, { method: 'PATCH',  body: JSON.stringify(body) }),
   delete: <T>(path: string)                 => request<T>(path, { method: 'DELETE' }),
 };
-
-export { ApiError };

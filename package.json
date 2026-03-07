@@ -20,8 +20,8 @@
     "test:e2e:ui": "npx playwright test --config=e2e/playwright.config.ts --ui",
     "test:e2e:headed": "npx playwright test --config=e2e/playwright.config.ts --headed",
     "lint:all": "nx run-many --target=lint --all",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
+    "android": "cd packages/mobile && expo run:android",
+    "ios": "cd packages/mobile && expo run:ios"
   },
   "devDependencies": {
     "@nx/eslint": "18.0.0",
