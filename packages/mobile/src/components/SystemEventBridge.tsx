@@ -1,13 +1,13 @@
-import React, { useEffect, useRef } from 'react';
-import NetInfo from '@react-native-community/netinfo';
-import type { SignalStatus } from '@forbiddenlan/comms';
-import { useStore } from '../store';
-import { comms } from '../utils/comms';
-import { CONFIG } from '../config';
+import React, { useEffect, useRef } from "react";
+import NetInfo from "@react-native-community/netinfo";
+import type { SignalStatus } from "@forbiddenlan/comms";
+import { useStore } from "../store";
+import { comms } from "../utils/comms";
+import { CONFIG } from "../config";
 
 function hasSignalTelemetry(status: SignalStatus) {
   return (
-    status.activeLink !== 'none' ||
+    status.activeLink !== "none" ||
     status.certusDataBars > 0 ||
     status.cellularSignal > 0 ||
     status.certusDataUsedKB > 0
@@ -31,12 +31,12 @@ function certusBarsFromDbm(dbm: number): number {
 
 function usageToKB(usage: unknown, unit: unknown): number {
   const value = toNumber(usage);
-  const normalizedUnit = String(unit || '').toUpperCase();
+  const normalizedUnit = String(unit || "").toUpperCase();
   if (!value) return 0;
 
-  if (normalizedUnit === 'GB') return value * 1024 * 1024;
-  if (normalizedUnit === 'MB') return value * 1024;
-  if (normalizedUnit === 'B') return value / 1024;
+  if (normalizedUnit === "GB") return value * 1024 * 1024;
+  if (normalizedUnit === "MB") return value * 1024;
+  if (normalizedUnit === "B") return value / 1024;
   return value;
 }
 
@@ -44,14 +44,14 @@ function inferActiveLink(
   routingPreference: unknown,
   certusBars: number,
   cellularSignal: number,
-): SignalStatus['activeLink'] {
-  const normalized = String(routingPreference || '').toLowerCase();
-  if (normalized === 'satellite') return 'satellite';
-  if (normalized === 'cellular') return 'cellular';
+): SignalStatus["activeLink"] {
+  const normalized = String(routingPreference || "").toLowerCase();
+  if (normalized === "satellite") return "satellite";
+  if (normalized === "cellular") return "cellular";
 
-  if (cellularSignal > 40) return 'cellular';
-  if (certusBars > 0) return 'satellite';
-  return 'none';
+  if (cellularSignal > 40) return "cellular";
+  if (certusBars > 0) return "satellite";
+  return "none";
 }
 
 async function fetchJson(url: string, jwt: string): Promise<any> {
@@ -74,8 +74,9 @@ async function fetchSignalFromApi(jwt: string): Promise<SignalStatus> {
     fetchJson(`${CONFIG.API_URL}/network/routing`, jwt),
   ]);
 
-  const usage = usageResult.status === 'fulfilled' ? usageResult.value : {};
-  const routing = routingResult.status === 'fulfilled' ? routingResult.value : {};
+  const usage = usageResult.status === "fulfilled" ? usageResult.value : {};
+  const routing =
+    routingResult.status === "fulfilled" ? routingResult.value : {};
 
   const certusBarsRaw = toNumber(status?.certusDataBars);
   const certusBars =
@@ -98,7 +99,11 @@ async function fetchSignalFromApi(jwt: string): Promise<SignalStatus> {
   return {
     certusDataBars: Math.max(0, Math.min(5, Math.round(certusBars))),
     cellularSignal: Math.round(cellularSignal),
-    activeLink: inferActiveLink(routing?.preference ?? routing?.prefer, certusBars, cellularSignal),
+    activeLink: inferActiveLink(
+      routing?.preference ?? routing?.prefer,
+      certusBars,
+      cellularSignal,
+    ),
     certusDataUsedKB: Math.max(0, Math.round(certusUsageKb)),
   };
 }
@@ -107,7 +112,9 @@ interface SystemEventBridgeProps {
   profileHydrated?: boolean;
 }
 
-export default function SystemEventBridge({ profileHydrated = true }: SystemEventBridgeProps) {
+export default function SystemEventBridge({
+  profileHydrated = true,
+}: SystemEventBridgeProps) {
   const jwt = useStore((s) => s.jwt);
   const role = useStore((s) => s.user?.role);
   const profile = useStore((s) => s.profile);
@@ -126,7 +133,9 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = Boolean(state.isConnected && state.isInternetReachable !== false);
+      const connected = Boolean(
+        state.isConnected && state.isInternetReachable !== false,
+      );
       const previous = netConnectedRef.current;
 
       if (previous === null) {
@@ -136,21 +145,21 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
 
       if (previous && !connected) {
         pushNotification({
-          title: 'Network Disconnected',
-          message: 'Device lost internet connectivity.',
-          severity: 'warning',
-          source: 'network',
-          dedupeKey: 'network-offline',
+          title: "Network Disconnected",
+          message: "Device lost internet connectivity.",
+          severity: "warning",
+          source: "network",
+          dedupeKey: "network-offline",
         });
       }
 
       if (!previous && connected) {
         pushNotification({
-          title: 'Network Restored',
-          message: 'Internet connectivity restored.',
-          severity: 'info',
-          source: 'network',
-          dedupeKey: 'network-online',
+          title: "Network Restored",
+          message: "Internet connectivity restored.",
+          severity: "info",
+          source: "network",
+          dedupeKey: "network-online",
         });
       }
 
@@ -161,7 +170,7 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
   }, [pushNotification]);
 
   useEffect(() => {
-    if (!jwt || role === 'admin') return undefined;
+    if (!jwt) return undefined;
 
     let disposed = false;
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -172,10 +181,13 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
       try {
         nextStatus = await fetchSignalFromApi(jwt);
       } catch {
-        try {
-          nextStatus = await comms.getSignalStatus();
-        } catch {
-          nextStatus = null;
+        // Non-admin users can also fall back to the comms SDK
+        if (role !== "admin") {
+          try {
+            nextStatus = await comms.getSignalStatus();
+          } catch {
+            nextStatus = null;
+          }
         }
       }
 
@@ -194,12 +206,14 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
   }, [jwt, role, setSignalStatus]);
 
   useEffect(() => {
-    if (!jwt || role === 'admin') return;
-    comms.setTransportMode(preferredConnection === 'satellite' ? 'satcom' : 'cellular');
+    if (!jwt || role === "admin") return;
+    comms.setTransportMode(
+      preferredConnection === "satellite" ? "satcom" : "cellular",
+    );
   }, [jwt, role, preferredConnection]);
 
   useEffect(() => {
-    if (!jwt || role === 'admin' || !profileHydrated) return;
+    if (!jwt || role === "admin" || !profileHydrated) return;
 
     if (skipFirstProfileSyncRef.current) {
       skipFirstProfileSyncRef.current = false;
@@ -209,9 +223,9 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
     const syncProfile = async () => {
       try {
         await fetch(`${CONFIG.API_URL}/users/me/profile`, {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${jwt}`,
           },
           body: JSON.stringify({
@@ -227,7 +241,15 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
     };
 
     syncProfile();
-  }, [jwt, role, profileHydrated, profile.displayName, profile.callsign, profile.photoUrl, profile.statusMessage]);
+  }, [
+    jwt,
+    role,
+    profileHydrated,
+    profile.displayName,
+    profile.callsign,
+    profile.photoUrl,
+    profile.statusMessage,
+  ]);
 
   useEffect(() => {
     const previous = prevSignalRef.current;
@@ -243,88 +265,106 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
 
     if (prevHasTelemetry || curHasTelemetry) {
       if (previous.activeLink !== current.activeLink) {
-        if (previous.activeLink !== 'none' && current.activeLink === 'none') {
+        if (previous.activeLink !== "none" && current.activeLink === "none") {
           pushNotification({
-            title: 'Connection Lost',
+            title: "Connection Lost",
             message: `${previous.activeLink.toUpperCase()} link dropped.`,
-            severity: 'warning',
-            source: 'signal',
-            dedupeKey: 'signal-link-lost',
+            severity: "warning",
+            source: "signal",
+            dedupeKey: "signal-link-lost",
           });
-        } else if (previous.activeLink === 'none' && current.activeLink !== 'none') {
+        } else if (
+          previous.activeLink === "none" &&
+          current.activeLink !== "none"
+        ) {
           pushNotification({
-            title: 'Connection Restored',
+            title: "Connection Restored",
             message: `${current.activeLink.toUpperCase()} link is back online.`,
-            severity: 'info',
-            source: 'signal',
-            dedupeKey: 'signal-link-restored',
+            severity: "info",
+            source: "signal",
+            dedupeKey: "signal-link-restored",
           });
-        } else if (previous.activeLink === 'satellite' && current.activeLink === 'cellular') {
+        } else if (
+          previous.activeLink === "satellite" &&
+          current.activeLink === "cellular"
+        ) {
           pushNotification({
-            title: 'Fallback Engaged',
-            message: 'Traffic switched from SATCOM to cellular.',
-            severity: 'warning',
-            source: 'signal',
-            dedupeKey: 'signal-fallback-cellular',
+            title: "Fallback Engaged",
+            message: "Traffic switched from SATCOM to cellular.",
+            severity: "warning",
+            source: "signal",
+            dedupeKey: "signal-fallback-cellular",
           });
-        } else if (previous.activeLink === 'cellular' && current.activeLink === 'satellite') {
+        } else if (
+          previous.activeLink === "cellular" &&
+          current.activeLink === "satellite"
+        ) {
           pushNotification({
-            title: 'SATCOM Active',
-            message: 'Traffic switched from cellular to SATCOM.',
-            severity: 'info',
-            source: 'signal',
-            dedupeKey: 'signal-satcom-active',
+            title: "SATCOM Active",
+            message: "Traffic switched from cellular to SATCOM.",
+            severity: "info",
+            source: "signal",
+            dedupeKey: "signal-satcom-active",
           });
         }
       }
 
-      if (current.activeLink === 'satellite') {
+      if (current.activeLink === "satellite") {
         if (previous.certusDataBars >= 2 && current.certusDataBars === 0) {
           pushNotification({
-            title: 'Satellite Signal Lost',
-            message: 'Certus data bars dropped to 0.',
-            severity: 'warning',
-            source: 'signal',
-            dedupeKey: 'signal-sat-lost',
+            title: "Satellite Signal Lost",
+            message: "Certus data bars dropped to 0.",
+            severity: "warning",
+            source: "signal",
+            dedupeKey: "signal-sat-lost",
           });
-        } else if (previous.certusDataBars >= 4 && current.certusDataBars <= 2) {
+        } else if (
+          previous.certusDataBars >= 4 &&
+          current.certusDataBars <= 2
+        ) {
           pushNotification({
-            title: 'Satellite Signal Degraded',
+            title: "Satellite Signal Degraded",
             message: `Certus dropped to ${current.certusDataBars}/5 bars.`,
-            severity: 'warning',
-            source: 'signal',
-            dedupeKey: 'signal-sat-degraded',
+            severity: "warning",
+            source: "signal",
+            dedupeKey: "signal-sat-degraded",
           });
         }
       }
 
-      if (current.activeLink === 'cellular') {
+      if (current.activeLink === "cellular") {
         if (previous.cellularSignal >= 30 && current.cellularSignal < 15) {
           pushNotification({
-            title: 'Cellular Signal Weak',
+            title: "Cellular Signal Weak",
             message: `Cellular signal dropped to ${current.cellularSignal}%.`,
-            severity: 'warning',
-            source: 'signal',
-            dedupeKey: 'signal-cell-weak',
+            severity: "warning",
+            source: "signal",
+            dedupeKey: "signal-cell-weak",
           });
-        } else if (previous.cellularSignal < 15 && current.cellularSignal >= 30) {
+        } else if (
+          previous.cellularSignal < 15 &&
+          current.cellularSignal >= 30
+        ) {
           pushNotification({
-            title: 'Cellular Signal Recovered',
+            title: "Cellular Signal Recovered",
             message: `Cellular signal recovered to ${current.cellularSignal}%.`,
-            severity: 'info',
-            source: 'signal',
-            dedupeKey: 'signal-cell-recovered',
+            severity: "info",
+            source: "signal",
+            dedupeKey: "signal-cell-recovered",
           });
         }
       }
 
-      if (preferredConnection === 'satellite' && current.activeLink === 'cellular') {
+      if (
+        preferredConnection === "satellite" &&
+        current.activeLink === "cellular"
+      ) {
         pushNotification({
-          title: 'Preferred Link Unavailable',
-          message: 'Preferred SATCOM link unavailable, using cellular.',
-          severity: 'warning',
-          source: 'signal',
-          dedupeKey: 'signal-preferred-satellite-unavailable',
+          title: "Preferred Link Unavailable",
+          message: "Preferred SATCOM link unavailable, using cellular.",
+          severity: "warning",
+          source: "signal",
+          dedupeKey: "signal-preferred-satellite-unavailable",
         });
       }
     }

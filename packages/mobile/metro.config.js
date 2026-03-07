@@ -116,16 +116,21 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   // require() calls at bundle time. The .native.tsx stub (SatelliteGlobe.native.tsx)
   // handles the file-level redirect; these stubs catch any direct import of the
   // underlying libraries on native as a second line of defence.
-  if (platform !== 'web' && (moduleName === 'cobe' || moduleName === 'motion' || moduleName.startsWith('motion/'))) {
-    return { type: 'sourceFile', filePath: path.resolve(shimDir, 'empty.js') };
+  if (
+    platform !== "web" &&
+    (moduleName === "cobe" ||
+      moduleName === "motion" ||
+      moduleName.startsWith("motion/"))
+  ) {
+    return { type: "sourceFile", filePath: path.resolve(shimDir, "empty.js") };
   }
 
   // ─── lucide-react → lucide-react-native ──────────────────────────────────────
   // lucide-react is the DOM/SVG web package — it renders nothing on native.
   // Redirect to lucide-react-native (uses react-native-svg) on all platforms
   // so icons render identically on Android, iOS, and web.
-  if (moduleName === 'lucide-react') {
-    return context.resolveRequest(context, 'lucide-react-native', platform);
+  if (moduleName === "lucide-react") {
+    return context.resolveRequest(context, "lucide-react-native", platform);
   }
 
   // ─── pnpm monorepo: expo/AppEntry fix ────────────────────────────────────────
@@ -199,4 +204,4 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = withNativeWind(config, { input: "./global.css" });

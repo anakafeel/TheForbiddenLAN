@@ -125,7 +125,7 @@ export function AdminMap() {
         background: isDark
           ? 'radial-gradient(circle at 18% 15%, rgba(7, 37, 55, 0.5), rgba(4, 6, 12, 0.98))'
           : 'radial-gradient(circle at 18% 15%, rgba(194, 233, 255, 0.55), rgba(234, 242, 250, 0.95))',
-        minHeight: 460,
+        height: 620,
         overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
