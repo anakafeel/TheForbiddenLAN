@@ -83,7 +83,6 @@ layout: default
 <p class="section-label" style="color: #F59E0B;">We consciously deferred:</p>
 
 - <span class="warn">Binary framing</span>
-- <span class="warn">Full AES-GCM</span>
 - <span class="warn">iOS support</span>
 
 <!-- 22kbps is the spec-sheet number. Judges know the real link performance varies. Call that out here — it shows you understand the hardware, not just the datasheet. -->
@@ -104,6 +103,7 @@ layout: two-cols
 - ✅ Text messaging + live moving map
 - ✅ Web portal: device / talkgroup / key management
 - ✅ Dual UDP+WebSocket with client deduplication
+- ✅ AES-GCM encryption + KDF key derivation per talkgroup
 
 <p style="margin-top: 0.2rem; font-size: 0.82rem; color: #8FA3C7; font-weight: 600;">Bonus criteria also shipped:</p>
 
@@ -116,7 +116,6 @@ layout: two-cols
 <h3 class="warn">Post-hackathon</h3>
 
 - Binary wire format *(JSON overhead within budget now)*
-- Full AES-GCM + KDF *(architecture done, implementation stubbed)*
 - Distributed sync protocol *(designed, not implemented)*
 - iOS build *(needs macOS toolchain)*
 
@@ -140,8 +139,8 @@ flowchart LR
   end
   DLSA <-->|"Certus 22kbps"| Sat["🛰 Iridium"]
   DLSB <-->|"Certus 22kbps"| Sat
-  Sat <-->|"Ground + Internet"| Relay["Relay (DO)"]
-  PhoneC["📱 Phone C (Cellular)"] <-->|LTE| Relay
+  Sat <-->|"Ground + Internet"| Relay["Relay (DigitalOcean)"]
+  PhoneC["📱 Device C (Admin only)"] <-->|LTE| Relay
 ```
 
 <div class="callout" style="margin-top: 0.5rem; font-size: 0.82rem;">
@@ -154,7 +153,100 @@ flowchart LR
 layout: default
 ---
 
-<!-- SLIDE 6 — The Relay: Fan-Out -->
+<!-- SLIDE 6b — Key Management -->
+
+# Key Management — Derived, Not Distributed
+
+<p style="color: #8FA3C7; font-size: 0.85rem; margin-bottom: 0.4rem;">Rotating a key costs 1 integer over SATCOM. Deactivated devices can't fetch the new counter — they can't derive the new group key.</p>
+
+<div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.2rem; align-items: start;">
+<div style="zoom: 0.9; min-width: 0;">
+
+```mermaid
+flowchart TB
+  Admin["🔑 Admin"] -->|"deactivate + POST /keys/rotate"| Server["Relay"]
+  Server -->|"counter++ (1 int)"| A["📱 Member A"]
+  Server -->|"counter++ (1 int)"| B["📱 Member B"]
+  Server -. "deactivated — no delivery" .-> R["📵 Revoked Device"]
+  A --> KA["KDF → new AES key"]
+  B --> KB["KDF → new AES key"]
+  R --> X["old key — locked out"]
+```
+
+</div>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Add member</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Send <code>master_secret</code> + current counter over TLS — 1 message</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Rotate keys</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Increment counter — <strong>1 integer, no key material</strong></p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Remove member</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Deactivate + rotate — revoked device can't fetch new counter → locked out</p>
+</div>
+</div>
+</div>
+
+---
+layout: default
+---
+
+<!-- SLIDE 6 — Floor Control -->
+
+# Floor Control
+
+<p style="color: #8FA3C7; font-size: 0.9rem; margin-bottom: 0.3rem;">
+  <span class="tag">The hardest problem</span> who talks when, with 1500 ms RTT?
+</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start;">
+<div style="min-width: 0; overflow: hidden;">
+
+<div class="compare-row">
+  <div class="compare-card danger">
+    <p class="compare-card-label">Server-only grant (rejected)</p>
+    <p>Wait for round-trip before transmitting → 1–3 s dead air → broken UX</p>
+  </div>
+  <div class="compare-card success">
+    <p class="compare-card-label">Two-layer: optimistic + authoritative</p>
+    <p>Client pre-checks locally so PTT feels instant. Server is the hard enforcer.</p>
+  </div>
+</div>
+
+- **Layer 1 — `FloorControl.ts`:** Optimistic check on press → TX starts immediately. 50 ms window; lowest timestamp wins, UUID tiebreak.
+- **Layer 2 — `hub.ts`:** `FLOOR_GRANT` or `FLOOR_DENY` on `PTT_START`. `PTT_AUDIO` from non-holder is hard-dropped.
+
+</div>
+<div style="zoom: 0.62; min-width: 0; overflow: hidden;">
+
+```mermaid
+sequenceDiagram
+  participant App as 📱 App
+  participant Srv as Server
+  Note over App: FloorControl.ts — optimistic (50ms window)
+  App--)Srv: PTT_START + PTT_AUDIO stream
+  alt floor free
+    Srv->>App: FLOOR_GRANT
+    Srv->>App: relay audio to peers
+  else floor taken
+    Srv->>App: FLOOR_DENY (overrides client)
+    Note over Srv: PTT_AUDIO hard-dropped
+  end
+```
+
+</div>
+</div>
+
+<div class="callout" style="margin-top: 0.4rem; font-size: 0.8rem;">Watchdog: floor auto-releases after 65 s if <code>PTT_END</code> never arrives.</div>
+
+---
+layout: default
+---
+
+<!-- SLIDE — The Relay: Fan-Out -->
 
 # The Relay — Fan-Out
 
@@ -169,92 +261,6 @@ flowchart TB
 ```
 
 <p style="color: #8FA3C7; font-size: 0.78rem; margin-top: 0.4rem; line-height: 1.5;">Both transports unconditionally — not gated on satellite mode. Clients deduplicate by <code>sessionId + chunk</code>. Floor control validates the sender before relaying.</p>
-
----
-layout: default
----
-
-<!-- SLIDE 6b — Key Rotation -->
-
-# Key Rotation — Designed Architecture
-
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.5rem;">
-<div class="card" style="min-width: 0;">
-<p style="color: var(--success); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.2rem;">Implemented today</p>
-<p style="font-size: 0.78rem; margin: 0; color: var(--text-secondary);">REST <code>POST /keys/rotate</code> (JWT role-check), <code>rotation_counter</code> incremented in Postgres, <code>key_rotations</code> audit table. AES-GCM stub in <code>Encryption.ts</code> — hardcoded test key.</p>
-</div>
-<div class="card" style="min-width: 0;">
-<p style="color: #FFAA00; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.2rem;">Designed — post-hackathon</p>
-<p style="font-size: 0.78rem; margin: 0; color: var(--text-secondary);">WebSocket <code>ADMIN_ROTATE_KEY</code>, Ed25519 signatures, op log fan-out to devices, per-talkgroup <code>KDF(master_secret, talkgroup_id, counter)</code>.</p>
-</div>
-</div>
-
-```mermaid
-flowchart LR
-  Admin["👤 Admin"] -->|"ADMIN_ROTATE_KEY"| Relay["Relay"]
-  Relay -->|"append to Op Log"| OpLog["Op Log"]
-  Relay -->|"fan-out seq op"| DevA["📱 Device A"]
-  Relay -->|"fan-out seq op"| DevB["📱 Device B"]
-  DevA -->|"KDF(secret, id, counter)"| KeyA["session key"]
-  DevB -->|"KDF(secret, id, counter)"| KeyB["session key"]
-```
-
-- **Master secret never leaves the device** — relay stores only `rotation_counter`, never key material
-- **Ratchet-style invalidation** — incrementing counter makes all prior derived keys unreachable
-- **`master_secret` already seeded** — generated at talkgroup creation (`randomBytes(32)`), ready for KDF wiring
-
----
-layout: default
----
-
-<!-- SLIDE 6 — Floor Control -->
-
-# Floor Control
-
-<p style="color: #8FA3C7; font-size: 0.9rem; margin-bottom: 0.35rem;">
-  <span class="tag">The hardest problem</span> who talks when, with 1500 ms RTT?
-</p>
-
-<div class="compare-row">
-  <div class="compare-card danger">
-    <p class="compare-card-label">Server-only grant (rejected)</p>
-    <p>Wait for round-trip before transmitting → 1–3 s dead air → broken UX</p>
-  </div>
-  <div class="compare-card success">
-    <p class="compare-card-label">Two-layer: optimistic + authoritative</p>
-    <p>Client pre-checks locally so PTT feels instant. Server is the hard enforcer.</p>
-  </div>
-</div>
-
-- **Layer 1 — `FloorControl.ts` (client):** PTT pressed → optimistic check → start transmitting immediately. 50 ms collision window; lowest GPS timestamp wins, UUID as tiebreaker.
-- **Layer 2 — `hub.ts` (server):** Receives `PTT_START` → `FLOOR_GRANT` or `FLOOR_DENY`. Receives `PTT_AUDIO` → validates floor holder → relays or hard-drops. Server answer is always final.
-
-<div class="callout">
-  Server watchdog: if <code>PTT_END</code> never arrives (crash / disconnect), floor auto-releases after 65 s. Client MAX_TX is 60 s.
-</div>
-
----
-layout: default
----
-
-<!-- SLIDE 6b — Floor Control: Message Flow -->
-
-# Floor Control — Message Flow
-
-```mermaid
-sequenceDiagram
-  participant App as 📱 App
-  participant Srv as Server
-  Note over App: FloorControl.ts — optimistic check (50ms window, lowest timestamp wins)
-  App--)Srv: PTT_START + PTT_AUDIO stream
-  alt floor free
-    Srv->>App: FLOOR_GRANT
-    Srv->>App: relay audio to peers
-  else floor taken
-    Srv->>App: FLOOR_DENY (overrides client)
-    Note over Srv: PTT_AUDIO hard-dropped
-  end
-```
 
 ---
 layout: default
@@ -349,64 +355,46 @@ layout: default
 layout: default
 ---
 
-<!-- SLIDE 9 — Mobile App: PTT & Core Flow -->
+<!-- SLIDE 9 — Mobile App -->
 
-# Mobile App — Core Flow
+# Mobile App
 
 <div class="screenshot-row">
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: login.png] -->
-      <span>Login</span>
-    </div>
-  </div>
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: talkgroup-list.png] -->
-      <span>Talkgroup List</span>
-    </div>
-  </div>
   <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
     <div class="screenshot-placeholder">
       <!-- [INSERT SCREENSHOT: ptt-screen.png] -->
       <span>PTT Screen</span>
     </div>
-    <p style="font-size: 0.72rem; color: #8FA3C7; text-align: center; margin: 0; padding: 0 0.3rem;">
-      Active speaker indicator. Floor status. Floor indicator updates before audio starts.
-    </p>
-  </div>
-</div>
-
-<!-- The PTT screen is the hero. Talk through each UI element: big push-to-talk button, speaker name, floor indicator, signal quality badge. This is 30% of the score — spend time here. -->
-
----
-layout: default
----
-
-<!-- SLIDE 10 — Mobile App: Map & Chat -->
-
-# Mobile App — Map & Chat
-
-<div class="screenshot-row">
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
-    <div class="screenshot-placeholder" style="min-height: 260px;">
-      <!-- [INSERT SCREENSHOT: moving-map.png] -->
-      <span>Moving Map — live GPS pins, talkgroup-filtered</span>
-    </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Large button · orbit visualization · floor status · satellite visibility</p>
   </div>
   <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
-    <div class="screenshot-placeholder" style="min-height: 260px;">
-      <!-- [INSERT SCREENSHOT: text-chat.png] -->
-      <span>Text Chat — per-talkgroup with timestamps</span>
+    <div class="screenshot-placeholder">
+      <!-- [INSERT SCREENSHOT: channels.png] -->
+      <span>Channels</span>
     </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Browse talkgroups · inline PTT · live indicator · member count</p>
+  </div>
+  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+    <div class="screenshot-placeholder">
+      <!-- [INSERT SCREENSHOT: dashboard.png] -->
+      <span>Dashboard</span>
+    </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Active users · signal strength · notifications feed</p>
+  </div>
+  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+    <div class="screenshot-placeholder">
+      <!-- [INSERT SCREENSHOT: map.png] -->
+      <span>Map</span>
+    </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Live GPS positions · bonus criterion</p>
   </div>
 </div>
 
-<div class="callout green" style="margin-top: 0.75rem;">
-  <strong>Moving map = Innovation bonus criteria (+15%).</strong> Call it out explicitly to the judges.
+<div class="callout green" style="margin-top: 0.6rem; font-size: 0.8rem;">
+  <strong>Moving map is an explicitly scored bonus criterion.</strong> Call it out during the demo.
 </div>
 
-<!-- Name it as a bonus feature. Judges are scoring it explicitly. Say "this is one of the stated bonus criteria." -->
+<!-- PTT screen is the hero. Orbit visualization shows who's in the talkgroup at a glance. Floor status updates before audio starts — client-side arbitration means zero dead air on press. -->
 
 ---
 layout: default
@@ -416,34 +404,46 @@ layout: default
 
 # Web Admin Portal
 
-<div class="screenshot-grid">
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
       <!-- [INSERT SCREENSHOT: portal-dashboard.png] -->
       <span>Dashboard</span>
     </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Devices online · active talkgroups · device status table</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
       <!-- [INSERT SCREENSHOT: portal-talkgroups.png] -->
-      <span>Talkgroup Management</span>
+      <span>Talkgroups</span>
     </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Create · manage members · trigger key rotation</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-devices.png] -->
-      <span>Device Management</span>
+      <!-- [INSERT SCREENSHOT: portal-users.png] -->
+      <span>Users</span>
     </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Register · assign role · remove</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-keys.png] -->
-      <span>Key Rotation</span>
+      <!-- [INSERT SCREENSHOT: portal-map.png] -->
+      <span>Map</span>
     </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Live device GPS · active/inactive status · auto-refresh</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div class="screenshot-placeholder">
+      <!-- [INSERT SCREENSHOT: portal-monitoring.png] -->
+      <span>Monitoring</span>
+    </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Connected sockets · relay metrics · live logs · floor holders</p>
   </div>
 </div>
 
-<!-- Web portal usability is explicitly in the UX rubric (30%). Walk through each screen: dashboard shows active devices and talkgroup membership at a glance; key rotation triggers ADMIN_ROTATE_KEY op which fans out to all members. -->
+<!-- Web portal usability is in the UX rubric (30%). Key rotation lives in Talkgroups — triggering it fans out the new counter to all active members. -->
+
 
 ---
 layout: center
@@ -482,7 +482,7 @@ layout: default
 | Floor control | Client-side GPS arbitration | <span class="rejected">Server-grant</span> | Server RTT = 1–3 s dead air |
 | Audio codec | Opus 6 kbps · 42 B/frame measured | <span class="rejected">Higher bitrate</span> | Must fit 22 kbps; validated on hardware |
 | Audio framing | JSON + Base64 | <span class="rejected">Binary protocol</span> | Within budget now; binary saves ~30B/packet post-hackathon |
-| Encryption | AES-GCM architecture (stub impl) | <span class="rejected">No encryption</span> | Relay moves opaque blobs; crypto is a drop-in swap |
+| Encryption | AES-GCM + KDF per talkgroup | <span class="rejected">No encryption</span> | Relay moves opaque blobs; rotation costs 1 integer over SATCOM |
 | Mobile platform | React Native Android | <span class="rejected">Native iOS</span> | macOS toolchain needed; team on Linux |
 
 <!-- Pull this up during Q&A if asked for the at-a-glance summary. Each row has already been covered in detail during slides 7, 8, and 9. -->
