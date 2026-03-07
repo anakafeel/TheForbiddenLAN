@@ -72,7 +72,7 @@ function StatusCard({
   bars,
   colors,
   strength,
-  isActive,
+  isSelected,
   onPress,
   styles,
 }: {
@@ -82,7 +82,7 @@ function StatusCard({
   bars: number;
   colors: any;
   strength?: "strong" | "weak" | "none";
-  isActive?: boolean;
+  isSelected?: boolean;
   onPress?: () => void;
   styles: any;
 }) {
@@ -94,8 +94,7 @@ function StatusCard({
       style={({ pressed }) => [
         styles.bentoCard,
         styles.signalCard,
-        isActive && styles.signalCardActive,
-        isActive && { borderColor: signalColor, shadowColor: signalColor },
+        isSelected && styles.signalCardSelected,
         pressed && styles.signalCardPressed,
       ]}
       onPress={onPress}
@@ -115,7 +114,7 @@ function StatusCard({
           ))}
         </View>
       </View>
-      <Text style={styles.signalValue}>{value}</Text>
+      <Text style={[styles.signalValue, { color: signalColor }]}>{value}</Text>
       <Text style={[styles.signalMetric, { color: signalColor }]}>{metric}</Text>
     </Pressable>
   );
@@ -136,7 +135,9 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const activeTalkgroupId = useStore((s) => s.activeTalkgroup);
   const setActiveTalkgroup = useStore((s) => s.setActiveTalkgroup);
   const signalStatus = useStore((s) => s.signalStatus);
+  const preferredConnection = useStore((s) => s.preferredConnection);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
+  const pushNotification = useStore((s) => s.pushNotification);
   const { current, setCurrent } = useContext(ChannelContext as any) as {
     current: { id: string; name: string } | null;
     setCurrent: (channel: any) => void;
@@ -152,9 +153,23 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const memberIdsByTalkgroupRef = useRef<Record<string, Record<string, true>>>({});
 
   const selectConnection = (mode: ConnectionMode) => {
+    const satAvailable = Math.max(0, Number(signalStatus.certusDataBars) || 0) > 0;
+    const cellAvailable = Math.max(0, Number(signalStatus.cellularSignal) || 0) > 0;
+    const available = mode === "satellite" ? satAvailable : cellAvailable;
+
+    if (!available) {
+      pushNotification({
+        title: "Signal Unavailable",
+        message:
+          mode === "satellite"
+            ? "SATCOM selected, but satellite signal is currently offline."
+            : "Cellular selected, but cellular signal is currently offline.",
+        severity: "warning",
+        source: "signal",
+      });
+    }
+
     setPreferredConnection(mode);
-    // Switch actual transport — 'satellite' maps to 'satcom' in the comms SDK
-    comms.setTransportMode(mode === 'satellite' ? 'satcom' : 'cellular');
   };
 
   useEffect(() => {
@@ -502,7 +517,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               bars={satBars}
               strength={satStrength}
               colors={colors}
-              isActive={signalStatus.activeLink === "satellite"}
+              isSelected={preferredConnection === "satellite"}
               onPress={() => selectConnection("satellite")}
               styles={styles}
             />
@@ -513,7 +528,7 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
               bars={cellBars}
               strength={cellStrength}
               colors={colors}
-              isActive={signalStatus.activeLink === "cellular"}
+              isSelected={preferredConnection === "cellular"}
               onPress={() => selectConnection("cellular")}
               styles={styles}
             />
@@ -728,13 +743,14 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     padding: spacing.lg,
     justifyContent: "space-between",
   },
-  signalCardActive: {
-    borderColor: colors.status.active,
-    shadowColor: colors.status.active,
+  signalCardSelected: {
+    borderColor: colors.accent.primary,
+    shadowColor: colors.accent.primary,
+    backgroundColor: colors.background.cardHover,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOpacity: 0.72,
+    shadowRadius: 12,
+    elevation: 10,
   },
   signalCardPressed: {
     opacity: 0.9,

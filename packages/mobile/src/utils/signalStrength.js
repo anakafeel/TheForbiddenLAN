@@ -23,6 +23,5 @@ export function getBarsFromPercent(percent, maxBars = 4) {
 export function getSignalColor(strength, colors) {
   if (strength === "strong") return colors.status.active;
   if (strength === "weak") return colors.status.warning;
-  return "#9CA3AF";
+  return colors.status.danger;
 }
-

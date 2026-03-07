@@ -544,8 +544,8 @@ export async function initComms(jwt) {
   // Init AES-GCM-256 key (hardcoded test key — replaced by KDF when ready)
   await encryption.init();
 
-  // Connect — no dlsUser/dlsPass skips DLS-140 HTTP login (avoids ERR_ADDRESS_UNREACHABLE)
-  await comms.connect(jwt);
+  // Connect to relay + attempt DLS-140 auth so signal telemetry can come from router hardware.
+  await comms.connect(jwt, CONFIG.DLS140_USER, CONFIG.DLS140_PASS);
 
   // Always use onRawMessage — half-duplex is enforced locally below.
   // onMessage's built-in filter can't distinguish "our own echoed audio" from

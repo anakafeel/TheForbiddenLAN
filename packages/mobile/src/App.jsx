@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text, Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { ChannelProvider } from './context/ChannelContext';
 import { useStore } from './store';
-import { setJwtGetter } from './lib/api';
+import { setJwtGetter, setServerUrlGetter } from './lib/api';
 import { loadUserPreferences, saveUserPreferences } from './lib/userPreferences';
 import { useAppTheme } from './theme';
 import SystemEventBridge from './components/SystemEventBridge';
@@ -87,6 +87,7 @@ export default function App() {
   // Wire the API helper's JWT getter to the store — runs once on mount.
   useEffect(() => {
     setJwtGetter(() => useStore.getState().jwt);
+    setServerUrlGetter(() => useStore.getState().customServerUrl);
   }, []);
 
   // Load persisted user profile/preferences on app boot.

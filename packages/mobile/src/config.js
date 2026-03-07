@@ -29,6 +29,8 @@ export const CONFIG = {
   WS_URL: process.env.EXPO_PUBLIC_WS_URL ?? "ws://134.122.32.45:3000/ws",
   API_URL: process.env.EXPO_PUBLIC_API_URL ?? "http://134.122.32.45:3000",
   DLS140_URL: process.env.EXPO_PUBLIC_DLS140_URL ?? "http://192.168.111.1:3000",
+  DLS140_USER: process.env.EXPO_PUBLIC_DLS140_USER ?? "skytrac",
+  DLS140_PASS: process.env.EXPO_PUBLIC_DLS140_PASS ?? "skytrac",
 
   // ── Identity ──────────────────────────────────────────────────────────────
   DEVICE_ID: process.env.EXPO_PUBLIC_DEVICE_ID ?? _stableDeviceId(),

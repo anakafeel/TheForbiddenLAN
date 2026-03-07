@@ -4,6 +4,25 @@ import type { SignalStatus } from '@forbiddenlan/comms';
 import { useStore } from '../store';
 import { comms } from '../utils/comms';
 import { CONFIG } from '../config';
+import { getEffectiveApiUrl } from '../lib/api';
+
+type EndpointAuth = 'app' | 'dls' | 'none';
+
+type SignalEndpoint = {
+  url: string;
+  base: string;
+  auth: EndpointAuth;
+};
+
+class EndpointError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const dlsJwtCache = new Map<string, string>();
 
 function hasSignalTelemetry(status: SignalStatus) {
   return (
@@ -40,6 +59,28 @@ function usageToKB(usage: unknown, unit: unknown): number {
   return value;
 }
 
+function dbmToPercent(dbm: number): number {
+  if (!Number.isFinite(dbm)) return 0;
+  if (dbm >= -50) return 100;
+  if (dbm <= -120) return 0;
+  return Math.round(((dbm + 120) / 70) * 100);
+}
+
+function normalizeBaseUrl(input: unknown): string {
+  const value = String(input || '').trim();
+  if (!value) return '';
+  return value.replace(/\/+$/, '');
+}
+
+function getCandidateBaseUrls(): string[] {
+  const unique = new Set<string>();
+  [getEffectiveApiUrl(), CONFIG.API_URL, CONFIG.DLS140_URL].forEach((base) => {
+    const normalized = normalizeBaseUrl(base);
+    if (normalized) unique.add(normalized);
+  });
+  return Array.from(unique);
+}
+
 function inferActiveLink(
   routingPreference: unknown,
   certusBars: number,
@@ -56,49 +97,165 @@ function inferActiveLink(
 
 async function fetchJson(url: string, jwt: string): Promise<any> {
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-    },
+    headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
   });
   if (!response.ok) {
-    throw new Error(`Signal endpoint failed (${response.status})`);
+    throw new EndpointError(response.status, `Signal endpoint failed (${response.status})`);
   }
   return response.json().catch(() => ({}));
 }
 
+async function loginDls(base: string): Promise<string> {
+  const cached = dlsJwtCache.get(base);
+  if (cached) return cached;
+
+  const response = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: CONFIG.DLS140_USER,
+      password: CONFIG.DLS140_PASS,
+    }),
+  });
+  if (!response.ok) {
+    throw new EndpointError(response.status, `DLS auth failed (${response.status})`);
+  }
+  const data = await response.json().catch(() => ({}));
+  const token = String(data?.jwt ?? data?.token ?? '').trim();
+  if (!token) throw new Error('DLS auth response missing token');
+  dlsJwtCache.set(base, token);
+  return token;
+}
+
+async function fetchEndpoint(endpoint: SignalEndpoint, appJwt: string): Promise<any> {
+  if (endpoint.auth === 'none') return fetchJson(endpoint.url, '');
+  if (endpoint.auth === 'app') return fetchJson(endpoint.url, appJwt);
+
+  // DLS auth endpoint.
+  const token = await loginDls(endpoint.base);
+  try {
+    return await fetchJson(endpoint.url, token);
+  } catch (err) {
+    if (err instanceof EndpointError && err.status === 401) {
+      dlsJwtCache.delete(endpoint.base);
+      const refreshed = await loginDls(endpoint.base);
+      return fetchJson(endpoint.url, refreshed);
+    }
+    throw err;
+  }
+}
+
+async function fetchFirstSuccessfulJson(
+  endpoints: SignalEndpoint[],
+  jwt: string,
+): Promise<any> {
+  let lastError: Error | null = null;
+  for (const endpoint of endpoints) {
+    try {
+      return await fetchEndpoint(endpoint, jwt);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Request failed');
+    }
+  }
+  throw lastError ?? new Error('All signal endpoints failed');
+}
+
+function parseCertusBars(status: any): number {
+  const bars = toNumber(
+    status?.certusDataBars ??
+    status?.certus_data_bars ??
+    status?.certus?.dataBars ??
+    status?.certus?.bars,
+  );
+  if (bars > 0) return bars;
+
+  const dbm = toNumber(
+    status?.certusSignalStrength ??
+    status?.certus_signal_strength ??
+    status?.certus?.signalStrength ??
+    status?.certus?.dbm,
+  );
+  return certusBarsFromDbm(dbm);
+}
+
+function parseCellularSignal(status: any): number {
+  const raw = toNumber(
+    status?.cellularSignal ??
+    status?.cellular_signal ??
+    status?.cellularSignalStrength ??
+    status?.cellular_signal_strength ??
+    status?.cellular?.signal ??
+    status?.cellular?.signalStrength ??
+    status?.cellular?.strength ??
+    status?.cell?.signalStrength ??
+    status?.lte?.signalStrength,
+  );
+
+  // Some firmware returns RSSI in dBm (negative).
+  if (raw < 0) return dbmToPercent(raw);
+  // Some payloads return 0..1 ratio.
+  if (raw > 0 && raw <= 1) return Math.round(raw * 100);
+  return Math.max(0, Math.min(100, raw));
+}
+
+function parseCertusUsageKB(usage: any): number {
+  const certusTxRxKb =
+    usageToKB(usage?.certus?.txusage, usage?.certus?.txunit) +
+    usageToKB(usage?.certus?.rxusage, usage?.certus?.rxunit);
+  if (certusTxRxKb > 0) return certusTxRxKb;
+
+  const bytesUsed = toNumber(usage?.bytesUsed ?? usage?.bytes_used ?? usage?.certus?.bytesUsed);
+  if (bytesUsed > 0) return bytesUsed / 1024;
+
+  const flatTxRxKb =
+    usageToKB(usage?.txusage, usage?.txunit) +
+    usageToKB(usage?.rxusage, usage?.rxunit);
+  return flatTxRxKb;
+}
+
 async function fetchSignalFromApi(jwt: string): Promise<SignalStatus> {
-  const status = await fetchJson(`${CONFIG.API_URL}/device/status`, jwt);
+  const dlsBase = normalizeBaseUrl(CONFIG.DLS140_URL);
+  const statusEndpoints: SignalEndpoint[] = getCandidateBaseUrls().flatMap((base) => ([
+    { url: `${base}/device/status`, base, auth: 'app' as const },
+    ...(base === dlsBase ? [{ url: `${base}/device/status`, base, auth: 'dls' as const }] : []),
+    ...(base === dlsBase ? [{ url: `${base}/device/status`, base, auth: 'none' as const }] : []),
+  ]));
+  const usageEndpoints: SignalEndpoint[] = getCandidateBaseUrls().flatMap((base) => ([
+    { url: `${base}/device/data-usage?period=24h`, base, auth: 'app' as const },
+    ...(base === dlsBase ? [{ url: `${base}/device/data-usage?period=24h`, base, auth: 'dls' as const }] : []),
+    ...(base === dlsBase ? [{ url: `${base}/device/data-usage?period=24h`, base, auth: 'none' as const }] : []),
+  ]));
+  const routingEndpoints: SignalEndpoint[] = getCandidateBaseUrls().flatMap((base) => ([
+    { url: `${base}/network/routing`, base, auth: 'app' as const },
+    ...(base === dlsBase ? [{ url: `${base}/network/routing`, base, auth: 'dls' as const }] : []),
+    ...(base === dlsBase ? [{ url: `${base}/network/routing`, base, auth: 'none' as const }] : []),
+  ]));
+
+  const status = await fetchFirstSuccessfulJson(statusEndpoints, jwt);
 
   const [usageResult, routingResult] = await Promise.allSettled([
-    fetchJson(`${CONFIG.API_URL}/device/data-usage?period=24h`, jwt),
-    fetchJson(`${CONFIG.API_URL}/network/routing`, jwt),
+    fetchFirstSuccessfulJson(usageEndpoints, jwt),
+    fetchFirstSuccessfulJson(routingEndpoints, jwt),
   ]);
 
   const usage = usageResult.status === 'fulfilled' ? usageResult.value : {};
   const routing = routingResult.status === 'fulfilled' ? routingResult.value : {};
 
-  const certusBarsRaw = toNumber(status?.certusDataBars);
-  const certusBars =
-    certusBarsRaw > 0
-      ? certusBarsRaw
-      : certusBarsFromDbm(toNumber(status?.certusSignalStrength));
-
-  const cellularSignal = Math.max(
-    0,
-    Math.min(
-      100,
-      toNumber(status?.cellularSignal ?? status?.cellularSignalStrength),
-    ),
-  );
-
-  const certusUsageKb =
-    usageToKB(usage?.certus?.txusage, usage?.certus?.txunit) +
-    usageToKB(usage?.certus?.rxusage, usage?.certus?.rxunit);
+  const certusBars = parseCertusBars(status);
+  const cellularSignal = parseCellularSignal(status);
+  const certusUsageKb = parseCertusUsageKB(usage);
+  const preferredRoute =
+    routing?.preference ??
+    routing?.prefer ??
+    routing?.activeLink ??
+    routing?.active_link ??
+    status?.activeLink ??
+    status?.active_link;
 
   return {
     certusDataBars: Math.max(0, Math.min(5, Math.round(certusBars))),
     cellularSignal: Math.round(cellularSignal),
-    activeLink: inferActiveLink(routing?.preference ?? routing?.prefer, certusBars, cellularSignal),
+    activeLink: inferActiveLink(preferredRoute, certusBars, cellularSignal),
     certusDataUsedKB: Math.max(0, Math.round(certusUsageKb)),
   };
 }
@@ -171,7 +328,8 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
 
       try {
         nextStatus = await fetchSignalFromApi(jwt);
-      } catch {
+      } catch (err) {
+        console.warn('[Signal] Router telemetry fetch failed:', err);
         try {
           nextStatus = await comms.getSignalStatus();
         } catch {
@@ -181,6 +339,14 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
 
       if (!disposed && nextStatus) {
         setSignalStatus(nextStatus);
+      } else if (!disposed) {
+        pushNotification({
+          title: 'Signal Telemetry Unavailable',
+          message: 'Cannot reach router telemetry endpoints. Check DLS connection and credentials.',
+          severity: 'warning',
+          source: 'signal',
+          dedupeKey: 'signal-telemetry-unavailable',
+        });
       }
     };
 
@@ -191,12 +357,102 @@ export default function SystemEventBridge({ profileHydrated = true }: SystemEven
       disposed = true;
       if (timer) clearInterval(timer);
     };
-  }, [jwt, role, setSignalStatus]);
+  }, [jwt, role, setSignalStatus, pushNotification]);
 
   useEffect(() => {
     if (!jwt || role === 'admin') return;
-    comms.setTransportMode(preferredConnection === 'satellite' ? 'satcom' : 'cellular');
-  }, [jwt, role, preferredConnection]);
+
+    let disposed = false;
+    const prefer = preferredConnection === 'satellite' ? 'satellite' : 'cellular';
+    const dlsBase = normalizeBaseUrl(CONFIG.DLS140_URL);
+    const candidateBases = getCandidateBaseUrls();
+
+    const applyRoutingPreference = async () => {
+      try {
+        let updated = false;
+
+        for (const base of candidateBases) {
+          const variants: Array<{ auth: EndpointAuth; body: Record<string, string> }> = [
+            { auth: 'app', body: { preference: prefer } },
+            { auth: 'app', body: { prefer } },
+          ];
+          if (base === dlsBase) {
+            variants.push(
+              { auth: 'dls', body: { preference: prefer } },
+              { auth: 'dls', body: { prefer } },
+              { auth: 'none', body: { preference: prefer } },
+              { auth: 'none', body: { prefer } },
+            );
+          }
+
+          for (const variant of variants) {
+            let authHeader: Record<string, string> = {};
+            if (variant.auth === 'app') {
+              authHeader = { Authorization: `Bearer ${jwt}` };
+            } else if (variant.auth === 'dls') {
+              try {
+                const dlsJwt = await loginDls(base);
+                authHeader = { Authorization: `Bearer ${dlsJwt}` };
+              } catch {
+                continue;
+              }
+            }
+
+            const response = await fetch(`${base}/network/routing`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeader,
+              },
+              body: JSON.stringify(variant.body),
+            });
+            if (response.ok) {
+              updated = true;
+              break;
+            }
+          }
+
+          if (updated) break;
+        }
+
+        if (!updated) throw new Error('Routing update failed');
+
+        // Refresh immediately after route change so dashboard cards reflect hardware state quickly.
+        const refreshed = await fetchSignalFromApi(jwt).catch(() => null);
+        if (!disposed && refreshed) setSignalStatus(refreshed);
+        return;
+      } catch {
+        // Best-effort fallback for legacy comms SDKs that expose setTransportMode.
+        const legacy = comms as unknown as {
+          setTransportMode?: (mode: 'satcom' | 'cellular') => Promise<void> | void;
+        };
+        if (typeof legacy.setTransportMode === 'function') {
+          try {
+            await legacy.setTransportMode(prefer === 'satellite' ? 'satcom' : 'cellular');
+            return;
+          } catch {
+            // Fall through to notification.
+          }
+        }
+      }
+
+      if (!disposed) {
+        pushNotification({
+          title: 'Routing Update Failed',
+          message: `Could not switch preferred link to ${prefer.toUpperCase()}.`,
+          severity: 'warning',
+          source: 'signal',
+          dedupeKey: `routing-update-failed-${prefer}`,
+        });
+      }
+    };
+
+    applyRoutingPreference();
+
+    return () => {
+      disposed = true;
+    };
+  }, [jwt, role, preferredConnection, pushNotification, setSignalStatus]);
 
   useEffect(() => {
     if (!jwt || role === 'admin' || !profileHydrated) return;

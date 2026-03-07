@@ -620,7 +620,6 @@ export default function PTTScreen({ navigation }) {
     console.log('#############################################');
     console.log('##### SATCOM TOGGLE PRESSED: ' + (newValue ? 'ON' : 'OFF') + ' #####');
     console.log('#############################################');
-    comms.setTransportMode(newValue ? "satcom" : "cellular");
     setPreferredConnection(newValue ? "satellite" : "cellular");
     console.log(`[PTTScreen] SATCOM toggle: ${newValue ? 'ON' : 'OFF'}`);
   }, [isSatcom, setPreferredConnection]);
