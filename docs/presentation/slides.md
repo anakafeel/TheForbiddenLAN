@@ -359,34 +359,41 @@ layout: default
 
 # Mobile App
 
-<div class="screenshot-row">
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: ptt-screen.png] -->
-      <span>PTT Screen</span>
+      <!-- [INSERT SCREENSHOT: login.png] -->
+      <span>Login</span>
     </div>
-    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Large button · orbit visualization · floor status · satellite visibility</p>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Unified auth · admin role auto-detected · device registration</p>
   </div>
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
+    <div class="screenshot-placeholder">
+      <!-- [INSERT SCREENSHOT: home.png] -->
+      <span>Home</span>
+    </div>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Active users · signal strength · notifications feed</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
       <!-- [INSERT SCREENSHOT: channels.png] -->
       <span>Channels</span>
     </div>
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Browse talkgroups · inline PTT · live indicator · member count</p>
   </div>
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: dashboard.png] -->
-      <span>Dashboard</span>
+      <!-- [INSERT SCREENSHOT: ptt-screen.png] -->
+      <span>PTT</span>
     </div>
-    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Active users · signal strength · notifications feed</p>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Large button · orbit visualization · floor status · satellite visibility</p>
   </div>
-  <div style="display: flex; flex-direction: column; flex: 1; align-items: center; gap: 0.4rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
     <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: map.png] -->
-      <span>Map</span>
+      <!-- [INSERT SCREENSHOT: profile.png] -->
+      <span>Profile</span>
     </div>
-    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Live GPS positions · bonus criterion</p>
+    <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Callsign · display name · preferred link · session info</p>
   </div>
 </div>
 
