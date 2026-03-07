@@ -6,6 +6,7 @@ import { View, Text, TextInput, Pressable, ActivityIndicator, StyleSheet, Platfo
 import { useStore } from '../store';
 import { CONFIG } from '../config';
 import { useAppTheme } from '../theme';
+import { setDlsCredentials } from '../lib/dlsAuth';
 
 /** Decode the payload section of a JWT (no verification — server already signed it).
  *  Uses a pure-JS base64 decode so it works on Hermes, JSC, and web. */
@@ -114,6 +115,9 @@ export function LoginScreen() {
 
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Login failed'); setLoading(false); return; }
+
+      // Reuse login credentials for DLS-140 local auth (/auth/login -> /location/gps).
+      setDlsCredentials(username, password);
 
       const payload = decodeJwtPayload(data.jwt);
 

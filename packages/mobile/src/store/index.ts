@@ -1,6 +1,7 @@
 // Zustand global store — auth token, user info, active talkgroup, signal status
 import { create } from 'zustand';
 import type { SignalStatus, FloorStatus, GPS } from '@forbiddenlan/comms';
+import { clearDlsSession } from '../lib/dlsAuth';
 
 export type ConnectionMode = 'satellite' | 'cellular';
 export type ThemeMode = 'dark' | 'light';
@@ -107,17 +108,20 @@ export const useStore = create<AppState>((set) => ({
       },
     }),
   clearAuth: () =>
-    set({
-      jwt: null,
-      user: null,
-      notifications: [],
-      profile: {
-        displayName: "",
-        callsign: "",
-        photoUrl: "",
-        unit: "",
-        statusMessage: "",
-      },
+    set(() => {
+      clearDlsSession();
+      return {
+        jwt: null,
+        user: null,
+        notifications: [],
+        profile: {
+          displayName: "",
+          callsign: "",
+          photoUrl: "",
+          unit: "",
+          statusMessage: "",
+        },
+      };
     }),
   setActiveTalkgroup: (id) => set({ activeTalkgroup: id }),
   setPreferredConnection: (preferredConnection) => set({ preferredConnection }),
