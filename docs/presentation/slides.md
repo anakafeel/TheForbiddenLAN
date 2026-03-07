@@ -512,6 +512,105 @@ layout: default
 
 <!-- Web portal usability is in the UX rubric (30%). Key rotation lives in Talkgroups — triggering it fans out the new counter to all active members. -->
 
+---
+layout: default
+---
+
+<!-- SLIDE — Mobile App v2 (WIP) -->
+
+# Mobile App — Designed for the Ramp
+
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; margin-bottom: 0.6rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/login.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Login</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <div class="screenshot-placeholder"><span>Home</span></div>
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Home</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <div class="screenshot-placeholder"><span>Channels</span></div>
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Channels</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <div class="screenshot-placeholder"><span>PTT</span></div>
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">PTT</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <div class="screenshot-placeholder"><span>Profile</span></div>
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Profile</p>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Oversized touch targets</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Gloves + sunlight. PTT button dominates the screen — operational requirement, not a style call.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Channel as a gate</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Must select a channel before transmitting. Accidental PTT to the wrong group on a live ramp is a real hazard.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Floor state visible</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Half-duplex needs a "don't talk" signal. Floor status shows before audio starts — not after.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Unified login</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Same app, same login for admins and crew. Role is a JWT flag — no separate portal.</p>
+</div>
+</div>
+
+---
+layout: default
+---
+
+<!-- SLIDE — Admin Portal v2 (WIP) -->
+
+# Admin Portal — Designed for the Operator
+
+<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; margin-bottom: 0.6rem;">
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/admin_dashboard.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Dashboard</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/create_talkgroup.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Talkgroups</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/create_user.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Users</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/live_map.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Live Map</p>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+    <img src="/live_monitoring.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
+    <p style="font-size: 0.62rem; color: #8FA3C7; text-align: center; margin: 0;">Monitoring</p>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Floor state, not presence</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Monitoring shows who's transmitting right now — not just online. That distinction matters in an incident.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Map = coordination</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Real-time GPS lets dispatch route crew. We chose not to frame it as tracking.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Device ≠ User</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Device and user management are separate. One person can carry multiple radios — an aviation ops reality.</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Flat permissions</p>
+<p style="font-size: 0.72rem; margin: 0; color: var(--text-secondary);">Admin or crew — nothing in between. In an emergency you don't debug ACLs.</p>
+</div>
+</div>
 
 ---
 layout: center
