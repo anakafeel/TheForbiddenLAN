@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import fastifyCors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
 import { authRoutes } from './routes/auth.js';
 import { talkgroupRoutes } from './routes/talkgroups.js';
 import { deviceRoutes } from './routes/devices.js';
@@ -12,12 +13,14 @@ import { userRoutes } from './routes/users.js';
 import { tleRoutes } from './routes/tle.js';
 import { monitoringRoutes } from './routes/monitoring.js';
 import { registerHub, startUdpServer } from './ws/hub.js';
+import { AVATARS_DIR } from './constants.js';
 
 const app = Fastify({ logger: true });
 
 await app.register(fastifyCors, { origin: true });
 await app.register(fastifyJwt, { secret: process.env.JWT_SECRET ?? 'dev-secret' });
 await app.register(fastifyWebsocket);
+await app.register(fastifyStatic, { root: AVATARS_DIR, prefix: '/avatars/' });
 
 app.get('/ping', async () => ({ pong: true }));
 

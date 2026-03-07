@@ -112,12 +112,13 @@ export async function talkgroupRoutes(app: FastifyInstance) {
       where: { talkgroup_id: id },
       include: { user: { select: { id: true, username: true, role: true } } },
     });
-    return {
-      members: memberships.map((membership) => ({
+    const members = await Promise.all(
+      memberships.map(async (membership) => ({
         ...membership.user,
-        profile: getUserProfile(membership.user.id, membership.user.username),
+        profile: await getUserProfile(membership.user.id, membership.user.username),
       })),
-    };
+    );
+    return { members };
   });
 
   // POST /talkgroups/:id/members — admin adds a user to a talkgroup

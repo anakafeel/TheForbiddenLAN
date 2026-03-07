@@ -19,7 +19,6 @@ import { CONFIG } from './config';
 import { LoginScreen } from './screens/LoginScreen';
 import AppDrawer from './navigation/AppDrawer';
 import { AdminDashboard } from './screens/admin/AdminDashboard';
-import { AdminDevices } from './screens/admin/AdminDevices';
 import { AdminTalkgroups } from './screens/admin/AdminTalkgroups';
 import { AdminUsers } from './screens/admin/AdminUsers';
 import { AdminMap } from './screens/admin/AdminMap';
@@ -54,7 +53,6 @@ function AdminNavigator() {
       }}
     >
       <AdminTabs.Screen name="Dashboard" component={AdminDashboard} options={{ tabBarLabel: 'Dashboard' }} />
-      <AdminTabs.Screen name="Devices" component={AdminDevices} options={{ tabBarLabel: 'Devices' }} />
       <AdminTabs.Screen
         name="Talkgroups"
         component={AdminTalkgroups}
