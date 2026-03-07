@@ -266,6 +266,85 @@ flowchart TB
 layout: default
 ---
 
+<!-- SLIDE — Dual Delivery & Deduplication -->
+
+# Dual Delivery — Survive Any Path Failure
+
+<p style="color: #8FA3C7; font-size: 0.88rem; margin-bottom: 0.5rem;">The relay fans out every audio chunk on both UDP and WebSocket. Clients take whichever arrives first and discard the duplicate.</p>
+
+<div style="zoom: 0.85; margin-bottom: 0.6rem;">
+
+```mermaid
+flowchart LR
+  Sender["📱 Sender"] --> Relay["Relay"]
+  Relay -->|"UDP"| Peer["📱 Peer"]
+  Relay -->|"WS"| Peer
+  Peer --> Speaker["🔊 first wins — dupe dropped"]
+```
+
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Keep-alive</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);"><code>UDP_REGISTER</code> every 25 s — keeps NAT mapping alive on satellite link</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Deduplication</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Keyed on <code>sessionId:chunk</code> — no config, works transparently across transport switches</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Fallback</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">UDP blocked by firewall? WS carries audio. No intervention required.</p>
+</div>
+</div>
+
+---
+layout: default
+---
+
+<!-- SLIDE — Forward Error Correction -->
+
+# FEC — Recover Without Retransmit
+
+<p style="color: #8FA3C7; font-size: 0.88rem; margin-bottom: 0.5rem;">Satellite links drop packets. TCP retransmit = stale audio arriving late. Instead, every 4 frames carry a 5th XOR parity chunk — the receiver reconstructs any single loss locally.</p>
+
+<div style="zoom: 0.85; margin-bottom: 0.6rem;">
+
+```mermaid
+flowchart LR
+  subgraph TX["AudioPipeline — TX"]
+    direction TB
+    frames["4 audio frames"] -->|XOR| parity["+ parity chunk"]
+  end
+  TX -->|"5 packets over satellite"| RX
+  subgraph RX["comms.js — RX"]
+    direction TB
+    recv["3 frames + parity\n(1 dropped)"] -->|XOR| rec["lost frame recovered"]
+  end
+```
+
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Overhead</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">20% — 5 packets to protect 4 frames</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">Recovery</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Any 1 loss per group — XOR of remaining 3 + parity</p>
+</div>
+<div class="card">
+<p style="color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; margin: 0 0 0.15rem;">No round-trip</p>
+<p style="font-size: 0.75rem; margin: 0; color: var(--text-secondary);">Recovery happens at receiver — 1500 ms RTT makes retransmit unusable</p>
+</div>
+</div>
+
+---
+layout: default
+---
+
 <!-- SLIDE 7 — Messaging Framework -->
 
 # Why WebSocket + UDP
