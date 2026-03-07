@@ -109,6 +109,17 @@ const NODE_BUILTIN_SHIMS = new Set([
 ]);
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // ─── Web-only packages: stub on native ──────────────────────────────────────
+  // cobe (WebGL globe) and motion/react (Framer Motion web) are imported by
+  // SatelliteGlobe.tsx which is only rendered on web. Even though AdminMap.tsx
+  // guards the require() with `if (Platform.OS === 'web')`, Metro resolves ALL
+  // require() calls at bundle time. The .native.tsx stub (SatelliteGlobe.native.tsx)
+  // handles the file-level redirect; these stubs catch any direct import of the
+  // underlying libraries on native as a second line of defence.
+  if (platform !== 'web' && (moduleName === 'cobe' || moduleName === 'motion' || moduleName.startsWith('motion/'))) {
+    return { type: 'sourceFile', filePath: path.resolve(shimDir, 'empty.js') };
+  }
+
   // ─── lucide-react → lucide-react-native ──────────────────────────────────────
   // lucide-react is the DOM/SVG web package — it renders nothing on native.
   // Redirect to lucide-react-native (uses react-native-svg) on all platforms

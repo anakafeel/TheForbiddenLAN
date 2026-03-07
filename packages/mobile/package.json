@@ -17,6 +17,7 @@
     "buffer": "^6.0.3",
     "cobe": "^0.6.5",
     "expo": "~54.0.33",
+    "motion": "^12.35.0",
     "expo-asset": "~12.0.12",
     "expo-av": "~16.0.8",
     "expo-clipboard": "~8.0.8",
