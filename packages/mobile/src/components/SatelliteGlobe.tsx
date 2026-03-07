@@ -78,7 +78,6 @@ function toCobeMarker(marker: RuntimeMarker): Marker {
   return {
     location: [marker.lat, marker.lng],
     size: marker.size,
-    color: marker.color,
   };
 }
 

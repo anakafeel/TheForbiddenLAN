@@ -4,7 +4,9 @@ import * as satellite from 'satellite.js';
 import {
   getAdminErrorMessage,
   getAdminRouterPosition,
+  listAdminDevices,
   listAdminMapPositions,
+  type AdminDevice,
   type AdminMapPosition,
   type AdminRouterPosition,
 } from '../../lib/adminApi';
@@ -97,7 +99,7 @@ function computeSatelliteMarkers(catalog: IridiumSatellite[], now: Date) {
         id: entry.id,
         lat,
         lng,
-        size: 0.022,
+        size: 0.014,
         color: SATELLITE_MARKER_COLOR,
       };
     })
@@ -188,7 +190,7 @@ export function AdminMap() {
         boxShadow: 'none',
       } as CSSProperties,
       selectedDataButton: {
-        borderColor: colors.status.info,
+        border: `1px solid ${colors.status.info}`,
       } as CSSProperties,
       paletteRow: {
         display: 'flex',
@@ -246,6 +248,7 @@ export function AdminMap() {
     [colors, spacing, typography, isDark],
   );
 
+  const [allDevices, setAllDevices] = useState<AdminDevice[]>([]);
   const [positions, setPositions] = useState<AdminMapPosition[]>([]);
   const [routerPosition, setRouterPosition] = useState<AdminRouterPosition | null>(null);
   const [iridiumCatalog, setIridiumCatalog] = useState<IridiumSatellite[]>([]);
@@ -261,6 +264,7 @@ export function AdminMap() {
   const [refreshing, setRefreshing] = useState(false);
 
   const mountedRef = useRef(true);
+  const routerFailsRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -271,8 +275,12 @@ export function AdminMap() {
 
   const syncPositions = useCallback(async () => {
     try {
-      const nextPositions = await listAdminMapPositions();
+      const [nextDevices, nextPositions] = await Promise.all([
+        listAdminDevices(),
+        listAdminMapPositions(),
+      ]);
       if (!mountedRef.current) return;
+      setAllDevices(nextDevices);
       setPositions(nextPositions);
       setPositionsError('');
       setLastDataSyncAt(new Date().toISOString());
@@ -288,11 +296,21 @@ export function AdminMap() {
     try {
       const nextRouter = await getAdminRouterPosition();
       if (!mountedRef.current) return;
-      setRouterPosition(nextRouter);
+      // Only replace the stored position when we get a real fix.
+      // A null result (no satellite lock) must not erase the last known marker.
+      if (nextRouter !== null) {
+        setRouterPosition(nextRouter);
+        routerFailsRef.current = 0;
+      }
       setRouterError('');
       setLastDataSyncAt(new Date().toISOString());
     } catch (err) {
       if (!mountedRef.current) return;
+      routerFailsRef.current += 1;
+      if (routerFailsRef.current === 1) {
+        // Only warn once — subsequent failures are expected when off-LAN
+        console.warn('[AdminMap] syncRouter: DLS-140 unreachable (off-LAN):', (err as Error).message);
+      }
       setRouterError(getAdminErrorMessage(err, 'Failed to load router location'));
     } finally {
       setLoading(false);
@@ -337,22 +355,20 @@ export function AdminMap() {
     if (!focusTarget) return;
 
     if (focusTarget.type === 'router' && routerPosition) {
-      setFocusTarget((prev) => (prev ? { ...prev, lat: routerPosition.lat, lng: routerPosition.lng } : prev));
+      if (focusTarget.lat !== routerPosition.lat || focusTarget.lng !== routerPosition.lng) {
+        setFocusTarget((prev) => (prev ? { ...prev, lat: routerPosition.lat, lng: routerPosition.lng } : prev));
+      }
       return;
     }
 
     if (focusTarget.type === 'device') {
       const match = positions.find((entry) => entry.deviceId === focusTarget.id);
-      if (match) {
+      if (
+        match &&
+        (match.lat !== focusTarget.lat || match.lng !== focusTarget.lng || match.deviceName !== focusTarget.label)
+      ) {
         setFocusTarget((prev) =>
-          prev
-            ? {
-                ...prev,
-                lat: match.lat,
-                lng: match.lng,
-                label: match.deviceName,
-              }
-            : prev,
+          prev ? { ...prev, lat: match.lat, lng: match.lng, label: match.deviceName } : prev,
         );
       }
     }
@@ -379,7 +395,7 @@ export function AdminMap() {
         id: `device-${point.deviceId}`,
         lat: point.lat,
         lng: point.lng,
-        size: point.active ? 0.07 : 0.055,
+        size: point.active ? 0.06 : 0.04,
         color: point.active ? DEVICE_ACTIVE_COLOR : DEVICE_INACTIVE_COLOR,
       })),
     [positions],
@@ -393,7 +409,7 @@ export function AdminMap() {
               id: 'router-main',
               lat: routerPosition.lat,
               lng: routerPosition.lng,
-              size: 0.095,
+              size: 0.07,
               color: ROUTER_MARKER_COLOR,
             },
           ]
@@ -485,8 +501,10 @@ export function AdminMap() {
             <div style={webStyles.statValue}>{satelliteMarkers.length}</div>
           </div>
           <div style={webStyles.statCard}>
-            <div style={webStyles.statLabel}>Devices with GPS</div>
-            <div style={webStyles.statValue}>{positions.length}</div>
+            <div style={webStyles.statLabel}>Devices</div>
+            <div style={webStyles.statValue}>
+              {allDevices.filter((d) => d.active).length} active / {allDevices.length} total
+            </div>
           </div>
           <div style={webStyles.statCard}>
             <div style={webStyles.statLabel}>Router GPS</div>
@@ -568,28 +586,36 @@ export function AdminMap() {
           <div style={webStyles.card}>
             <div style={webStyles.cardHeader}>Devices</div>
             <div style={webStyles.cardBody}>
-              {positions.length === 0 ? (
-                <div style={webStyles.emptyText}>No device GPS data yet.</div>
+              {allDevices.length === 0 ? (
+                <div style={webStyles.emptyText}>No devices registered.</div>
               ) : (
-                positions.map((device) => (
-                  <button
-                    key={device.deviceId}
-                    type="button"
-                    onClick={() => selectDevice(device)}
-                    style={{
-                      ...webStyles.dataButton,
-                      ...(focusTarget?.type === 'device' && focusTarget.id === device.deviceId
-                        ? webStyles.selectedDataButton
-                        : {}),
-                    }}
-                  >
-                    {device.deviceName}
-                    <div style={webStyles.metaText}>
-                      {device.lat.toFixed(5)}, {device.lng.toFixed(5)} • {Math.round(device.alt)} m • {device.active ? 'Active' : 'Inactive'}
-                    </div>
-                    <div style={webStyles.metaText}>Updated {new Date(device.updated_at).toLocaleTimeString()}</div>
-                  </button>
-                ))
+                allDevices.map((device) => {
+                  const gps = positions.find((p) => p.deviceId === device.id);
+                  return (
+                    <button
+                      key={device.id}
+                      type="button"
+                      onClick={() => gps ? selectDevice(gps) : undefined}
+                      style={{
+                        ...webStyles.dataButton,
+                        cursor: gps ? 'pointer' : 'default',
+                        ...(focusTarget?.type === 'device' && focusTarget.id === device.id
+                          ? webStyles.selectedDataButton
+                          : {}),
+                      }}
+                    >
+                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, backgroundColor: device.active ? 'rgb(54,235,102)' : 'rgb(235,89,89)', marginRight: 6 }} />
+                      {device.name}
+                      <div style={webStyles.metaText}>
+                        {device.active ? 'Active' : 'Inactive'} • {device.site}
+                        {gps ? ` • ${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)} • ${Math.round(gps.alt)} m` : ' • No GPS'}
+                      </div>
+                      {gps && (
+                        <div style={webStyles.metaText}>Updated {new Date(gps.updated_at).toLocaleTimeString()}</div>
+                      )}
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
