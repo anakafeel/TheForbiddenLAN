@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState, useCallback, useRef, useContext } 
 import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
 import BottomMenu from "../components/BottomMenu";
 import { useAppTheme } from "../theme";
+import { hp, s } from '../utils/responsive';
 import { useStore, type ConnectionMode } from "../store";
 import { comms } from "../utils/comms";
 import { CONFIG } from "../config";
@@ -507,7 +508,7 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
-    paddingBottom: spacing.xxl + 84,
+    paddingBottom: spacing.xxl + s(84),
   },
   scroll: {
     paddingHorizontal: spacing.lg,
@@ -567,7 +568,7 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
   },
   usersBento: {
     flex: 1.2,
-    height: 320,
+    height: hp(38),
     paddingTop: spacing.lg,
   },
   usersHeaderRow: {
@@ -664,7 +665,7 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     flex: 0.95,
     gap: spacing.md,
     alignSelf: "stretch",
-    height: 320,
+    height: hp(38),
   },
   signalCard: {
     flex: 1,
@@ -754,7 +755,7 @@ function createStyles(colors: any, spacing: any, radius: any, typography: any) {
     borderColor: colors.border.subtle,
     padding: spacing.md,
     minHeight: 220,
-    maxHeight: 260,
+    maxHeight: hp(32),
   },
   notificationsScroll: {
     flex: 1,

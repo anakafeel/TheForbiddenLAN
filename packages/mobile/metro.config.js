@@ -109,6 +109,14 @@ const NODE_BUILTIN_SHIMS = new Set([
 ]);
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // ─── lucide-react → lucide-react-native ──────────────────────────────────────
+  // lucide-react is the DOM/SVG web package — it renders nothing on native.
+  // Redirect to lucide-react-native (uses react-native-svg) on all platforms
+  // so icons render identically on Android, iOS, and web.
+  if (moduleName === 'lucide-react') {
+    return context.resolveRequest(context, 'lucide-react-native', platform);
+  }
+
   // ─── pnpm monorepo: expo/AppEntry fix ────────────────────────────────────────
   // When the native Android binary requests the virtual entry bundle, Metro
   // resolves it from the pnpm virtual store:

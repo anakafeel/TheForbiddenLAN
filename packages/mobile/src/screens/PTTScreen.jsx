@@ -17,8 +17,10 @@ import {
   Easing,
   Platform,
   Image,
+  useWindowDimensions,
 } from "react-native";
-import { Mic } from "lucide-react";
+import { Mic } from "lucide-react-native";
+import { s, wp, hp } from '../utils/responsive';
 import { ChannelContext } from "../context/ChannelContext";
 import { startAudioStream, stopAudioStream } from "../utils/audio";
 import {
@@ -40,8 +42,6 @@ import { playPTTPressBeep } from "../utils/pttSounds";
 import BottomMenu from "../components/BottomMenu";
 
 const LOCAL_USER_LABEL = "YOU";
-const ORBIT_RADIUS_X = 132;
-const ORBIT_RADIUS_Y = 92;
 
 function formatDuration(totalSeconds) {
   const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -83,6 +83,8 @@ function getUserInitials(user, localUserIds = []) {
 function ParticipantOrbit({
   participants,
   styles,
+  orbitRadiusX,
+  orbitRadiusY,
 }) {
   const spin = useRef(new Animated.Value(0)).current;
 
@@ -115,21 +117,29 @@ function ParticipantOrbit({
   });
 
   const bubbleSize =
-    participants.length > 12 ? 30 : participants.length > 8 ? 34 : 40;
+    participants.length > 12 ? s(30) : participants.length > 8 ? s(34) : s(40);
+  const halfBubble = bubbleSize / 2;
+
+  // The animated view must be a square large enough to contain every bubble at any
+  // rotation angle. The worst case is the diagonal: sqrt(rx² + ry²) + halfBubble.
+  const maxRadius = Math.sqrt(orbitRadiusX * orbitRadiusX + orbitRadiusY * orbitRadiusY);
+  const trackSize = Math.ceil(2 * (maxRadius + halfBubble + 2));
+  const center = trackSize / 2;
 
   return (
     <View pointerEvents="none" style={styles.orbitContainer}>
       <Animated.View
-        style={[
-          styles.orbitTrack,
-          participants.length > 0 && { transform: [{ rotate }] },
-        ]}
+        style={{
+          width: trackSize,
+          height: trackSize,
+          transform: participants.length > 0 ? [{ rotate }] : [],
+        }}
       >
         {participants.map((participant, index) => {
           const count = Math.max(1, participants.length);
           const angle = (Math.PI * 2 * index) / count;
-          const translateX = Math.cos(angle) * ORBIT_RADIUS_X;
-          const translateY = Math.sin(angle) * ORBIT_RADIUS_Y;
+          const tx = Math.cos(angle) * orbitRadiusX;
+          const ty = Math.sin(angle) * orbitRadiusY;
           const highlighted = participant.isTalking;
 
           return (
@@ -143,9 +153,8 @@ function ParticipantOrbit({
                   width: bubbleSize,
                   height: bubbleSize,
                   borderRadius: bubbleSize / 2,
-                  marginLeft: -(bubbleSize / 2),
-                  marginTop: -(bubbleSize / 2),
-                  transform: [{ translateX }, { translateY }],
+                  left: center + tx - halfBubble,
+                  top: center + ty - halfBubble,
                 },
               ]}
             >
@@ -171,10 +180,33 @@ function ParticipantOrbit({
 
 export default function PTTScreen({ navigation }) {
   const { colors, spacing, radius, typography } = useAppTheme();
+  const { height: screenH } = useWindowDimensions();
+  const isCompact = screenH < 680;
   const styles = useMemo(
-    () => createStyles(colors, spacing, radius, typography),
-    [colors, spacing, radius, typography],
+    () => createStyles(colors, spacing, radius, typography, isCompact),
+    [colors, spacing, radius, typography, isCompact],
   );
+
+  const [pttAreaHeight, setPttAreaHeight] = useState(0);
+  const handlePttAreaLayout = useCallback(
+    (e) => setPttAreaHeight(e.nativeEvent.layout.height),
+    [],
+  );
+
+  // Compute orbit radii that are guaranteed to fit inside pttArea.
+  // The Animated.View is a square of side = 2*(sqrt(rx²+ry²) + halfBubble + 2).
+  // Its half-diagonal must be <= pttAreaHeight/2 so it never overflows into
+  // sibling views that would paint on top and hide the bubbles.
+  const { orbitRadiusX, orbitRadiusY } = useMemo(() => {
+    const maxDiag = pttAreaHeight > 0
+      ? Math.max(50, pttAreaHeight / 2 - s(22))
+      : s(132); // safe default before layout
+    // Maintain original 132:92 aspect ratio
+    const aspect = 132 / 92;
+    const ry = Math.round(maxDiag / Math.sqrt(aspect * aspect + 1));
+    const rx = Math.round(aspect * ry);
+    return { orbitRadiusX: rx, orbitRadiusY: ry };
+  }, [pttAreaHeight]);
 
   const { current, setCurrent } = useContext(ChannelContext);
   const jwt = useStore((s) => s.jwt);
@@ -825,14 +857,7 @@ export default function PTTScreen({ navigation }) {
         </Text>
       </View>
 
-      <View style={styles.pttArea}>
-        {hasPresenceSnapshot && channelUsers.length > 0 && (
-          <ParticipantOrbit
-            participants={orbitParticipants}
-            styles={styles}
-          />
-        )}
-
+      <View style={styles.pttArea} onLayout={handlePttAreaLayout}>
         <View
           style={[
             styles.glowRing,
@@ -868,7 +893,7 @@ export default function PTTScreen({ navigation }) {
         >
           <View style={styles.pttIconWrap}>
             {Platform.OS === "web" ? (
-              <Mic size={46} color={colors.text.inverse} strokeWidth={2.2} />
+              <Mic size={s(46)} color={colors.text.inverse} strokeWidth={2.2} />
             ) : (
               <Text style={styles.pttIcon}>{isTransmitting ? "🔴" : "🎙️"}</Text>
             )}
@@ -877,6 +902,15 @@ export default function PTTScreen({ navigation }) {
             {isTransmitting ? "TRANSMITTING" : "HOLD TO TALK"}
           </Text>
         </Pressable>
+
+        {hasPresenceSnapshot && channelUsers.length > 0 && (
+          <ParticipantOrbit
+            participants={orbitParticipants}
+            styles={styles}
+            orbitRadiusX={orbitRadiusX}
+            orbitRadiusY={orbitRadiusY}
+          />
+        )}
       </View>
 
       <View style={styles.toggleContainer}>
@@ -938,7 +972,7 @@ export default function PTTScreen({ navigation }) {
   );
 }
 
-function createStyles(colors, spacing, radius, typography) {
+function createStyles(colors, spacing, radius, typography, isCompact = false) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -951,7 +985,7 @@ function createStyles(colors, spacing, radius, typography) {
       padding: spacing.xl,
     },
     noChannelIcon: {
-      fontSize: 64,
+      fontSize: s(64),
       marginBottom: spacing.lg,
       opacity: 0.5,
     },
@@ -981,7 +1015,7 @@ function createStyles(colors, spacing, radius, typography) {
     },
     channelHeader: {
       alignItems: "center",
-      paddingVertical: spacing.xl,
+      paddingVertical: isCompact ? spacing.xs : spacing.xl,
       paddingHorizontal: spacing.lg,
       backgroundColor: colors.background.secondary,
       borderBottomWidth: 1,
@@ -1088,7 +1122,7 @@ function createStyles(colors, spacing, radius, typography) {
       textAlign: "center",
     },
     userCirclesSection: {
-      paddingVertical: spacing.md,
+      paddingVertical: isCompact ? spacing.xs : spacing.md,
       paddingHorizontal: spacing.lg,
       borderBottomWidth: 1,
       borderBottomColor: colors.border.subtle,
@@ -1117,7 +1151,7 @@ function createStyles(colors, spacing, radius, typography) {
     },
     speakingBar: {
       backgroundColor: colors.background.tertiary,
-      paddingVertical: spacing.md,
+      paddingVertical: isCompact ? spacing.xs : spacing.md,
       paddingHorizontal: spacing.lg,
       alignItems: "center",
       borderBottomWidth: 1,
@@ -1147,10 +1181,11 @@ function createStyles(colors, spacing, radius, typography) {
     },
     orbitContainer: {
       position: "absolute",
-      width: 340,
-      height: 260,
+      width: wp(87),
+      height: isCompact ? hp(28) : hp(30),
       alignItems: "center",
       justifyContent: "center",
+      overflow: "visible",
     },
     orbitTrack: {
       width: 1,
@@ -1209,25 +1244,25 @@ function createStyles(colors, spacing, radius, typography) {
       opacity: 0.3,
     },
     glowRing1: {
-      width: 280,
-      height: 280,
+      width: isCompact ? s(220) : s(280),
+      height: isCompact ? s(220) : s(280),
     },
     glowRing2: {
-      width: 240,
-      height: 240,
+      width: isCompact ? s(180) : s(240),
+      height: isCompact ? s(180) : s(240),
     },
     glowRing3: {
-      width: 200,
-      height: 200,
+      width: isCompact ? s(150) : s(200),
+      height: isCompact ? s(150) : s(200),
     },
     glowRingActive: {
       borderColor: colors.status.danger,
       opacity: 0.6,
     },
     pttButton: {
-      width: 160,
-      height: 160,
-      borderRadius: 80,
+      width: isCompact ? s(130) : s(160),
+      height: isCompact ? s(130) : s(160),
+      borderRadius: isCompact ? s(65) : s(80),
       backgroundColor: colors.accent.primary,
       alignItems: "center",
       justifyContent: "center",
@@ -1250,11 +1285,11 @@ function createStyles(colors, spacing, radius, typography) {
       transform: [{ scale: 0.95 }],
     },
     pttIcon: {
-      fontSize: 48,
+      fontSize: s(48),
       marginBottom: 0,
     },
     pttIconWrap: {
-      height: 52,
+      height: s(52),
       justifyContent: "center",
       alignItems: "center",
       marginBottom: spacing.sm,
@@ -1279,7 +1314,7 @@ function createStyles(colors, spacing, radius, typography) {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: spacing.lg,
+      paddingVertical: isCompact ? spacing.xs : spacing.lg,
     },
     toggleLabel: {
       color: colors.text.muted,
@@ -1324,7 +1359,7 @@ function createStyles(colors, spacing, radius, typography) {
       color: colors.text.muted,
       fontSize: typography.size.sm,
       textAlign: "center",
-      paddingBottom: spacing.xxl + 84,
+      paddingBottom: (isCompact ? spacing.xs : spacing.xxl) + s(84),
       letterSpacing: typography.letterSpacing.wide,
     },
   });

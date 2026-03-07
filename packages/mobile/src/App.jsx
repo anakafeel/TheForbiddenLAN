@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text, Platform } from 'react-native';
+import { Text, Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { ChannelProvider } from './context/ChannelContext';
 import { useStore } from './store';
 import { setJwtGetter } from './lib/api';
@@ -70,12 +70,19 @@ function AdminNavigator() {
 export default function App() {
   const jwt = useStore(s => s.jwt);
   const user = useStore(s => s.user);
+  const hydrating = useStore(s => s.hydrating);
+  const hydrateAuth = useStore(s => s.hydrateAuth);
   const setProfile = useStore((s) => s.setProfile);
   const preferredConnection = useStore((s) => s.preferredConnection);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
   const { themeMode } = useAppTheme();
   const [prefsHydrated, setPrefsHydrated] = useState(false);
   const [profileHydrated, setProfileHydrated] = useState(false);
+
+  // Restore JWT from SecureStore on first launch — must run before anything else.
+  useEffect(() => {
+    hydrateAuth();
+  }, []);
 
   // Wire the API helper's JWT getter to the store — runs once on mount.
   useEffect(() => {
@@ -155,6 +162,16 @@ export default function App() {
   }, [prefsHydrated, preferredConnection]);
 
   // No user → login. Admin → admin tabs. User → Annie's drawer (Dashboard, Channels, PTT, Profile).
+  if (hydrating) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.splash}>
+          <ActivityIndicator size="large" color="#4FC3F7" />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   if (!user) {
     return (
       <SafeAreaProvider>
@@ -178,3 +195,11 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    backgroundColor: '#0D1117',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

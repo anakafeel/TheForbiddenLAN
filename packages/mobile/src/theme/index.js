@@ -4,6 +4,7 @@
  */
 import { useMemo } from 'react';
 import { useStore } from '../store';
+import { ms, s } from '../utils/responsive';
 
 export const darkColors = {
   background: {
@@ -116,13 +117,13 @@ export const lightColors = {
 };
 
 export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-  xxxl: 48,
+  xs: ms(4),
+  sm: ms(8),
+  md: ms(12),
+  lg: ms(16),
+  xl: ms(24),
+  xxl: ms(32),
+  xxxl: ms(48),
 };
 
 export const radius = {
@@ -180,16 +181,16 @@ export const shadows = {
 };
 
 export const typography = {
-  // Font sizes
+  // Font sizes — scaled to screen width via moderate scale
   size: {
-    xs: 10,
-    sm: 12,
-    md: 14,
-    lg: 16,
-    xl: 20,
-    xxl: 24,
-    xxxl: 32,
-    display: 48,
+    xs: s(10),
+    sm: s(12),
+    md: s(14),
+    lg: s(16),
+    xl: s(20),
+    xxl: s(24),
+    xxxl: s(32),
+    display: s(48),
   },
   // Font weights
   weight: {

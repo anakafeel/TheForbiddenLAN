@@ -2,7 +2,7 @@
 // Manages its own active tab state and renders admin screens directly.
 import React, { useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Mic, TvMinimalPlay, House, User, MapPin, ClipboardList as ClipboardClock } from 'lucide-react';
+import { Mic, TvMinimalPlay, House, User, MapPin, ClipboardList as ClipboardClock } from 'lucide-react-native';
 import { useAppTheme } from '../theme';
 import { useStore } from '../store';
 
