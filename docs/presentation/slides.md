@@ -361,10 +361,7 @@ layout: default
 
 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: login.png] -->
-      <span>Login</span>
-    </div>
+    <img src="/login.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Unified auth · admin role auto-detected · device registration</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
@@ -413,38 +410,23 @@ layout: default
 
 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-dashboard.png] -->
-      <span>Dashboard</span>
-    </div>
+    <img src="/admin_dashboard.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Devices online · active talkgroups · device status table</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-talkgroups.png] -->
-      <span>Talkgroups</span>
-    </div>
+    <img src="/create_talkgroup.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Create · manage members · trigger key rotation</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-users.png] -->
-      <span>Users</span>
-    </div>
+    <img src="/create_user.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Register · assign role · remove</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-map.png] -->
-      <span>Map</span>
-    </div>
+    <img src="/live_map.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Live device GPS · active/inactive status · auto-refresh</p>
   </div>
   <div style="display: flex; flex-direction: column; align-items: center; gap: 0.3rem;">
-    <div class="screenshot-placeholder">
-      <!-- [INSERT SCREENSHOT: portal-monitoring.png] -->
-      <span>Monitoring</span>
-    </div>
+    <img src="/live_monitoring.png" style="width: 100%; border-radius: 0.4rem; border: 1px solid #1E2D4A;" />
     <p style="font-size: 0.7rem; color: #8FA3C7; text-align: center; margin: 0;">Connected sockets · relay metrics · live logs · floor holders</p>
   </div>
 </div>
