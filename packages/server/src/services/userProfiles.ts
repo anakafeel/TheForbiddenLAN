@@ -116,7 +116,7 @@ export function upsertUserProfile(userId: string, username: string, patch: UserP
   const next: UserProfileSnapshot = {
     display_name: cleanText(patch.display_name, 64) || current.display_name || username,
     callsign: cleanText(patch.callsign, 16).toUpperCase() || current.callsign || fallbackCallsign(username),
-    photo_url: cleanText(patch.photo_url, 2048),
+    photo_url: cleanText(patch.photo_url, 4096),
     status_message: cleanText(patch.status_message, 280),
     updated_at: new Date().toISOString(),
   };

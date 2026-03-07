@@ -1,8 +1,18 @@
 // User routes — admin view of all users
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import prisma from '../db/client.js';
 import { disconnectUserSessions } from '../ws/hub.js';
 import { getUserProfile, upsertUserProfile } from '../services/userProfiles.js';
+import { AVATARS_DIR } from '../constants.js';
+
+const ALLOWED_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+};
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('onRequest', async (req, reply) => {
@@ -32,6 +42,38 @@ export async function userRoutes(app: FastifyInstance) {
     if (!user) return reply.code(404).send({ error: 'user_not_found' });
 
     return { profile: getUserProfile(user.id, user.username) };
+  });
+
+  // POST /users/me/profile/avatar — upload a profile picture, returns { avatar_url }
+  app.post('/me/profile/avatar', async (req, reply) => {
+    const userId = (req.user as any).sub;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true },
+    });
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+
+    const file = await (req as any).file();
+    if (!file) return reply.code(400).send({ error: 'no_file' });
+
+    const ext = ALLOWED_MIME[file.mimetype];
+    if (!ext) return reply.code(400).send({ error: 'unsupported_image_type' });
+
+    const filename = `${user.id}.${ext}`;
+    const dest = path.join(AVATARS_DIR, filename);
+
+    const buffer = await file.toBuffer();
+    fs.writeFileSync(dest, buffer);
+
+    // Remove any old avatar with a different extension
+    for (const old of Object.values(ALLOWED_MIME)) {
+      if (old === ext) continue;
+      const oldPath = path.join(AVATARS_DIR, `${user.id}.${old}`);
+      try { fs.unlinkSync(oldPath); } catch { /* not found, ignore */ }
+    }
+
+    const avatar_url = `/avatars/${filename}`;
+    return { avatar_url };
   });
 
   // PUT /users/me/profile — update profile details (display name, callsign, photo, status)

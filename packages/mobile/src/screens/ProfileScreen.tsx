@@ -188,6 +188,25 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
     setSavedAt(Date.now());
   };
 
+  /**
+   * Upload the picked image to the server and return the hosted URL.
+   * Falls back to null on failure.
+   */
+  const uploadAvatarToServer = async (
+    formData: FormData,
+  ): Promise<string | null> => {
+    if (!jwt) return null;
+    const res = await fetch(`${CONFIG.API_URL}/users/me/profile/avatar`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}` },
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    const data = await res.json();
+    if (!data?.avatar_url) throw new Error("No avatar_url in response");
+    return `${CONFIG.API_URL}${data.avatar_url}`;
+  };
+
   const pickPhotoFromWeb = async (): Promise<string | null> => {
     if (typeof document === "undefined") return null;
 
@@ -196,28 +215,26 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
       input.type = "file";
       input.accept = "image/*";
 
-      input.onchange = () => {
+      input.onchange = async () => {
         const file = input.files?.[0];
         if (!file) {
           resolve(null);
           return;
         }
 
-        if (file.size > 2 * 1024 * 1024) {
-          reject(new Error("Please select an image under 2MB."));
+        if (file.size > 5 * 1024 * 1024) {
+          reject(new Error("Please select an image under 5MB."));
           return;
         }
 
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === "string") {
-            resolve(reader.result);
-            return;
-          }
-          reject(new Error("Unable to read selected image."));
-        };
-        reader.onerror = () => reject(new Error("Unable to read selected image."));
-        reader.readAsDataURL(file);
+        try {
+          const formData = new FormData();
+          formData.append("avatar", file);
+          const url = await uploadAvatarToServer(formData);
+          resolve(url);
+        } catch (err: any) {
+          reject(err);
+        }
       };
 
       input.click();
@@ -246,24 +263,39 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
           });
 
           if (!result.canceled) {
-            const uri = result.assets?.[0]?.uri;
-            if (uri) {
-              updateField("photoUrl", uri);
+            const asset = result.assets?.[0];
+            if (asset?.uri) {
+              // Upload to server so the URL is accessible from any device
+              const formData = new FormData();
+              (formData as any).append("avatar", {
+                uri: asset.uri,
+                type: asset.mimeType ?? "image/jpeg",
+                name: `avatar.${(asset.mimeType ?? "image/jpeg").split("/")[1] ?? "jpg"}`,
+              } as any);
+              const hostedUrl = await uploadAvatarToServer(formData);
+              if (hostedUrl) {
+                updateField("photoUrl", hostedUrl);
+              }
               return;
             }
           }
-        } catch {
-          Alert.alert(
-            "Photo Upload Unavailable",
-            "Unable to access the photo library. You can still paste an image URL manually.",
-          );
+        } catch (err: any) {
+          const msg = err?.message ?? "";
+          if (msg.toLowerCase().includes("permission")) {
+            Alert.alert(
+              "Permission Required",
+              "Photo library permission was denied. You can paste an image URL manually.",
+            );
+          } else {
+            throw err;
+          }
         }
         return;
       }
 
-      const dataUrl = await pickPhotoFromWeb();
-      if (dataUrl) {
-        updateField("photoUrl", dataUrl);
+      const hostedUrl = await pickPhotoFromWeb();
+      if (hostedUrl) {
+        updateField("photoUrl", hostedUrl);
       }
     } catch (err: any) {
       const message = err?.message ?? "Unable to upload photo.";
@@ -347,7 +379,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
               ]}
             >
               <Text style={styles.photoButtonText}>
-                {isPickingPhoto ? "Selecting..." : "Upload Photo"}
+                {isPickingPhoto ? "Uploading..." : "Upload Photo"}
               </Text>
             </Pressable>
             {form.photoUrl ? (
@@ -360,7 +392,7 @@ export default function ProfileScreen({ navigation }: { navigation: any }) {
             ) : null}
           </View>
           <Text style={[styles.photoHelper, photoError ? styles.photoHelperError : null]}>
-            {photoError || "You can paste an image URL or upload a local image file."}
+            {photoError || "Upload a photo (up to 5 MB) or paste an image URL directly."}
           </Text>
         </View>
 
