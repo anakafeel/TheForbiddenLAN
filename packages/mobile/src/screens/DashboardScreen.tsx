@@ -133,7 +133,6 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const notificationFeed = notifications.slice(0, 8);
   const jwt = useStore((s) => s.jwt);
   const user = useStore((s) => s.user);
-  const activeTalkgroupId = useStore((s) => s.activeTalkgroup);
   const setActiveTalkgroup = useStore((s) => s.setActiveTalkgroup);
   const signalStatus = useStore((s) => s.signalStatus);
   const setPreferredConnection = useStore((s) => s.setPreferredConnection);
@@ -145,11 +144,8 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([]);
   const [presenceByTalkgroup, setPresenceByTalkgroup] = useState<Record<string, string[]>>({});
   const [membersById, setMembersById] = useState<Record<string, TalkgroupMember>>({});
-  const [memberIdsByTalkgroup, setMemberIdsByTalkgroup] = useState<Record<string, Record<string, true>>>({});
 
   const mountedRef = useRef(true);
-  const allowedTalkgroupIdsRef = useRef<Set<string>>(new Set());
-  const memberIdsByTalkgroupRef = useRef<Record<string, Record<string, true>>>({});
 
   const selectConnection = (mode: ConnectionMode) => {
     setPreferredConnection(mode);
@@ -169,9 +165,6 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
       setTalkgroups([]);
       setPresenceByTalkgroup({});
       setMembersById({});
-      setMemberIdsByTalkgroup({});
-      allowedTalkgroupIdsRef.current = new Set();
-      memberIdsByTalkgroupRef.current = {};
       return;
     }
 
@@ -209,13 +202,16 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
         if (cancelled || !mountedRef.current) return;
 
         setTalkgroups(mappedTalkgroups);
-        allowedTalkgroupIdsRef.current = new Set(mappedTalkgroups.map((tg) => tg.id));
         setPresenceByTalkgroup((prev) => {
           const next: Record<string, string[]> = {};
           mappedTalkgroups.forEach((tg) => {
             next[tg.id] = prev[tg.id] ?? [];
           });
           return next;
+        });
+
+        mappedTalkgroups.forEach((tg) => {
+          comms.joinTalkgroup(tg.id);
         });
 
         const memberChunks = await Promise.all(
@@ -236,7 +232,6 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
         if (cancelled || !mountedRef.current) return;
 
         const mergedMembers: Record<string, TalkgroupMember> = {};
-        const nextMemberIdsByTalkgroup: Record<string, Record<string, true>> = {};
         memberChunks.flat().forEach((member: any) => {
           if (!member?.id) return;
           const userId = String(member.id);
@@ -257,30 +252,13 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
           };
         });
 
-        memberChunks.forEach((members, idx) => {
-          const talkgroupId = mappedTalkgroups[idx]?.id;
-          if (!talkgroupId) return;
-
-          const idsForTalkgroup: Record<string, true> = {};
-          members.forEach((member: any) => {
-            if (!member?.id) return;
-            idsForTalkgroup[String(member.id)] = true;
-          });
-          nextMemberIdsByTalkgroup[talkgroupId] = idsForTalkgroup;
-        });
-
         setMembersById(mergedMembers);
-        setMemberIdsByTalkgroup(nextMemberIdsByTalkgroup);
-        memberIdsByTalkgroupRef.current = nextMemberIdsByTalkgroup;
       } catch (err) {
         console.warn("[Dashboard] Failed to hydrate active users panel:", err);
         if (!cancelled && mountedRef.current) {
           setTalkgroups([]);
           setPresenceByTalkgroup({});
           setMembersById({});
-          setMemberIdsByTalkgroup({});
-          allowedTalkgroupIdsRef.current = new Set();
-          memberIdsByTalkgroupRef.current = {};
         }
       }
     };
@@ -293,37 +271,11 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
   }, [jwt]);
 
   useEffect(() => {
-    const nextAllowed = new Set(talkgroups.map((tg) => tg.id));
-    allowedTalkgroupIdsRef.current = nextAllowed;
-  }, [talkgroups]);
-
-  useEffect(() => {
-    memberIdsByTalkgroupRef.current = memberIdsByTalkgroup;
-  }, [memberIdsByTalkgroup]);
-
-  useEffect(() => {
-    const preferredTalkgroup = current?.id
-      ? String(current.id)
-      : activeTalkgroupId
-        ? String(activeTalkgroupId)
-        : "";
-    if (!preferredTalkgroup) return;
-    if (!allowedTalkgroupIdsRef.current.has(preferredTalkgroup)) return;
-
-    try {
-      comms.joinTalkgroup(preferredTalkgroup);
-    } catch (err) {
-      console.warn("[Dashboard] Failed to join preferred talkgroup:", err);
-    }
-  }, [talkgroups, current?.id, activeTalkgroupId]);
-
-  useEffect(() => {
     const handleMessage = (msg: any) => {
       if (!mountedRef.current || !msg || msg.type !== "PRESENCE") return;
       if (!msg.talkgroup) return;
 
       const talkgroupId = String(msg.talkgroup);
-      if (!allowedTalkgroupIdsRef.current.has(talkgroupId)) return;
       const online: string[] = Array.isArray(msg.online)
         ? Array.from(
             new Set<string>(
@@ -356,13 +308,10 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     talkgroups.forEach((tg) => {
       const onlineUsers = presenceByTalkgroup[tg.id] ?? [];
       if (!Array.isArray(onlineUsers) || onlineUsers.length === 0) return;
-      const talkgroupMemberIds = memberIdsByTalkgroup[tg.id];
-      if (!talkgroupMemberIds) return;
 
       onlineUsers.forEach((userId) => {
         const localUserId = user?.sub ? String(user.sub) : null;
         if (localUserId && String(userId) === localUserId) return;
-        if (!talkgroupMemberIds[userId]) return;
         const rowKey = `${tg.id}:${userId}`;
         if (seen.has(rowKey)) return;
         seen.add(rowKey);
@@ -393,15 +342,10 @@ export default function DashboardScreen({ navigation }: { navigation: any }) {
     talkgroups,
     presenceByTalkgroup,
     membersById,
-    memberIdsByTalkgroup,
     user?.sub,
   ]);
 
   const handleUserPress = useCallback((activeUser: ActiveUserRow) => {
-    if (!allowedTalkgroupIdsRef.current.has(activeUser.channelId)) return;
-    const talkgroupMemberIds = memberIdsByTalkgroupRef.current[activeUser.channelId];
-    if (!talkgroupMemberIds || !talkgroupMemberIds[activeUser.userId]) return;
-
     const selectedChannel = {
       id: activeUser.channelId,
       name: activeUser.channelName,

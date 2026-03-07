@@ -1,42 +1,18 @@
 // System status overview — devices online, data usage, active talkgroups
 import { useEffect, useState } from 'react';
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
-const ONLINE_STATES = new Set(['active', 'online', 'enabled', 'up']);
-
-type DeviceRow = {
-  id: string;
-  name?: string;
-  serial?: string;
-  site?: string;
-  active?: boolean;
-  state?: string;
-};
-
-function isOnline(device: DeviceRow) {
-  if (typeof device.active === 'boolean') return device.active;
-  return ONLINE_STATES.has((device.state ?? '').toLowerCase());
-}
 
 export function Dashboard() {
-  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
   useEffect(() => {
     fetch(`${API}/devices`, { headers: { Authorization: `Bearer ${localStorage.getItem('jwt')}` } })
-      .then(r => r.json())
-      .then((data) => {
-        const rows = Array.isArray(data?.devices)
-          ? data.devices
-          : Array.isArray(data)
-            ? data
-            : [];
-        setDevices(rows);
-      })
-      .catch(() => {});
+      .then(r => r.json()).then(setDevices).catch(() => {});
   }, []);
   return (
     <div>
       <h1 style={{ color:'#0A1628' }}>System Dashboard</h1>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16, marginTop:16 }}>
-        <StatCard label="Devices Online" value={devices.filter(isOnline).length} />
+        <StatCard label="Devices Online" value={devices.filter(d=>d.active).length} />
         <StatCard label="Total Devices"  value={devices.length} />
         <StatCard label="Active Talkgroups" value="—" />
       </div>
@@ -49,9 +25,9 @@ export function Dashboard() {
         </tr></thead>
         <tbody>{devices.map((d,i) => (
           <tr key={d.id} style={{ backgroundColor: i%2===0?'#EBF4FD':'white' }}>
-            <td style={{ padding:10 }}>{d.name ?? d.serial ?? d.id}</td>
-            <td style={{ padding:10 }}>{d.site ?? '—'}</td>
-            <td style={{ padding:10, color: isOnline(d)?'green':'red' }}>{isOnline(d)?'Online':'Offline'}</td>
+            <td style={{ padding:10 }}>{d.name}</td>
+            <td style={{ padding:10 }}>{d.site}</td>
+            <td style={{ padding:10, color: d.active?'green':'red' }}>{d.active?'Online':'Offline'}</td>
           </tr>
         ))}</tbody>
       </table>

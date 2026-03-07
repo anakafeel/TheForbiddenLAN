@@ -1,8 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -24,12 +22,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       PORT: "3000"
-    volumes:
-      - avatars:/data/avatars
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   pgdata:
-  avatars:

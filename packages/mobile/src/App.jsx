@@ -54,6 +54,7 @@ function AdminNavigator() {
       }}
     >
       <AdminTabs.Screen name="Dashboard" component={AdminDashboard} options={{ tabBarLabel: 'Dashboard' }} />
+      <AdminTabs.Screen name="Devices" component={AdminDevices} options={{ tabBarLabel: 'Devices' }} />
       <AdminTabs.Screen
         name="Talkgroups"
         component={AdminTalkgroups}

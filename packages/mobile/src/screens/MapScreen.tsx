@@ -1,33 +1,22 @@
-// Moving map — shows GPS positions via SatelliteGlobe
-import { Platform, View, Text } from 'react-native';
+// Moving map — shows GPS positions of all talkgroup members via Leaflet
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { useStore } from '../store';
-
-let SatelliteGlobe: any;
-if (Platform.OS === 'web') {
-  SatelliteGlobe = require('../components/SatelliteGlobe').SatelliteGlobe;
-}
 
 export function MapScreen() {
   const { gps } = useStore();
-
-  if (Platform.OS !== 'web') {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#05070B' }}>
-        <Text style={{ color: '#8FA3C7' }}>Map view is only available on web</Text>
-      </View>
-    );
-  }
-
-  const markers = gps
-    ? [{ id: 'self', lat: gps.lat, lng: gps.lng, size: 0.07, color: [0.2, 0.95, 1] }]
-    : [];
-  const focusPoint = gps ? { lat: gps.lat, lng: gps.lng, zoom: 1.65 } : null;
+  const center: [number, number] = gps ? [gps.lat, gps.lng] : [49.28, -123.12];
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100%' }}>
-      {SatelliteGlobe ? (
-        <SatelliteGlobe markers={markers} focusPoint={focusPoint} dark />
-      ) : null}
+    <div style={{ height: '100vh', width: '100%' }}>
+      <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        {gps && (
+          <Marker position={[gps.lat, gps.lng]}>
+            <Popup>My position — {gps.alt.toFixed(0)}m</Popup>
+          </Marker>
+        )}
+      </MapContainer>
     </div>
   );
 }

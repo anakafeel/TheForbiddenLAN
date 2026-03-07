@@ -4,8 +4,6 @@ export interface Config {
   WS_URL: string;
   API_URL: string;
   DLS140_URL: string;
-  DLS140_USERNAME?: string;
-  DLS140_PASSWORD?: string;
   DEVICE_ID: string;
   TALKGROUP?: string;
   MOCK_JWT?: string;

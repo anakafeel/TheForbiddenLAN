@@ -37,15 +37,32 @@ fi
 
 # ── Clean stale CMake cache (needed after adding new native modules) ─────────
 # If the CMake cache pre-dates the pnpm lockfile, nuke it so Gradle's codegen
-# step runs before C++ compilation (avoids "unknown target react_codegen_*" errors).
-CXX_CACHE="packages/mobile/android/app/.cxx"
+# step runs before C++ compilation (avoids "EventEmitters.h not found" errors).
+MOBILE_ANDROID_CXX="packages/mobile/android/app/.cxx"
 LOCKFILE="pnpm-lock.yaml"
-if [[ -d "$CXX_CACHE" ]]; then
-  if [[ "$LOCKFILE" -nt "$CXX_CACHE" ]]; then
-    echo "🧹 Stale CMake cache detected — clearing .cxx to force codegen re-run..."
-    rm -rf "$CXX_CACHE"
-  fi
+if [[ -d "$MOBILE_ANDROID_CXX" && "$LOCKFILE" -nt "$MOBILE_ANDROID_CXX" ]]; then
+  echo "🔧 Native modules changed — cleaning stale CMake cache..."
+  rm -rf "$MOBILE_ANDROID_CXX" packages/mobile/android/app/build
+  echo "   Running expo prebuild to regenerate autolinking..."
+  (cd packages/mobile && npx expo prebuild --platform android --no-install 2>&1 | grep -E "✔|✗|Error" || true)
 fi
+
+# ── Kill stale Metro on port 8081 ────────────────────────────────────────────
+# If a dead/orphaned Metro process is still bound to 8081, Expo CLI will print
+# "Skipping dev server" and NOT start a fresh one. The installed APK then opens
+# to a white screen because it can't load the JS bundle.
+echo "🔧 Clearing any stale Metro process on port 8081..."
+OLD_PID=$(lsof -ti :8081 2>/dev/null)
+if [[ -n "$OLD_PID" ]]; then
+  echo "   Killing PID $OLD_PID"
+  kill -9 "$OLD_PID" 2>/dev/null || true
+  sleep 1
+fi
+
+# ── Ensure adb reverse is set up ─────────────────────────────────────────────
+# Forward device:8081 → host:8081 so the physical device can reach Metro.
+echo "🔧 Setting up adb reverse tunnel (8081)..."
+adb reverse tcp:8081 tcp:8081 2>/dev/null || true
 
 cd packages/mobile
 npx expo run:android "$@"

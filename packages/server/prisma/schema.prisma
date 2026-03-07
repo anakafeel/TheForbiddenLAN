@@ -25,20 +25,14 @@ model Device {
 }
 
 model User {
-  id                 String       @id @default(uuid())
-  username           String       @unique
-  password_hash      String
-  role               Role         @default(user)
-  device_id          String?      @unique
-  device             Device?      @relation(fields: [device_id], references: [id])
-  created_at         DateTime     @default(now())
-  memberships        Membership[]
-  // Profile fields (stored in DB so they survive server restarts/redeploys)
-  display_name       String?
-  callsign           String?
-  photo_url          String?
-  status_message     String?
-  profile_updated_at DateTime?
+  id            String       @id @default(uuid())
+  username      String       @unique
+  password_hash String
+  role          Role         @default(user)
+  device_id     String?      @unique
+  device        Device?      @relation(fields: [device_id], references: [id])
+  created_at    DateTime     @default(now())
+  memberships   Membership[]
 }
 
 model Talkgroup {

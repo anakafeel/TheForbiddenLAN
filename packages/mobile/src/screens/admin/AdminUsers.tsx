@@ -94,19 +94,20 @@ export function AdminUsers() {
     setError('');
     try {
       await deleteAdminUser(item);
-      // Optimistically remove the user from the list immediately so the UI
-      // updates even if the subsequent refresh is slow or fails.
-      setUsers((prev) =>
-        prev.filter((u) => u.id !== item.id && u.username !== item.username),
-      );
-      // Refresh from server in the background to sync any other changes.
-      load().catch(() => { /* background refresh failure is non-fatal */ });
+      const nextUsers = await listAdminUsers();
+      const stillExists = nextUsers.some((u) => u.id === item.id || u.username === item.username);
+
+      if (stillExists) {
+        throw new Error('User still exists after delete request.');
+      }
+
+      setUsers(nextUsers);
     } catch (e) {
       setError(getAdminErrorMessage(e, 'Failed to delete user'));
     } finally {
       setDeletingUserId(null);
     }
-  }, [authUser?.sub, authUser?.username, confirmDelete, load]);
+  }, [authUser?.sub, authUser?.username, confirmDelete]);
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={colors.status.info} /></View>;

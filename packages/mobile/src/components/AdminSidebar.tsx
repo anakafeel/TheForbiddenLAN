@@ -7,6 +7,7 @@ import { useAppTheme } from '../theme';
 import { useStore } from '../store';
 
 import { AdminDashboard } from '../screens/admin/AdminDashboard';
+import { AdminDevices } from '../screens/admin/AdminDevices';
 import { AdminTalkgroups } from '../screens/admin/AdminTalkgroups';
 import { AdminUsers } from '../screens/admin/AdminUsers';
 import { AdminMap } from '../screens/admin/AdminMap';
@@ -14,6 +15,7 @@ import { AdminMonitoring } from '../screens/admin/AdminMonitoring';
 
 const TAB_CONFIG = [
   { key: 'Dashboard',  label: 'Dashboard',  Icon: House },
+  { key: 'Devices',    label: 'Devices',    Icon: TvMinimalPlay },
   { key: 'Talkgroups', label: 'Talk Groups', Icon: Mic },
   { key: 'Users',      label: 'Users',      Icon: User },
   { key: 'Map',        label: 'Map',        Icon: MapPin },
@@ -22,6 +24,7 @@ const TAB_CONFIG = [
 
 const SCREEN_MAP = {
   Dashboard: AdminDashboard,
+  Devices: AdminDevices,
   Talkgroups: AdminTalkgroups,
   Users: AdminUsers,
   Map: AdminMap,
