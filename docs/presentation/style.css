@@ -1,0 +1,526 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ─────────────────────────────────────────────
+   Color tokens — mirrors mobile app theme/index.js
+   ───────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-primary:    #05070B;
+  --bg-secondary:  #0B1220;
+  --bg-elevated:   #111C31;
+  --bg-card:       rgba(14, 23, 38, 0.88);
+  --bg-glass:      rgba(8, 14, 24, 0.70);
+
+  /* Accent (blue system) */
+  --accent:        #2563FF;
+  --accent-dark:   #1D4ED8;
+  --accent-light:  #60A5FA;
+  --glow:          rgba(37, 99, 255, 0.28);
+  --glow-strong:   rgba(37, 99, 255, 0.45);
+
+  /* Text */
+  --text-primary:  #F8FAFC;
+  --text-secondary: #DCE6FF;
+  --text-muted:    #8FA3C7;   /* from mobile app text.muted */
+  --text-dim:      #637593;
+
+  /* Borders */
+  --border-subtle: rgba(96, 165, 250, 0.20);
+  --border-medium: rgba(96, 165, 250, 0.34);
+  --border-strong: rgba(147, 197, 253, 0.48);
+
+  /* Status */
+  --green:         #22C55E;
+  --green-glow:    rgba(34, 197, 94, 0.36);
+  --red:           #EF4444;
+  --red-glow:      rgba(239, 68, 68, 0.4);
+  --warn:          #F59E0B;
+  --warn-glow:     rgba(245, 158, 11, 0.38);
+  --info:          #38BDF8;
+  --info-glow:     rgba(56, 189, 248, 0.35);
+
+  /* Radius */
+  --radius-sm:     8px;
+  --radius-md:     12px;
+  --radius-lg:     16px;
+  --radius-xl:     20px;
+  --radius-full:   9999px;
+}
+
+/* ─────────────────────────────────────────────
+   Base slide layout
+   ───────────────────────────────────────────── */
+.slidev-layout {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────
+   Typography — scoped under .slidev-layout to
+   beat the default theme's specificity
+   ───────────────────────────────────────────── */
+.slidev-layout h1 {
+  color: var(--accent);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.slidev-layout h2 {
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.4rem;
+  margin-top: 0;
+}
+
+.slidev-layout h3 {
+  color: var(--info);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.slidev-layout p {
+  color: var(--text-primary);
+  margin-bottom: 0.45rem;
+  margin-top: 0;
+}
+
+.slidev-layout strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.slidev-layout em {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* Cover / center — h1 is white hero, no bottom border */
+.slidev-layout.cover h1,
+.slidev-layout.intro h1 {
+  color: var(--text-primary);
+  font-size: 3rem;
+  letter-spacing: -0.04em;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.slidev-layout.cover h2 {
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  font-weight: 400;
+}
+
+.slidev-layout.center h1 {
+  font-size: 4rem;
+  color: var(--text-primary);
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* ─────────────────────────────────────────────
+   Layout padding — constrain content inside bounds
+   ───────────────────────────────────────────── */
+.slidev-layout.default {
+  padding: 1.75rem 2.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.slidev-layout.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem;
+}
+
+.slidev-layout.cover,
+.slidev-layout.intro {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 2.5rem 3rem;
+}
+
+.slidev-layout.two-cols {
+  padding: 1.75rem 2.5rem 1.5rem;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.slidev-layout.two-cols-header {
+  padding: 1.75rem 2.5rem 1.5rem;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Keep the header row compact so columns get most of the space */
+.slidev-layout.two-cols-header h1 {
+  margin-bottom: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+
+/* ─────────────────────────────────────────────
+   Lists — scoped for specificity
+   ───────────────────────────────────────────── */
+.slidev-layout ul {
+  padding-left: 1.3rem;
+  margin: 0.35rem 0;
+}
+
+.slidev-layout ul li {
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+}
+
+.slidev-layout ul li::marker {
+  color: var(--accent);
+}
+
+.slidev-layout ol {
+  padding-left: 1.3rem;
+  margin: 0.35rem 0;
+}
+
+.slidev-layout ol li {
+  margin-bottom: 0.25rem;
+}
+
+.slidev-layout ol li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────
+   Two-cols density
+   ───────────────────────────────────────────── */
+.slidev-layout.two-cols .col-left,
+.slidev-layout.two-cols .col-right,
+.slidev-layout.two-cols-header .col-left,
+.slidev-layout.two-cols-header .col-right {
+  padding: 0 0.6rem;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.slidev-layout.two-cols h3,
+.slidev-layout.two-cols-header h3 {
+  margin-top: 0;
+  margin-bottom: 0.2rem;
+}
+
+.slidev-layout.two-cols ul li,
+.slidev-layout.two-cols ol li,
+.slidev-layout.two-cols-header ul li,
+.slidev-layout.two-cols-header ol li {
+  margin-bottom: 0.15rem;
+}
+
+/* ─────────────────────────────────────────────
+   Tables — card surface with border-radius
+   ───────────────────────────────────────────── */
+.slidev-layout table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.84rem;
+  margin: 0.6rem 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 16px rgba(37, 99, 255, 0.10);
+}
+
+.slidev-layout thead th {
+  background-color: var(--bg-elevated);
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--border-medium);
+  text-align: left;
+}
+
+.slidev-layout tbody tr:nth-child(odd) td {
+  background-color: var(--bg-secondary);
+}
+
+.slidev-layout tbody tr:nth-child(even) td {
+  background-color: var(--bg-primary);
+}
+
+.slidev-layout tbody td {
+  padding: 0.4rem 0.85rem;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.08);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.slidev-layout tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─────────────────────────────────────────────
+   Code
+   ───────────────────────────────────────────── */
+.slidev-layout code {
+  color: var(--info);
+  background-color: var(--bg-secondary);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.84em;
+  border: 1px solid var(--border-subtle);
+}
+
+.slidev-layout pre {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.slidev-layout pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  color: var(--text-primary);
+}
+
+/* ─────────────────────────────────────────────
+   .card — bento-style surface card
+   ───────────────────────────────────────────── */
+.card {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-subtle);
+  padding: 1rem 1.1rem;
+  box-shadow: 0 4px 16px rgba(37, 99, 255, 0.12);
+}
+
+.card.glass {
+  background-color: var(--bg-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ─────────────────────────────────────────────
+   .callout — left-bordered panel
+   ───────────────────────────────────────────── */
+.callout {
+  background-color: var(--bg-elevated);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 0.6rem 1rem;
+  margin: 0.6rem 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  box-shadow: inset 0 0 20px rgba(37, 99, 255, 0.06);
+}
+
+.callout.red   { border-left-color: var(--red);  box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.06); }
+.callout.green { border-left-color: var(--green); box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.06); }
+.callout.warn  { border-left-color: var(--warn);  box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.06); }
+
+/* ─────────────────────────────────────────────
+   .compare-card — side-by-side decision panels
+   ───────────────────────────────────────────── */
+.compare-row {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.compare-card {
+  flex: 1;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  padding: 0.7rem 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.compare-card.danger {
+  border-color: rgba(239, 68, 68, 0.50);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.compare-card.success {
+  border-color: rgba(34, 197, 94, 0.50);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.15);
+}
+
+.compare-card.info {
+  border-color: rgba(96, 165, 250, 0.50);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.12);
+}
+
+.compare-card-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.3rem;
+}
+
+.compare-card.danger  .compare-card-label { color: var(--red); }
+.compare-card.success .compare-card-label { color: var(--green); }
+.compare-card.info    .compare-card-label { color: var(--accent-light); }
+
+.compare-card p {
+  font-size: 0.86rem;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* ─────────────────────────────────────────────
+   .metric — large number anchor
+   ───────────────────────────────────────────── */
+.metric {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.metric-sub {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 0.1rem;
+  font-weight: 500;
+}
+
+/* ─────────────────────────────────────────────
+   Status utilities
+   ───────────────────────────────────────────── */
+.shipped  { color: var(--green); }
+.rejected { color: var(--red); text-decoration: line-through; opacity: 0.85; }
+.warn     { color: var(--warn); }
+.info     { color: var(--info); }
+
+/* ─────────────────────────────────────────────
+   .tag — pill badge
+   ───────────────────────────────────────────── */
+.tag {
+  display: inline-block;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-medium);
+  color: var(--accent-light);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.28rem 0.75rem;
+  border-radius: var(--radius-full);
+  margin: 0.2rem 0.25rem;
+  letter-spacing: 0.01em;
+}
+
+/* ─────────────────────────────────────────────
+   .section-label
+   ───────────────────────────────────────────── */
+.section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin: 0.6rem 0 0.2rem;
+}
+
+/* ─────────────────────────────────────────────
+   Screenshot helpers
+   ───────────────────────────────────────────── */
+.screenshot-placeholder {
+  background-color: var(--bg-secondary);
+  border: 1px dashed var(--border-medium);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  flex: 1;
+  margin: 0.3rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 1rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.screenshot-placeholder span {
+  color: var(--text-dim);
+}
+
+.screenshot-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+  flex: 1;
+}
+
+.screenshot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+  flex: 1;
+}
+
+/* ─────────────────────────────────────────────
+   Mermaid
+   ───────────────────────────────────────────── */
+.mermaid {
+  min-height: 120px;
+  width: 100%;
+}
+
+.mermaid,
+.mermaid svg {
+  background: transparent !important;
+}
+
+.mermaid svg {
+  height: auto;
+  width: 100%;
+}
+
+/* ─────────────────────────────────────────────
+   Divider / scrollbar
+   ───────────────────────────────────────────── */
+.slidev-layout hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.6rem 0;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 2px; }
