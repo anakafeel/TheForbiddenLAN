@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-labelledby="t d">
+  <title id="t">SkyTalk - TheForbiddenLAN</title>
+  <desc id="d">Encrypted push-to-talk over satellite</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#050816"/>
+      <stop offset="1" stop-color="#0b1a3a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#818cf8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <g fill="#cbd5e1" opacity="0.7">
+    <circle cx="60" cy="40" r="1.5"/><circle cx="170" cy="250" r="1"/><circle cx="300" cy="70" r="1.2"/>
+    <circle cx="470" cy="280" r="1.5"/><circle cx="560" cy="30" r="1"/><circle cx="700" cy="110" r="1.2"/>
+    <circle cx="820" cy="290" r="1"/><circle cx="950" cy="50" r="1.5"/><circle cx="1110" cy="270" r="1.2"/>
+    <circle cx="1230" cy="90" r="1"/><circle cx="90" cy="150" r="1"/><circle cx="640" cy="240" r="1"/>
+  </g>
+  <circle cx="1030" cy="110" r="150" fill="url(#glow)"/>
+  <!-- Earth horizon -->
+  <ellipse cx="1030" cy="470" rx="420" ry="190" fill="#0a1f44" stroke="#38bdf8" stroke-opacity="0.5" stroke-width="2"/>
+  <!-- Satellite -->
+  <g transform="translate(1040 100) rotate(-20)">
+    <rect x="-18" y="-12" width="36" height="24" rx="4" fill="#1e293b" stroke="url(#accent)" stroke-width="2"/>
+    <rect x="-78" y="-9" width="52" height="18" fill="#0f2a5c" stroke="#38bdf8" stroke-width="1.5"/>
+    <rect x="26" y="-9" width="52" height="18" fill="#0f2a5c" stroke="#38bdf8" stroke-width="1.5"/>
+    <g stroke="#38bdf8" stroke-width="1" opacity="0.7">
+      <path d="M-62 -9V9M-46 -9V9M-30 -9V9M30 -9V9M46 -9V9M62 -9V9"/>
+    </g>
+    <circle cx="0" cy="0" r="4" fill="#38bdf8"/>
+  </g>
+  <!-- Signal arcs down to ground -->
+  <g fill="none" stroke="url(#accent)" stroke-linecap="round" stroke-width="3">
+    <path d="M985 175 Q1030 215 1075 175" opacity="0.9"/>
+    <path d="M965 195 Q1030 255 1095 195" opacity="0.6"/>
+    <path d="M945 215 Q1030 295 1115 215" opacity="0.35"/>
+  </g>
+  <!-- Waveform -->
+  <g stroke="url(#accent)" stroke-width="4" stroke-linecap="round" opacity="0.85">
+    <path d="M70 300V288M90 300V280M110 300V290M130 300V272M150 300V285M170 300V292M190 300V278M210 300V288"/>
+  </g>
+  <!-- Text -->
+  <text x="70" y="130" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="54" font-weight="700" fill="#f8fafc">SkyTalk <tspan fill="#64748b" font-weight="400">/</tspan> <tspan fill="url(#accent)">TheForbiddenLAN</tspan></text>
+  <text x="72" y="178" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#cbd5e1">Encrypted push-to-talk over satellite.</text>
+  <text x="72" y="214" font-family="Menlo, Consolas, monospace" font-size="18" fill="#7dd3fc">Iridium Certus  |  AES-256-GCM  |  outbound-only relay</text>
+  <text x="72" y="244" font-family="Menlo, Consolas, monospace" font-size="15" fill="#94a3b8">SKYTRAC Hackathon 2026</text>
+</svg>
