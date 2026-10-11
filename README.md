@@ -22,6 +22,12 @@
 Built for the **SKYTRAC Hackathon 2026** by a four-person team. Full documentation: **[the-forbidden-lan-docs.vercel.app/docs](https://the-forbidden-lan-docs.vercel.app/docs)**
 
 <p align="center">
+  <a href=".github/assets/skytalk-demo.mp4"><img src=".github/assets/skytalk-demo.gif" alt="SkyTalk demo video: click to play" width="85%"></a>
+  <br>
+  <sub>Silent preview. Click it for the full video with sound (MP4).</sub>
+</p>
+
+<p align="center">
   <a href="https://the-forbidden-lan-docs.vercel.app/docs"><img src=".github/assets/docs-home.png" alt="SkyTalk documentation site home page" width="85%"></a>
 </p>
 
